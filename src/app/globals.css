@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter);
+}
+
+/* Global light theme base */
+html, body {
+  background-color: #ffffff;
+  color: #171717;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/80 backdrop-blur-md border border-neutral-200 shadow-sm;
+  }
+}
