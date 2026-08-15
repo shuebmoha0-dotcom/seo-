@@ -7,10 +7,7 @@ let scheduledTasks: RecurringTask[] = [];
 let schedulerInterval: NodeJS.Timeout | null = null;
 
 export const SchedulerEngine = {
-  
-  /**
-   * Register a new task into the scheduling system.
-   */
+
   registerTask(task: RecurringTask) {
     scheduledTasks.push(task);
     console.log(`[Scheduler] Task registered: ${task.task_id} - Next run: ${task.next_run_at}`);
@@ -31,22 +28,15 @@ export const SchedulerEngine = {
     scheduledTasks = scheduledTasks.filter(t => t.task_id !== taskId);
   },
 
-  /**
-   * Starts the background checking loop.
-   */
   start() {
     if (schedulerInterval) return;
-    
     console.log('[Scheduler] Background engine started. Checking every 60s.');
-    
-    // Check every 60 seconds if a task is due
     schedulerInterval = setInterval(async () => {
       const now = new Date();
-      
       for (const task of scheduledTasks) {
         if (task.status === 'active' && new Date(task.next_run_at) <= now) {
           console.log(`[Scheduler] Task DUE: ${task.task_id} -> "${task.goal}"`);
-          await this.executeTask(task);
+          await SchedulerEngine.executeTask(task);
         }
       }
     }, 60 * 1000);
@@ -59,58 +49,58 @@ export const SchedulerEngine = {
     }
   },
 
-  /**
-   * Mocks the triggering of the task by handing the goal off to the Orchestrator.
-   */
   async executeTask(task: RecurringTask) {
     console.log(`[Scheduler] Handoff to Orchestrator for: ${task.task_id}`);
-    
+
     const run_id = `run_${Date.now()}`;
     task.last_run_at = new Date().toISOString();
-    
-    // Calculate naive next run time (adds 1 day for daily)
+
     const next = new Date();
     if (task.schedule.frequency === 'daily') {
       next.setDate(next.getDate() + 1);
     } else if (task.schedule.frequency === 'weekly') {
       next.setDate(next.getDate() + 7);
     } else {
-      next.setDate(next.getDate() + 1); // fallback
+      next.setDate(next.getDate() + 1);
     }
     task.next_run_at = next.toISOString();
 
-    const executionRecord = {
+    // Explicitly typed so status can be mutated after creation
+    const executionRecord: {
+      run_id: string;
+      date: string;
+      status: 'completed' | 'failed' | 'awaiting_approval' | 'executing';
+      workflow_id: string;
+      summary?: string;
+    } = {
       run_id,
       date: new Date().toISOString(),
-      status: 'executing' as const,
+      status: 'executing',
       workflow_id: ''
     };
     task.execution_history.unshift(executionRecord);
 
     try {
       const orchestrator = new Orchestrator();
-      
-      // 1. Convert goal into task graph
-      const state = await orchestrator.initializeWorkflow(task.goal, { 
-        task_id: task.task_id, 
-        project_id: task.project_id 
+
+      const state = await orchestrator.initializeWorkflow(task.goal, {
+        task_id: task.task_id,
+        project_id: task.project_id
       });
       executionRecord.workflow_id = state.workflow_id;
 
-      // 2. Execute graph
       const finalState = await orchestrator.executeWorkflow(state);
 
       if (finalState.current_stage === 'PAUSED_FOR_APPROVAL') {
         executionRecord.status = 'awaiting_approval';
-        executionRecord.summary = `Workflow paused. Package requires approval.`;
+        executionRecord.summary = 'Workflow paused. Package requires approval.';
       } else if (finalState.current_stage === 'COMPLETED') {
         executionRecord.status = 'completed';
-        executionRecord.summary = `Workflow completed automatically.`;
+        executionRecord.summary = 'Workflow completed automatically.';
       } else {
         executionRecord.status = 'failed';
         executionRecord.summary = `Workflow ended in state: ${finalState.current_stage}`;
       }
-
     } catch (error) {
       console.error(`[Scheduler] Execution failed for task ${task.task_id}`, error);
       executionRecord.status = 'failed';
