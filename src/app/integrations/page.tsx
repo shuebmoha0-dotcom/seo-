@@ -4,9 +4,9 @@ import { Sidebar } from "@/components/Sidebar";
 import {
   Globe, Search, BarChart2, Layers, GitBranch, FileCode, CheckCircle2,
   AlertCircle, ShieldAlert, RefreshCw, Loader2, ArrowRight, Shield, Zap,
-  DollarSign, CheckSquare, XCircle, Info, ExternalLink, Cpu
+  DollarSign, CheckSquare, XCircle, Info, ExternalLink, Cpu, Key, HelpCircle
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Tab = "overview" | "actions";
 
@@ -115,16 +115,75 @@ export default function IntegrationsPage() {
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(INITIAL_INTEGRATIONS);
   const [actions, setActions] = useState<ExecutionAction[]>(DEMO_ACTIONS);
   const [showWpModal, setShowWpModal] = useState(false);
-  const [wpForm, setWpForm] = useState({ site_url: "", username: "", app_password: "", seo_plugin: "yoast" });
+  const [wpForm, setWpForm] = useState({ site_url: "", username: "", app_password: "", seo_plugin: "none" });
+  const [wpTesting, setWpTesting] = useState(false);
+  const [wpSaving, setWpSaving] = useState(false);
+  const [wpFeedback, setWpFeedback] = useState<{ ok?: boolean; message?: string } | null>(null);
+  const [crawlStarted, setCrawlStarted] = useState(false);
 
-  const handleTestConnection = (id: string) => {
+  // Fetch live WordPress status on mount
+  useEffect(() => {
+    async function loadStatus() {
+      try {
+        const res = await fetch("/api/integrations/wordpress/status");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            setIntegrations(prev => prev.map(i => i.provider === "wordpress" ? {
+              ...i,
+              status: "connected",
+              status_message: `Connected to ${data.site_name || data.site_url} as ${data.username}`,
+              config: { site_url: data.site_url, username: data.username, seo_plugin: data.seo_plugin },
+              last_tested: data.last_tested_at ? new Date(data.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Recently",
+            } : i));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load WordPress status:", err);
+      }
+    }
+    loadStatus();
+  }, []);
+
+  const handleTestConnection = async (id: string) => {
+    const item = integrations.find(i => i.id === id);
+    if (!item) return;
+
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, is_testing: true } : i));
-    setTimeout(() => {
-      setIntegrations(prev => prev.map(i => i.id === id ? { ...i, is_testing: false, status: "connected", status_message: "Connection verified", last_tested: "Just now" } : i));
-    }, 800);
+
+    if (item.provider === "wordpress") {
+      try {
+        const res = await fetch("/api/integrations/wordpress/verify", { method: "POST" });
+        const data = await res.json();
+        setIntegrations(prev => prev.map(i => i.id === id ? {
+          ...i,
+          is_testing: false,
+          status: data.ok ? "connected" : "error",
+          status_message: data.message || (data.ok ? "Connection verified" : "Verification failed"),
+          last_tested: "Just now",
+        } : i));
+      } catch {
+        setIntegrations(prev => prev.map(i => i.id === id ? { ...i, is_testing: false, status: "error", status_message: "Failed to reach server" } : i));
+      }
+    } else {
+      setTimeout(() => {
+        setIntegrations(prev => prev.map(i => i.id === id ? { ...i, is_testing: false, status: "connected", status_message: "Connection verified", last_tested: "Just now" } : i));
+      }, 600);
+    }
   };
 
-  const handleDisconnect = (id: string) => {
+  const handleDisconnect = async (id: string) => {
+    const item = integrations.find(i => i.id === id);
+    if (!item) return;
+
+    if (item.provider === "wordpress") {
+      try {
+        await fetch("/api/integrations/wordpress/disconnect", { method: "POST" });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     setIntegrations(prev => prev.map(i => i.id === id ? { ...i, status: "disconnected", status_message: "Disconnected" } : i));
   };
 
@@ -136,17 +195,89 @@ export default function IntegrationsPage() {
     setActions(prev => prev.map(a => a.id === id ? { ...a, status: "rejected" } : a));
   };
 
-  const handleConnectWp = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIntegrations(prev => prev.map(i => i.provider === "wordpress" ? {
-      ...i,
-      status: "connected",
-      status_message: `Connected to ${wpForm.site_url} (${wpForm.seo_plugin})`,
-      config: { site_url: wpForm.site_url, username: wpForm.username, seo_plugin: wpForm.seo_plugin },
-      last_tested: "Just now",
-    } : i));
-    setShowWpModal(false);
+  // Test credentials inside modal
+  const handleTestWpCredentials = async () => {
+    if (!wpForm.site_url || !wpForm.username || !wpForm.app_password) {
+      setWpFeedback({ ok: false, message: "Please fill in all fields before testing." });
+      return;
+    }
+
+    setWpTesting(true);
+    setWpFeedback(null);
+
+    try {
+      const res = await fetch("/api/integrations/wordpress/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_url: wpForm.site_url,
+          username: wpForm.username,
+          application_password: wpForm.app_password,
+          seo_plugin: wpForm.seo_plugin,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.ok) {
+        setWpFeedback({
+          ok: true,
+          message: `✓ Connected to ${data.site_name} as ${data.username} (REST API available).`,
+        });
+      } else {
+        setWpFeedback({ ok: false, message: data.error || "Connection failed." });
+      }
+    } catch (err: any) {
+      setWpFeedback({ ok: false, message: err.message || "Failed to reach server." });
+    } finally {
+      setWpTesting(false);
+    }
   };
+
+  // Save connection
+  const handleConnectWp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWpSaving(true);
+    setWpFeedback(null);
+
+    try {
+      const res = await fetch("/api/integrations/wordpress/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_url: wpForm.site_url,
+          username: wpForm.username,
+          application_password: wpForm.app_password,
+          seo_plugin: wpForm.seo_plugin,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setIntegrations(prev => prev.map(i => i.provider === "wordpress" ? {
+          ...i,
+          status: "connected",
+          status_message: `Connected to ${data.site_name || wpForm.site_url}`,
+          config: { site_url: wpForm.site_url, username: data.username || wpForm.username, seo_plugin: data.seo_plugin || wpForm.seo_plugin },
+          last_tested: "Just now",
+        } : i));
+        setShowWpModal(false);
+        setWpFeedback(null);
+      } else {
+        setWpFeedback({ ok: false, message: data.error || "Failed to save WordPress connection." });
+      }
+    } catch (err: any) {
+      setWpFeedback({ ok: false, message: err.message || "Failed to connect." });
+    } finally {
+      setWpSaving(false);
+    }
+  };
+
+  const handleStartInitialCrawl = () => {
+    setCrawlStarted(true);
+    setTimeout(() => setCrawlStarted(false), 3000);
+  };
+
+  const isWpConnected = integrations.some(i => i.provider === "wordpress" && i.status === "connected");
 
   return (
     <div className="flex min-h-screen bg-white text-neutral-900">
@@ -171,7 +302,7 @@ export default function IntegrationsPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                4 Active Connectors
+                {integrations.filter(i => i.status === "connected").length} Active Connectors
               </span>
             </div>
           </div>
@@ -219,6 +350,26 @@ export default function IntegrationsPage() {
                   <strong>Human Approval Protocol:</strong> Connecting an integration does NOT grant blanket permission to modify your site. Every single execution proposed by any agent requires explicit human review and approval before being pushed.
                 </div>
               </div>
+
+              {/* Initial Crawl Notification Banner after connecting */}
+              {isWpConnected && (
+                <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div>
+                      <strong>WordPress Connected:</strong> Your site is ready for autonomous SEO analysis and draft creation.
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleStartInitialCrawl}
+                    disabled={crawlStarted}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 flex items-center gap-1"
+                  >
+                    {crawlStarted ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {crawlStarted ? "Crawling Site..." : "Run Initial Website Crawl"}
+                  </button>
+                </div>
+              )}
 
               {/* Integrations Grid */}
               <div className="grid grid-cols-2 gap-4">
@@ -277,7 +428,7 @@ export default function IntegrationsPage() {
                               disabled={item.is_testing}
                               className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
                               {item.is_testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                              Test
+                              Verify
                             </button>
                             <button
                               onClick={() => handleDisconnect(item.id)}
@@ -297,17 +448,9 @@ export default function IntegrationsPage() {
 
                         {item.status === "disconnected" && item.provider === "wordpress" && (
                           <button
-                            onClick={() => setShowWpModal(true)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
-                            Connect WordPress
-                          </button>
-                        )}
-
-                        {item.status === "disconnected" && item.provider !== "wordpress" && (
-                          <button
-                            onClick={() => handleTestConnection(item.id)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
-                            Connect Platform
+                            onClick={() => { setShowWpModal(true); setWpFeedback(null); }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-1">
+                            <Key className="w-3 h-3" /> Connect WordPress
                           </button>
                         )}
                       </div>
@@ -318,68 +461,49 @@ export default function IntegrationsPage() {
             </div>
           )}
 
-          {/* ── EXECUTION QUEUE TAB ── */}
+          {/* ── EXECUTION ACTIONS TAB ── */}
           {activeTab === "actions" && (
             <div className="space-y-4">
-              <div className="flex items-start gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-2xl text-xs text-neutral-600">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Pending execution actions created by specialized agents. Approving an action invokes the execution connector (WordPress or GitHub) to perform the change safely.</span>
-              </div>
-
               <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-                <div className="grid grid-cols-12 gap-0 px-4 py-3 bg-neutral-50 border-b border-neutral-200 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
-                  <span className="col-span-3">Action & Agent</span>
-                  <span className="col-span-2">Target Page</span>
-                  <span className="col-span-3">Details</span>
-                  <span className="col-span-1 text-center">Risk</span>
-                  <span className="col-span-3 text-right">Approval</span>
+                <div className="p-4 border-b border-neutral-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-neutral-900 text-sm">Pending Execution Actions</h3>
+                    <p className="text-neutral-500 text-xs mt-0.5">Every action below requires human approval before execution.</p>
+                  </div>
+                  <span className="text-xs bg-amber-50 text-amber-700 font-semibold px-2.5 py-1 rounded-full border border-amber-200">
+                    {actions.filter(a => a.status === "pending").length} Pending Review
+                  </span>
                 </div>
 
-                <div className="divide-y divide-neutral-100">
+                <div className="divide-y divide-neutral-100 text-xs">
                   {actions.map(act => (
-                    <div key={act.id} className="grid grid-cols-12 gap-0 px-4 py-3 text-xs items-center hover:bg-neutral-50 transition-colors">
-                      <div className="col-span-3">
-                        <span className="font-bold text-neutral-900 block">{act.type.replace(/_/g, " ")}</span>
-                        <span className="text-[10px] text-neutral-400">by {act.proposed_by} · {act.time}</span>
+                    <div key={act.id} className="p-4 flex items-center justify-between hover:bg-neutral-50 transition-colors">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-neutral-900">{act.type}</span>
+                          <span className="font-mono text-neutral-500 text-[11px]">{act.page}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            act.risk === "low" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : act.risk === "medium" ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                : "bg-red-50 text-red-700 border border-red-200"
+                          }`}>
+                            {act.risk.toUpperCase()} RISK
+                          </span>
+                        </div>
+                        <p className="text-neutral-600 text-[11px]">{act.details}</p>
+                        <p className="text-[10px] text-neutral-400">Proposed by {act.proposed_by} · {act.time}</p>
                       </div>
 
-                      <div className="col-span-2 font-mono text-indigo-600 truncate pr-2">
-                        {act.page}
-                      </div>
-
-                      <div className="col-span-3 text-neutral-600 text-[11px] pr-2">
-                        {act.details}
-                      </div>
-
-                      <div className="col-span-1 text-center">
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
-                          act.risk === "high" ? "bg-red-50 text-red-700 border-red-200"
-                            : act.risk === "medium" ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        }`}>
-                          {act.risk.toUpperCase()}
-                        </span>
-                      </div>
-
-                      <div className="col-span-3 flex items-center justify-end gap-2">
-                        {act.status === "pending" && act.risk !== "high" && (
-                          <>
-                            <button onClick={() => handleApproveAction(act.id)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors">
-                              Approve
-                            </button>
+                      <div className="flex items-center gap-2">
+                        {act.status === "pending" && (
+                          <div className="flex items-center gap-2">
                             <button onClick={() => handleRejectAction(act.id)}
-                              className="bg-neutral-100 hover:bg-neutral-200 text-neutral-600 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-colors">
+                              className="text-neutral-400 hover:text-red-600 text-[11px] font-medium px-2 py-1 transition-colors">
                               Reject
                             </button>
-                          </>
-                        )}
-                        {act.status === "pending" && act.risk === "high" && (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-lg">High Risk Review</span>
                             <button onClick={() => handleApproveAction(act.id)}
                               className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors">
-                              Approve PR
+                              Approve & Execute
                             </button>
                           </div>
                         )}
@@ -406,55 +530,126 @@ export default function IntegrationsPage() {
             </div>
           )}
 
-
-
         </div>
       </div>
 
       {/* WordPress Connect Modal */}
       {showWpModal && (
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
-            <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-              <span>🟦</span> Connect WordPress Site
-            </h3>
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
+                <span>🟦</span> Connect WordPress Site
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowWpModal(false)}
+                className="text-neutral-400 hover:text-neutral-600 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
             <p className="text-xs text-neutral-500 leading-relaxed">
-              Uses WordPress Application Passwords. Your main administrator password is <strong>never required or stored</strong>.
+              Connect your WordPress site via official REST API. Uses WordPress Application Passwords so your administrator password is <strong>never required or stored</strong>.
             </p>
 
-            <form onSubmit={handleConnectWp} className="space-y-3 text-xs">
+            {/* How-To Guide Box */}
+            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl space-y-1.5 text-[11px] text-neutral-600">
+              <div className="flex items-center gap-1.5 font-semibold text-neutral-800">
+                <HelpCircle className="w-3.5 h-3.5 text-indigo-600" />
+                How to generate a WordPress Application Password:
+              </div>
+              <ol className="list-decimal list-inside space-y-0.5 text-neutral-600 pl-1 text-[10.5px]">
+                <li>Log in to your WordPress admin panel (<code className="bg-neutral-200 px-1 py-0.5 rounded">/wp-admin</code>).</li>
+                <li>Go to <strong>Users → Profile</strong> (or Edit User).</li>
+                <li>Scroll down to the <strong>Application Passwords</strong> section.</li>
+                <li>Enter a name (e.g. <em>SEO Autopilot</em>) and click <strong>Add New Application Password</strong>.</li>
+                <li>Copy the generated 16-character password and paste it below.</li>
+              </ol>
+            </div>
+
+            {/* Feedback Alert */}
+            {wpFeedback && (
+              <div className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
+                wpFeedback.ok ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
+              }`}>
+                {wpFeedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                <span>{wpFeedback.message}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConnectWp} className="space-y-3.5 text-xs">
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">WordPress Site URL</label>
-                <input value={wpForm.site_url} onChange={e => setWpForm(f => ({ ...f, site_url: e.target.value }))} required placeholder="https://myblog.com"
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-400" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">WordPress Username</label>
-                <input value={wpForm.username} onChange={e => setWpForm(f => ({ ...f, username: e.target.value }))} required placeholder="editor_user"
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-400" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">Application Password</label>
-                <input type="password" value={wpForm.app_password} onChange={e => setWpForm(f => ({ ...f, app_password: e.target.value }))} required placeholder="abcd 1234 efgh 5678"
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-400" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">SEO Plugin Installed</label>
-                <select value={wpForm.seo_plugin} onChange={e => setWpForm(f => ({ ...f, seo_plugin: e.target.value }))}
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-700 focus:outline-none focus:border-indigo-400">
-                  <option value="yoast">Yoast SEO</option>
-                  <option value="rankmath">Rank Math</option>
-                  <option value="aioseo">All-in-One SEO</option>
-                  <option value="none">None / Native</option>
-                </select>
+                <input
+                  type="url"
+                  value={wpForm.site_url}
+                  onChange={e => setWpForm(f => ({ ...f, site_url: e.target.value }))}
+                  required
+                  placeholder="https://example.com"
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
               </div>
 
-              <div className="flex gap-2 pt-2">
-                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl transition-colors">
-                  Verify & Save WordPress Connection
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">WordPress Username</label>
+                  <input
+                    type="text"
+                    value={wpForm.username}
+                    onChange={e => setWpForm(f => ({ ...f, username: e.target.value }))}
+                    required
+                    placeholder="editor_user"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">SEO Plugin (Optional)</label>
+                  <select
+                    value={wpForm.seo_plugin}
+                    onChange={e => setWpForm(f => ({ ...f, seo_plugin: e.target.value }))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-700 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="none">Auto-Detect / Native</option>
+                    <option value="yoast">Yoast SEO</option>
+                    <option value="rankmath">Rank Math</option>
+                    <option value="aioseo">All-in-One SEO</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">Application Password</label>
+                <input
+                  type="password"
+                  value={wpForm.app_password}
+                  onChange={e => setWpForm(f => ({ ...f, app_password: e.target.value }))}
+                  required
+                  placeholder="xxxx xxxx xxxx xxxx"
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 font-mono tracking-wider focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestWpCredentials}
+                  disabled={wpTesting || wpSaving}
+                  className="bg-neutral-100 hover:bg-neutral-200 disabled:opacity-50 text-neutral-700 font-semibold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  {wpTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Test Connection
                 </button>
-                <button type="button" onClick={() => setShowWpModal(false)} className="bg-neutral-100 hover:bg-neutral-200 text-neutral-600 px-4 py-2 rounded-xl font-medium">
-                  Cancel
+
+                <button
+                  type="submit"
+                  disabled={wpSaving || wpTesting}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  {wpSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Connect & Save Site
                 </button>
               </div>
             </form>

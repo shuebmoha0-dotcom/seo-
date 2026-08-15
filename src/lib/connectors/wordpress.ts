@@ -1,9 +1,11 @@
 /**
  * WordPress Connector
  * 
- * Uses WordPress REST API with Application Passwords (no admin password required).
+ * Implements IConnector for the WordPress REST API.
+ * Uses WordPress Application Passwords for authentication.
  * Adapts automatically to Yoast SEO, Rank Math, or All-in-One SEO.
- * Agents never receive WordPress credentials.
+ * Delegates to WordPressClient for rate limiting, retry logic, and SSRF security.
+ * Agents never receive or store WordPress credentials directly.
  */
 
 import type {
@@ -11,50 +13,16 @@ import type {
   GenericAction, ActionResult
 } from './types';
 import { ConnectorError, ConnectorErrors, ACTION_CAPABILITY_MAP } from './types';
+import { WordPressClient, WordPressSEOPlugin } from './wordpressClient';
 
-export type WordPressSEOPlugin = 'yoast' | 'rankmath' | 'aioseo' | 'none';
-
-interface WordPressConfig {
+export interface WordPressConfig {
   site_url: string;
-  app_username: string;       // WordPress username (not admin pass)
+  app_username: string;       // WordPress username
   app_password: string;       // WordPress Application Password
   seo_plugin: WordPressSEOPlugin;
   default_author_id?: number;
   media_upload_path?: string;
 }
-
-// SEO plugin field adapter
-const SEO_PLUGIN_ADAPTERS: Record<WordPressSEOPlugin, {
-  meta_title_field: string;
-  meta_desc_field: string;
-  canonical_field: string;
-  robots_field?: string;
-  schema_field?: string;
-}> = {
-  yoast: {
-    meta_title_field: '_yoast_wpseo_title',
-    meta_desc_field: '_yoast_wpseo_metadesc',
-    canonical_field: '_yoast_wpseo_canonical',
-    robots_field: '_yoast_wpseo_meta-robots-noindex',
-  },
-  rankmath: {
-    meta_title_field: 'rank_math_title',
-    meta_desc_field: 'rank_math_description',
-    canonical_field: 'rank_math_canonical_url',
-    robots_field: 'rank_math_robots',
-    schema_field: 'rank_math_schema',
-  },
-  aioseo: {
-    meta_title_field: '_aioseo_title',
-    meta_desc_field: '_aioseo_description',
-    canonical_field: '_aioseo_canonical_url',
-  },
-  none: {
-    meta_title_field: '',
-    meta_desc_field: '',
-    canonical_field: '',
-  },
-};
 
 export class WordPressConnector implements IConnector {
   readonly type: ConnectorType = 'wordpress';
@@ -67,54 +35,28 @@ export class WordPressConnector implements IConnector {
   ]);
 
   private config: WordPressConfig;
-  private adapter: typeof SEO_PLUGIN_ADAPTERS[WordPressSEOPlugin];
+  private client: WordPressClient;
 
   constructor(config: WordPressConfig) {
     this.config = config;
-    this.adapter = SEO_PLUGIN_ADAPTERS[config.seo_plugin];
-  }
-
-  private get authHeader(): string {
-    const credentials = `${this.config.app_username}:${this.config.app_password}`;
-    return 'Basic ' + Buffer.from(credentials).toString('base64');
-  }
-
-  private get apiBase(): string {
-    return this.config.site_url.replace(/\/$/, '') + '/wp-json/wp/v2';
-  }
-
-  private async wpFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const url = this.apiBase + path;
-    const res = await fetch(url, {
-      ...options,
-      headers: {
-        'Authorization': this.authHeader,
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+    this.client = new WordPressClient({
+      siteUrl: config.site_url,
+      username: config.app_username,
+      applicationPassword: config.app_password,
+      seoPlugin: config.seo_plugin,
     });
-
-    if (res.status === 401) throw new ConnectorError(ConnectorErrors.AUTH_REVOKED, 'WordPress Application Password rejected. Please reconnect.', false);
-    if (res.status === 403) throw new ConnectorError(ConnectorErrors.PERMISSION_DENIED, 'WordPress user lacks required permissions.', false);
-    if (res.status === 404) throw new ConnectorError(ConnectorErrors.NOT_FOUND, `WordPress resource not found: ${path}`, false);
-    if (res.status === 429) throw new ConnectorError(ConnectorErrors.RATE_LIMITED, 'WordPress API rate limit hit. Retry shortly.', true);
-    if (!res.ok) throw new ConnectorError(ConnectorErrors.CMS_ERROR, `WordPress API error ${res.status}: ${res.statusText}`, false);
-
-    return res.json() as Promise<T>;
   }
 
   async testConnection(): Promise<{ ok: boolean; message: string; details?: Record<string, any> }> {
     try {
-      const site = await this.wpFetch<any>('/');
-      const pluginInfo = this.detectSEOPlugin();
+      const test = await this.client.testConnection();
       return {
-        ok: true,
-        message: `Connected to "${site.name || this.config.site_url}"`,
+        ok: test.ok,
+        message: test.message,
         details: {
-          site_name: site.name,
-          wordpress_version: site.description,
-          seo_plugin: this.config.seo_plugin,
-          seo_plugin_adapter: pluginInfo,
+          site_name: test.siteName,
+          username: test.username,
+          detected_plugin: test.detectedPlugin,
           capabilities: [...this.capabilities],
         },
       };
@@ -147,195 +89,128 @@ export class WordPressConnector implements IConnector {
       case 'set_featured_image': return this.setFeaturedImage(action.payload);
       case 'publish_article': return this.publishPost(action.payload);
       case 'verify_change': return this.verifyChange(action.payload);
-      case 'update_schema': return this.updateSchema(action.payload);
-      default: return { success: false, error: `Action ${action.type} not yet implemented for WordPress`, error_code: ConnectorErrors.UNSUPPORTED_CAPABILITY };
+      default:
+        return {
+          success: false,
+          error: `Action ${action.type} not supported for WordPress`,
+          error_code: ConnectorErrors.UNSUPPORTED_CAPABILITY,
+        };
     }
   }
 
   private async getPage(payload: any): Promise<ActionResult> {
     try {
-      const posts = await this.wpFetch<any[]>(`/posts?slug=${payload.slug || ''}&status=any`);
-      if (!posts.length) {
-        const pages = await this.wpFetch<any[]>(`/pages?slug=${payload.slug || ''}&status=any`);
-        if (!pages.length) return { success: false, error: 'Page/post not found', error_code: ConnectorErrors.NOT_FOUND };
-        return { success: true, data: { post: pages[0], type: 'page' } };
+      const posts = await this.client.getPosts({ search: payload.slug, per_page: 5 });
+      if (!posts.data.length) {
+        return { success: false, error: 'Page/post not found on WordPress', error_code: ConnectorErrors.NOT_FOUND };
       }
-      return { success: true, data: { post: posts[0], type: 'post' } };
+      return { success: true, data: { post: posts.data[0], type: 'post' } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async createDraft(payload: any): Promise<ActionResult> {
     try {
-      const post = await this.wpFetch<any>('/posts', {
-        method: 'POST',
-        body: JSON.stringify({
-          title: payload.title,
-          content: payload.content || '',
-          status: 'draft',
-          excerpt: payload.excerpt || '',
-          categories: payload.category_ids || [],
-          tags: payload.tag_ids || [],
-        }),
+      const post = await this.client.createPost({
+        title: payload.title,
+        content: payload.content || '',
+        status: 'draft',
+        excerpt: payload.excerpt || '',
+        slug: payload.slug,
+        category_ids: payload.category_ids || [],
+        tag_ids: payload.tag_ids || [],
+        seo_title: payload.seo_title,
+        meta_description: payload.meta_description,
+        canonical_url: payload.canonical_url,
       });
-      // Apply SEO metadata if plugin is configured
-      if (this.config.seo_plugin !== 'none' && this.adapter.meta_title_field) {
-        await this.applyMetaFields(post.id, payload);
-      }
-      return { success: true, data: { wp_post_id: post.id, edit_url: post.link }, wp_post_id: post.id };
+      return {
+        success: true,
+        data: { wp_post_id: post.id, edit_url: post.link, status: post.status },
+        wp_post_id: post.id,
+      };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async updateTitle(payload: any): Promise<ActionResult> {
     try {
       const { post_id, title, seo_title } = payload;
-      // Update native WP title
-      await this.wpFetch<any>(`/posts/${post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ title }),
+      await this.client.updatePost(post_id, {
+        title,
+        seo_title,
       });
-      // Update SEO plugin title if configured
-      if (seo_title && this.config.seo_plugin !== 'none' && this.adapter.meta_title_field) {
-        await this.wpFetch<any>(`/posts/${post_id}`, {
-          method: 'POST',
-          body: JSON.stringify({ meta: { [this.adapter.meta_title_field]: seo_title } }),
-        });
-      }
       return { success: true, data: { post_id, title_updated: true } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async updateMetaDescription(payload: any): Promise<ActionResult> {
     try {
       const { post_id, meta_description } = payload;
-      if (this.config.seo_plugin === 'none' || !this.adapter.meta_desc_field) {
-        return { success: false, error: 'No SEO plugin configured. Cannot update meta description via WordPress connector.', error_code: ConnectorErrors.UNSUPPORTED_CAPABILITY };
-      }
-      await this.wpFetch<any>(`/posts/${post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ meta: { [this.adapter.meta_desc_field]: meta_description } }),
-      });
+      await this.client.updatePost(post_id, { meta_description });
       return { success: true, data: { post_id, meta_updated: true } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async updatePost(payload: any): Promise<ActionResult> {
     try {
       const { post_id, content, title } = payload;
-      const updated = await this.wpFetch<any>(`/posts/${post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ content, ...(title ? { title } : {}) }),
-      });
+      const updated = await this.client.updatePost(post_id, { content, ...(title ? { title } : {}) });
       return { success: true, data: { post_id, updated: true, link: updated.link } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async addImage(payload: any): Promise<ActionResult> {
-    // WordPress media upload — requires multipart form
     try {
-      const formData = new FormData();
-      if (payload.image_blob) formData.append('file', payload.image_blob, payload.filename || 'image.webp');
-      formData.append('alt_text', payload.alt_text || '');
-      formData.append('title', payload.title || '');
-      formData.append('caption', payload.caption || '');
-
-      const res = await fetch(this.apiBase + '/media', {
-        method: 'POST',
-        headers: { 'Authorization': this.authHeader },
-        body: formData,
+      const media = await this.client.uploadMedia({
+        buffer: payload.image_blob || Buffer.from(''),
+        filename: payload.filename || 'image.webp',
+        altText: payload.alt_text,
+        title: payload.title,
+        caption: payload.caption,
       });
-      if (!res.ok) throw new ConnectorError(ConnectorErrors.CMS_ERROR, 'Media upload failed', false);
-      const media = await res.json();
-      return { success: true, data: { media_id: media.id, url: media.source_url } };
+      return { success: true, data: { media_id: media.id, url: media.url } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async setFeaturedImage(payload: any): Promise<ActionResult> {
     try {
-      await this.wpFetch<any>(`/posts/${payload.post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ featured_media: payload.media_id }),
-      });
+      await this.client.setFeaturedImage(payload.post_id, payload.media_id);
       return { success: true, data: { post_id: payload.post_id, featured_media: payload.media_id } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async publishPost(payload: any): Promise<ActionResult> {
     try {
-      const post = await this.wpFetch<any>(`/posts/${payload.post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ status: 'publish' }),
-      });
+      const post = await this.client.publishPost(payload.post_id);
       return { success: true, data: { post_id: payload.post_id, link: post.link, status: 'published' } };
     } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
+      return { success: false, error: err.message, error_code: ConnectorErrors.CMS_ERROR };
     }
   }
 
   private async verifyChange(payload: any): Promise<ActionResult> {
     try {
-      const post = await this.wpFetch<any>(`/posts/${payload.post_id}`);
+      const verification = await this.client.verifyPublication(payload.post_id);
       return {
-        success: true,
-        verification_url: post.link,
-        data: {
-          title: post.title?.rendered,
-          status: post.status,
-          link: post.link,
-          modified: post.modified,
-        },
+        success: verification.isPublished,
+        verification_url: verification.url,
+        data: verification,
       };
     } catch (err: any) {
       return { success: false, error: err.message, error_code: ConnectorErrors.VERIFICATION_FAILED };
     }
-  }
-
-  private async updateSchema(payload: any): Promise<ActionResult> {
-    try {
-      if (this.config.seo_plugin !== 'rankmath' || !this.adapter.schema_field) {
-        return { success: false, error: 'Schema update via connector only supported with Rank Math currently.', error_code: ConnectorErrors.UNSUPPORTED_CAPABILITY };
-      }
-      await this.wpFetch<any>(`/posts/${payload.post_id}`, {
-        method: 'POST',
-        body: JSON.stringify({ meta: { [this.adapter.schema_field!]: JSON.stringify(payload.schema) } }),
-      });
-      return { success: true, data: { schema_updated: true } };
-    } catch (err: any) {
-      return { success: false, error: err.message, error_code: err.code };
-    }
-  }
-
-  private async applyMetaFields(postId: number, payload: any): Promise<void> {
-    const meta: Record<string, string> = {};
-    if (payload.seo_title && this.adapter.meta_title_field) meta[this.adapter.meta_title_field] = payload.seo_title;
-    if (payload.meta_description && this.adapter.meta_desc_field) meta[this.adapter.meta_desc_field] = payload.meta_description;
-    if (payload.canonical && this.adapter.canonical_field) meta[this.adapter.canonical_field] = payload.canonical;
-    if (Object.keys(meta).length > 0) {
-      await this.wpFetch<any>(`/posts/${postId}`, { method: 'POST', body: JSON.stringify({ meta }) });
-    }
-  }
-
-  private detectSEOPlugin(): string {
-    const adapters: Record<WordPressSEOPlugin, string> = {
-      yoast: 'Yoast SEO adapter active',
-      rankmath: 'Rank Math adapter active',
-      aioseo: 'All-in-One SEO adapter active',
-      none: 'No SEO plugin configured',
-    };
-    return adapters[this.config.seo_plugin];
   }
 
   getMetadata(): ConnectorMetadata {
