@@ -8,7 +8,6 @@ const PUBLIC_PREFIXES = ['/auth/', '/api/auth/'];
 function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_ROUTES.includes(pathname)) return true;
   if (PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix))) return true;
-  // Static files and Next.js internals are excluded via the matcher below
   return false;
 }
 
@@ -24,6 +23,11 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder',
     {
+      cookieOptions: {
+        maxAge: 60 * 60 * 24 * 365, // 1 year persistence
+        path: '/',
+        sameSite: 'lax',
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -32,19 +36,23 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              maxAge: 60 * 60 * 24 * 365, // Persist across browser/window closure
+              path: '/',
+              sameSite: 'lax',
+            })
           );
         },
       },
     }
   );
 
-  // Always refresh the session (required by @supabase/ssr)
+  // Refresh the session (extends session and keeps user logged in)
   const { data: { user } } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Only enforce auth protection when real Supabase credentials are configured
   if (isRealSupabase) {
     const isPublic = isPublicRoute(pathname);
 

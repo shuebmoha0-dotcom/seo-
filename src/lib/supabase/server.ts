@@ -10,6 +10,12 @@ export async function createClient() {
     supabaseUrl,
     supabaseAnonKey,
     {
+      cookieOptions: {
+        maxAge: 60 * 60 * 24 * 365, // 1 year persistent session
+        path: '/',
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll()
@@ -17,7 +23,12 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                maxAge: 60 * 60 * 24 * 365, // Persist across window close
+                path: '/',
+                sameSite: 'lax',
+              })
             )
           } catch {
             // Server Component ignore set cookie errors
