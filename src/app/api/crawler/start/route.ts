@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       websiteId: website_id || 'default',
       projectId: project_id,
       targetUrl: validation.normalizedUrl,
-      siteTech,
+      siteTech: site_tech,
       maxPages: max_pages ? parseInt(max_pages, 10) : 100,
       maxDepth: max_depth ? parseInt(max_depth, 10) : 3,
     });
