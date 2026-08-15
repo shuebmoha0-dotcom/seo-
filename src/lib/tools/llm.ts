@@ -38,18 +38,62 @@ function getModel(provider: string, modelName: string): LanguageModel {
   return openai(modelName) as LanguageModel;
 }
 
-// Cost tracking (mock rates for example)
-const PRICING = {
+// Usage context optionally passed per call for DB tracking
+export interface UsageContext {
+  user_id?: string;
+  project_id?: string;
+  task_id?: string;
+  task_execution_id?: string;
+  agent_execution_id?: string;
+}
+
+// Cost rates per 1K tokens (USD)
+const PRICING: Record<string, { in: number; out: number }> = {
   'gpt-4o': { in: 0.005, out: 0.015 },
   'gpt-4o-mini': { in: 0.00015, out: 0.0006 },
-  'claude-3-5-sonnet-20240620': { in: 0.003, out: 0.015 }
+  'claude-3-5-sonnet-20240620': { in: 0.003, out: 0.015 },
+  'claude-3-haiku-20240307': { in: 0.00025, out: 0.00125 },
 };
 
-function trackCost(agent: string, modelName: string, usage: any) {
+async function trackCost(agent: string, modelName: string, provider: string, usage: any, context?: UsageContext) {
   if (!usage) return;
   const rates = PRICING[modelName as keyof typeof PRICING] || { in: 0, out: 0 };
-  const cost = ((usage.promptTokens || 0) / 1000) * rates.in + ((usage.completionTokens || 0) / 1000) * rates.out;
+  const inputTokens = usage.promptTokens || 0;
+  const outputTokens = usage.completionTokens || 0;
+  const cost = (inputTokens / 1000) * rates.in + (outputTokens / 1000) * rates.out;
+  
   console.log(`[Cost Tracker] Agent: ${agent} | Model: ${modelName} | Tokens: ${usage.totalTokens} | Est. Cost: $${cost.toFixed(4)}`);
+
+  // Persist to Supabase usage_events (non-blocking, fails silently in dev)
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (supabaseUrl && !supabaseUrl.includes('placeholder') && supabaseKey && context?.user_id) {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      await supabase.from('usage_events').insert({
+        user_id: context.user_id,
+        project_id: context.project_id,
+        task_id: context.task_id,
+        task_execution_id: context.task_execution_id,
+        agent_execution_id: context.agent_execution_id,
+        provider,
+        model: modelName,
+        api_type: 'llm',
+        agent_type: agent,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        api_calls: 1,
+        estimated_cost: parseFloat(cost.toFixed(6)),
+        currency: 'USD'
+      });
+    }
+  } catch (err) {
+    // Non-critical — never block agent execution due to usage tracking failure
+    console.warn('[Cost Tracker] Failed to persist usage event:', err);
+  }
 }
 
 /**
@@ -65,14 +109,14 @@ export const LLMProvider = {
 
     try {
       const result = await aiGenerateObject({ ...options, model: primaryModel });
-      trackCost(options.agent, config.modelName, result.usage);
+      trackCost(options.agent, config.modelName, config.provider, result.usage, options.context);
       return result;
     } catch (error: any) {
       if (config.fallback) {
         console.warn(`[LLM Router] ${config.modelName} unavailable for ${options.agent}. Retrying with fallback: ${config.fallback.modelName}...`);
         const fallbackModel = getModel(config.fallback.provider, config.fallback.modelName);
         const result = await aiGenerateObject({ ...options, model: fallbackModel });
-        trackCost(options.agent, config.fallback.modelName, result.usage);
+        trackCost(options.agent, config.fallback.modelName, config.fallback.provider, result.usage, options.context);
         return result;
       }
       throw error;
@@ -87,14 +131,14 @@ export const LLMProvider = {
 
     try {
       const result = await aiGenerateText({ ...options, model: primaryModel });
-      trackCost(options.agent, config.modelName, result.usage);
+      trackCost(options.agent, config.modelName, config.provider, result.usage, options.context);
       return result;
     } catch (error: any) {
       if (config.fallback) {
         console.warn(`[LLM Router] ${config.modelName} unavailable for ${options.agent}. Retrying with fallback: ${config.fallback.modelName}...`);
         const fallbackModel = getModel(config.fallback.provider, config.fallback.modelName);
         const result = await aiGenerateText({ ...options, model: fallbackModel });
-        trackCost(options.agent, config.fallback.modelName, result.usage);
+        trackCost(options.agent, config.fallback.modelName, config.fallback.provider, result.usage, options.context);
         return result;
       }
       throw error;

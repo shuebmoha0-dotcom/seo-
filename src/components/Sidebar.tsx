@@ -46,6 +46,7 @@ export function Sidebar() {
     { name: "Backlinks", href: "/backlinks", icon: LinkIcon },
     { name: "Technical SEO", href: "/technical-seo", icon: Wrench },
     { name: "Integrations", href: "/integrations", icon: Plug2 },
+    { name: "Usage", href: "/usage", icon: Zap },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
