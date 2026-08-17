@@ -74,7 +74,7 @@ export default function BacklinksPage() {
     }
     setResearching(true);
     try {
-      const res = await fetch("/api/agent/backlinks/research", {
+      const res = await fetch("/api/agent/backlink/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -96,7 +96,7 @@ export default function BacklinksPage() {
     setOutreachDraft(null);
 
     try {
-      const res = await fetch("/api/agent/backlinks/draft-outreach", {
+      const res = await fetch("/api/agent/backlink/outreach/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,10 +132,10 @@ export default function BacklinksPage() {
   const handleVerify = async (linkId: string, linkingUrl: string, targetUrl: string) => {
     setVerifyingId(linkId);
     try {
-      await fetch("/api/agent/backlinks/verify", {
+      await fetch("/api/agent/backlink/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ linkingUrl, targetUrl }),
+        body: JSON.stringify({ linking_url: linkingUrl, target_url: targetUrl }),
       });
     } catch (e) {
       console.error(e);

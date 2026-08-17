@@ -2,10 +2,72 @@ import { NextResponse } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
 import { createClient } from '@/lib/supabase/server';
 
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const websiteId = searchParams.get('website_id');
+
+    if (!websiteId) {
+      return NextResponse.json({ drafts: [] });
+    }
+
+    const supabase = await createClient();
+
+    const { data: drafts, error } = await supabase
+      .from('content_drafts')
+      .select(`
+        *,
+        content_versions (*),
+        content_qa_results (*),
+        content_images (*)
+      `)
+      .eq('website_id', websiteId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const formattedDrafts = (drafts || []).map((d: any) => ({
+      id: d.id,
+      working_title: d.working_title,
+      primary_keyword: d.primary_keyword,
+      search_intent: d.search_intent,
+      content_type: d.content_type,
+      word_count: d.word_count || 0,
+      reading_time: d.reading_time_minutes || 0,
+      status: d.status || 'ready_for_approval',
+      version: d.current_version || 1,
+      seo_title: d.seo_title,
+      meta_description: d.meta_description,
+      url_slug: d.url_slug,
+      content_body: d.content_body,
+      qa: d.content_qa_results?.[0] || null,
+      images: d.content_images || [],
+    }));
+
+    return NextResponse.json({ drafts: formattedDrafts });
+  } catch (error: any) {
+    console.error('[Content Draft GET] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { website_id, primary_keyword, secondary_keywords, search_intent, content_type, target_audience, working_title, competitor_gaps, internal_linking_opportunities, entities, revision_notes, rules } = body;
+    const {
+      website_id,
+      primary_keyword,
+      secondary_keywords,
+      search_intent,
+      content_type,
+      target_audience,
+      working_title,
+      competitor_gaps,
+      internal_linking_opportunities,
+      entities,
+      revision_notes,
+      rules,
+    } = body;
 
     if (!primary_keyword || !search_intent) {
       return NextResponse.json({ error: 'primary_keyword and search_intent are required' }, { status: 400 });
@@ -45,8 +107,10 @@ export async function POST(request: Request) {
 
     // Persist draft to Supabase
     const supabase = await createClient();
+    let savedDraft = null;
+
     if (website_id) {
-      const { data: draft } = await supabase
+      const { data: draft, error: draftErr } = await supabase
         .from('content_drafts')
         .insert({
           website_id,
@@ -68,6 +132,9 @@ export async function POST(request: Request) {
         })
         .select()
         .single();
+
+      if (draftErr) throw draftErr;
+      savedDraft = draft;
 
       if (draft) {
         // Save version
@@ -98,9 +165,28 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, output });
+    return NextResponse.json({
+      success: true,
+      draft: savedDraft ? {
+        id: savedDraft.id,
+        working_title: savedDraft.working_title,
+        primary_keyword: savedDraft.primary_keyword,
+        search_intent: savedDraft.search_intent,
+        content_type: savedDraft.content_type,
+        word_count: savedDraft.word_count,
+        reading_time: savedDraft.reading_time_minutes,
+        status: savedDraft.status,
+        version: savedDraft.current_version,
+        seo_title: savedDraft.seo_title,
+        meta_description: savedDraft.meta_description,
+        url_slug: savedDraft.url_slug,
+        content_body: savedDraft.content_body,
+        qa: output.qa,
+        images: output.images,
+      } : output,
+    });
   } catch (error: any) {
-    console.error('Content draft error:', error);
+    console.error('[Content Draft POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

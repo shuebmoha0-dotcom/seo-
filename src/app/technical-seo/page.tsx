@@ -320,10 +320,29 @@ export default function TechnicalSEOPage() {
         start_url: currentWebsite.url,
         site_tech: currentWebsite.platform === "wordpress" ? "wordpress"
           : currentWebsite.platform === "nextjs" ? "nextjs"
-          : currentWebsite.platform === "shopify" ? "shopify"
           : "unknown"
       }));
     }
+    async function fetchLatestCrawl() {
+      if (!currentWebsite) {
+        setResult(null);
+        setIssues([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/agent/technical/crawl?website_id=${currentWebsite.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.result) {
+            setResult(data.result);
+            setIssues(data.result.issues || []);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load previous crawl:", err);
+      }
+    }
+    fetchLatestCrawl();
   }, [currentWebsite?.id]);
 
   const handleCrawl = async (e: React.FormEvent) => {
