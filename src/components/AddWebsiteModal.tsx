@@ -83,14 +83,13 @@ export function AddWebsiteModal() {
       });
 
       const data = await res.json();
-      if (!res.ok || data.error) {
-        setError(data.error || "Failed to add website.");
-      } else {
+
+      if (data.website) {
         await refreshWebsites();
-        if (data.website) {
-          setCurrentWebsite(data.website);
-        }
+        setCurrentWebsite(data.website);
         closeAddModal();
+      } else if (!res.ok || data.error) {
+        setError(data.error || "Failed to add website.");
       }
     } catch (err: any) {
       setError(err.message || "Failed to submit website.");

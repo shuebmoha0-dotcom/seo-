@@ -134,6 +134,7 @@ export class WebsiteService {
     website: any;
     integration?: any;
     error?: string;
+    warning?: string;
   }> {
     // A. Validate URL
     const urlValidation = validateAndNormalizeWordPressUrl(payload.url);
@@ -217,11 +218,8 @@ export class WebsiteService {
           seoPlugin: (payload.wordpress_config.seo_plugin as any) || 'none',
         });
 
-        const test = await wpClient.testConnection();
-        if (!test.ok) {
-          return { success: true, website, error: `Website created, but WordPress auth failed: ${test.message}` };
-        }
-
+        const connectionTest = await wpClient.testConnection();
+        const isConnected = connectionTest.ok;
         const encryptedPass = encryptCredential(payload.wordpress_config.app_password);
 
         const { data: wpInt } = await supabase
@@ -230,8 +228,10 @@ export class WebsiteService {
             website_id: website.id,
             provider: 'wordpress',
             display_name: 'WordPress',
-            status: 'connected',
-            status_message: `Connected to ${test.siteName || domain} as @${payload.wordpress_config.username}`,
+            status: isConnected ? 'connected' : 'action_required',
+            status_message: isConnected 
+              ? `Connected to ${connectionTest.siteName || domain} as @${payload.wordpress_config.username}`
+              : `Auth check: ${connectionTest.message}`,
             config: {
               site_url: normalizedUrl,
               username: payload.wordpress_config.username,
@@ -239,7 +239,7 @@ export class WebsiteService {
             },
             capabilities: ['CREATE_DRAFT', 'UPDATE_CONTENT', 'UPDATE_METADATA', 'PUBLISH_CONTENT'],
             last_tested_at: new Date().toISOString(),
-            last_success_at: new Date().toISOString(),
+            last_success_at: isConnected ? new Date().toISOString() : null,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'website_id,provider' })
           .select('id')
@@ -253,6 +253,10 @@ export class WebsiteService {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'integration_id,credential_type' });
           integrationResult = wpInt;
+        }
+
+        if (!isConnected) {
+          return { success: true, website, integration: integrationResult, warning: `Website connected! Note: WordPress verification returned: ${connectionTest.message}` };
         }
       } catch (err: any) {
         console.error('[WebsiteService] WordPress setup error:', err);

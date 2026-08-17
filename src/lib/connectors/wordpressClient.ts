@@ -183,17 +183,39 @@ export class WordPressClient {
    * 1. Discover WordPress REST API and retrieve site details
    */
   async getSiteInfo(): Promise<WordPressSiteInfo> {
-    const discoveryUrl = `${this.siteUrl}/wp-json/`;
-    const res = await fetch(discoveryUrl, {
-      headers: { 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
+    const endpoints = [
+      `${this.siteUrl}/wp-json/`,
+      `${this.siteUrl}/?rest_route=/`,
+    ];
 
-    if (!res.ok) {
-      throw new Error('WordPress REST API not found. Please ensure the REST API is enabled on your WordPress site.');
+    let data: any = null;
+    let restBase = `${this.siteUrl}/wp-json/`;
+
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Authorization': this.authHeader,
+          },
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (res.ok) {
+          data = await res.json();
+          restBase = url;
+          break;
+        }
+      } catch (e) {
+        // try next endpoint
+      }
     }
 
-    const data = await res.json();
+    if (!data) {
+      throw new Error('WordPress REST API not found or blocked by a security plugin. Please ensure the REST API is accessible on your site.');
+    }
+
     const namespaces: string[] = data.namespaces || [];
 
     return {
@@ -203,7 +225,7 @@ export class WordPressClient {
       home: data.home || this.siteUrl,
       gmt_offset: data.gmt_offset || '0',
       namespaces,
-      rest_base: discoveryUrl,
+      rest_base: restBase,
       has_yoast: namespaces.includes('yoast/v1'),
       has_rankmath: namespaces.includes('rankmath/v1'),
       has_aioseo: namespaces.includes('aioseo/v1'),
