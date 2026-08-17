@@ -55,8 +55,8 @@ export function WebsiteSwitcher() {
       {isOpen && (
         <div className="absolute top-full left-0 mt-1.5 w-72 bg-white border border-neutral-200 rounded-2xl shadow-xl z-50 p-2 space-y-1">
           <div className="px-2.5 py-1.5 border-b border-neutral-100 flex items-center justify-between text-[10px] text-neutral-400">
-            <span className="font-semibold uppercase tracking-wider">Your Websites ({websites.length}/{planLimit?.max_websites || 5})</span>
-            {planLimit && <span className="font-medium text-indigo-600">{planLimit.plan_name}</span>}
+            <span className="font-semibold uppercase tracking-wider">Your Websites ({websites.length})</span>
+            <span className="font-medium text-indigo-600">Testing Mode</span>
           </div>
 
           <div className="max-h-56 overflow-y-auto space-y-0.5">

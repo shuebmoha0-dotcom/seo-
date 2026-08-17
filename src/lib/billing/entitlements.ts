@@ -1,13 +1,14 @@
 /**
  * Centralized Plan Entitlements & Quotas
  * 
- * Controls allowed limits across plans without hardcoding throughout the codebase.
+ * Controls allowed limits across plans.
+ * In Testing / Development Mode: All limits are relaxed and users have unlimited website access.
  */
 
 import { createClient } from '@/lib/supabase/server';
 
 export interface PlanEntitlements {
-  plan_id: 'free' | 'starter' | 'pro' | 'enterprise';
+  plan_id: 'free' | 'starter' | 'pro' | 'enterprise' | 'testing';
   display_name: string;
   max_websites: number;
   max_crawl_pages: number;
@@ -19,6 +20,17 @@ export interface PlanEntitlements {
 }
 
 export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
+  testing: {
+    plan_id: 'testing',
+    display_name: 'Testing Mode (Unlimited)',
+    max_websites: 9999,
+    max_crawl_pages: 50000,
+    max_recurring_tasks: 1000,
+    can_use_github_execution: true,
+    can_use_wordpress_execution: true,
+    can_use_custom_api: true,
+    can_use_scheduled_autopilot: true,
+  },
   free: {
     plan_id: 'free',
     display_name: 'Free Trial',
@@ -28,14 +40,14 @@ export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
     can_use_github_execution: true,
     can_use_wordpress_execution: true,
     can_use_custom_api: true,
-    can_use_scheduled_autopilot: false,
+    can_use_scheduled_autopilot: true,
   },
   starter: {
     plan_id: 'starter',
     display_name: 'Starter Plan',
-    max_websites: 2,
-    max_crawl_pages: 250,
-    max_recurring_tasks: 5,
+    max_websites: 5,
+    max_crawl_pages: 500,
+    max_recurring_tasks: 10,
     can_use_github_execution: true,
     can_use_wordpress_execution: true,
     can_use_custom_api: true,
@@ -44,9 +56,9 @@ export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
   pro: {
     plan_id: 'pro',
     display_name: 'Pro Plan',
-    max_websites: 5,
-    max_crawl_pages: 2500,
-    max_recurring_tasks: 20,
+    max_websites: 20,
+    max_crawl_pages: 5000,
+    max_recurring_tasks: 50,
     can_use_github_execution: true,
     can_use_wordpress_execution: true,
     can_use_custom_api: true,
@@ -55,9 +67,9 @@ export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
   enterprise: {
     plan_id: 'enterprise',
     display_name: 'Enterprise Plan',
-    max_websites: 25,
-    max_crawl_pages: 10000,
-    max_recurring_tasks: 100,
+    max_websites: 9999,
+    max_crawl_pages: 50000,
+    max_recurring_tasks: 1000,
     can_use_github_execution: true,
     can_use_wordpress_execution: true,
     can_use_custom_api: true,
@@ -67,6 +79,7 @@ export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
 
 /**
  * Check if the user has reached their allowed website quota.
+ * Currently in Testing Mode: Always returns allowed = true with unlimited slots.
  */
 export async function checkWebsiteLimit(userId: string): Promise<{
   allowed: boolean;
@@ -78,41 +91,20 @@ export async function checkWebsiteLimit(userId: string): Promise<{
 }> {
   const supabase = await createClient();
 
-  // 1. Fetch user's subscription tier
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('id, email, role')
-    .eq('id', userId)
-    .maybeSingle();
-
-  // Query subscription if table exists, otherwise default to pro for active development
-  const planKey = 'pro';
-  const entitlements = PLAN_ENTITLEMENTS[planKey] || PLAN_ENTITLEMENTS.free;
-
-  // 2. Count existing websites for user
-  const { count, error } = await supabase
+  // Count existing websites for user
+  const { count } = await supabase
     .from('websites')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
 
   const currentCount = count || 0;
 
-  if (currentCount >= entitlements.max_websites) {
-    return {
-      allowed: false,
-      current_count: currentCount,
-      max_websites: entitlements.max_websites,
-      plan_name: entitlements.display_name,
-      upgrade_required: true,
-      message: `You have reached the limit of ${entitlements.max_websites} website(s) on the ${entitlements.display_name}. Please upgrade your plan to connect additional websites.`,
-    };
-  }
-
+  // In Testing Mode: unlimited websites allowed
   return {
     allowed: true,
     current_count: currentCount,
-    max_websites: entitlements.max_websites,
-    plan_name: entitlements.display_name,
+    max_websites: 9999,
+    plan_name: 'Testing Mode',
     upgrade_required: false,
   };
 }

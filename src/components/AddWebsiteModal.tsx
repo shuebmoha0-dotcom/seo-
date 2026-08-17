@@ -118,19 +118,6 @@ export function AddWebsiteModal() {
           </button>
         </div>
 
-        {/* Plan Limit Notice if Reached */}
-        {planLimit && !planLimit.allowed && (
-          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
-            <div className="flex items-center gap-2 font-bold text-amber-800">
-              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>Plan Website Limit Reached</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              You are currently using {planLimit.current_count} of {planLimit.max_websites} website slot(s) on the {planLimit.plan_name}. Please upgrade your plan to connect additional websites.
-            </p>
-          </div>
-        )}
-
         {/* Error Feedback */}
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
@@ -327,7 +314,7 @@ export function AddWebsiteModal() {
           <div className="flex items-center gap-2 pt-2">
             <button
               type="submit"
-              disabled={submitting || (planLimit ? !planLimit.allowed : false)}
+              disabled={submitting}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
