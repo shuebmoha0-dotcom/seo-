@@ -8,6 +8,15 @@
 
 import type { TechnicalIssue } from '@/lib/agent/technicalSeoAgent';
 
+export interface CrawlComparisonInput {
+  id: string;
+  technical_health_score?: number;
+  crawlability_score?: number;
+  indexability_score?: number;
+  issues?: TechnicalIssue[];
+  urls?: Array<{ url: string; status_code: number }>;
+}
+
 export interface CrawlComparisonResult {
   previous_crawl_id?: string;
   current_crawl_id: string;
@@ -22,36 +31,28 @@ export interface CrawlComparisonResult {
 }
 
 export function compareCrawls(
-  currentCrawl: {
-    id: string;
-    technical_health_score: number;
-    crawlability_score: number;
-    indexability_score: number;
-    issues: TechnicalIssue[];
-    urls: Array<{ url: string; status_code: number }>;
-  },
-  previousCrawl?: {
-    id: string;
-    technical_health_score: number;
-    crawlability_score: number;
-    indexability_score: number;
-    issues: TechnicalIssue[];
-    urls: Array<{ url: string; status_code: number }>;
-  } | null
+  currentCrawl: CrawlComparisonInput,
+  previousCrawl?: CrawlComparisonInput | null
 ): CrawlComparisonResult {
+  const currIssues = currentCrawl.issues || [];
+  const currUrls = currentCrawl.urls || [];
+
   if (!previousCrawl) {
     return {
       current_crawl_id: currentCrawl.id,
       score_delta: 0,
       crawlability_delta: 0,
       indexability_delta: 0,
-      new_issues: currentCrawl.issues,
+      new_issues: currIssues,
       resolved_issues: [],
       persistent_issues: [],
-      new_broken_urls: currentCrawl.urls.filter(u => u.status_code >= 400).map(u => u.url),
+      new_broken_urls: currUrls.filter(u => u.status_code >= 400).map(u => u.url),
       resolved_broken_urls: [],
     };
   }
+
+  const prevIssues = previousCrawl.issues || [];
+  const prevUrls = previousCrawl.urls || [];
 
   // 1. Calculate Score Deltas
   const scoreDelta = (currentCrawl.technical_health_score || 0) - (previousCrawl.technical_health_score || 0);
@@ -60,12 +61,12 @@ export function compareCrawls(
 
   // 2. Map previous issues by issue_type
   const prevIssueMap = new Map<string, TechnicalIssue>();
-  for (const issue of previousCrawl.issues) {
+  for (const issue of prevIssues) {
     prevIssueMap.set(issue.issue_type, issue);
   }
 
   const currIssueMap = new Map<string, TechnicalIssue>();
-  for (const issue of currentCrawl.issues) {
+  for (const issue of currIssues) {
     currIssueMap.set(issue.issue_type, issue);
   }
 
@@ -73,7 +74,7 @@ export function compareCrawls(
   const newIssues: TechnicalIssue[] = [];
   const persistentIssues: TechnicalIssue[] = [];
 
-  for (const issue of currentCrawl.issues) {
+  for (const issue of currIssues) {
     if (!prevIssueMap.has(issue.issue_type)) {
       newIssues.push(issue);
     } else {
@@ -83,15 +84,15 @@ export function compareCrawls(
 
   // Resolved issues = In Previous, not in Current
   const resolvedIssues: TechnicalIssue[] = [];
-  for (const issue of previousCrawl.issues) {
+  for (const issue of prevIssues) {
     if (!currIssueMap.has(issue.issue_type)) {
       resolvedIssues.push(issue);
     }
   }
 
   // 3. Broken URLs delta
-  const prev404s = new Set(previousCrawl.urls.filter(u => u.status_code >= 400).map(u => u.url));
-  const curr404s = new Set(currentCrawl.urls.filter(u => u.status_code >= 400).map(u => u.url));
+  const prev404s = new Set(prevUrls.filter(u => u.status_code >= 400).map(u => u.url));
+  const curr404s = new Set(currUrls.filter(u => u.status_code >= 400).map(u => u.url));
 
   const newBrokenUrls = Array.from(curr404s).filter(u => !prev404s.has(u));
   const resolvedBrokenUrls = Array.from(prev404s).filter(u => !curr404s.has(u));
