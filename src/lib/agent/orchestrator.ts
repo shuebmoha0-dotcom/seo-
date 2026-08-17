@@ -9,8 +9,7 @@ import { CompetitorAgent } from './competitorAgent';
 import { InternalLinkingAgent } from './internalLinkingAgent';
 import { crawl_website } from '../tools/crawler';
 import { serp_analysis_tool } from '../tools/dataforseo';
-import { DataForSEOCrawler } from '../connectors/dataforseoCrawler';
-import { normalizeDataForSEOResponse } from '../connectors/crawlerNormalizer';
+import { CrawlService } from '../crawler/crawlService';
 
 export class Orchestrator {
   private MAX_ITERATIONS = 10;
@@ -209,15 +208,26 @@ Create a logical DAG (Directed Acyclic Graph) of tasks. Use 'dependencies' to en
       }
       case 'TechnicalSEOAgent': {
         const agent = new TechnicalSEOAgent();
-        const dfs = new DataForSEOCrawler();
+        const crawlService = new CrawlService();
         const targetUrl = task.input_data?.url || 'https://example.com';
-        const taskRes = await dfs.submitCrawlTask({ target: targetUrl, max_crawl_pages: 50 });
-        const rawPages = await dfs.getPages(taskRes.task_id, 50);
-        const normalized = normalizeDataForSEOResponse(rawPages);
-        const techRes = await agent.analyze({ start_url: targetUrl, crawl_data: normalized });
-        findings.push(`Crawled ${normalized.pages.length} URLs. Detected ${techRes.issues.length} technical issues.`);
-        proposed_actions = techRes.issues.map((i: any) => ({ type: 'technical_fix', detail: i.description }));
-        requires_approval = true;
+        const analysis = await crawlService.getOrAnalyzeWebsite({
+          websiteId: task.input_data?.website_id || 'default',
+          targetUrl,
+          maxPages: 50,
+        });
+
+        let crawlData = analysis.result;
+        if (!crawlData && analysis.task_id) {
+          const poll = await crawlService.getAnalysisStatus(analysis.crawl_id, analysis.task_id);
+          crawlData = poll.result;
+        }
+
+        if (crawlData) {
+          const techRes = await agent.analyze({ start_url: targetUrl, crawl_data: crawlData });
+          findings.push(`Analyzed ${crawlData.pages.length} URLs. Detected ${techRes.issues.length} technical issues.`);
+          proposed_actions = techRes.issues.map((i: any) => ({ type: 'technical_fix', detail: i.description }));
+          requires_approval = true;
+        }
         break;
       }
       case 'MonitoringAgent': {

@@ -27,19 +27,6 @@ interface IntegrationItem {
 
 const INITIAL_INTEGRATIONS: IntegrationItem[] = [
   {
-    id: "int-1",
-    provider: "crawler",
-    display_name: "Universal Website Crawler",
-    icon: "🌐",
-    description: "Read-only website crawler. Works with any platform (Next.js, Webflow, WordPress, Shopify, Custom).",
-    status: "connected",
-    status_message: "Active and monitoring",
-    capabilities: ["CRAWL_URLS", "CRAWL_SITEMAP", "DETECT_TECHNOLOGY"],
-    config: { crawl_depth: 3, user_agent: "SEOAutopilotBot/1.0" },
-    last_tested: "2 hours ago",
-    last_synced: "2 hours ago",
-  },
-  {
     id: "int-2",
     provider: "google_search_console",
     display_name: "Google Search Console",
@@ -86,6 +73,17 @@ const INITIAL_INTEGRATIONS: IntegrationItem[] = [
     status: "disconnected",
     status_message: "Not connected",
     capabilities: ["CREATE_DRAFT", "UPDATE_CONTENT", "UPDATE_METADATA", "PUBLISH_CONTENT"],
+    config: {},
+  },
+  {
+    id: "int-7",
+    provider: "custom_api",
+    display_name: "Custom Website API",
+    icon: "⚡",
+    description: "Webhook & REST API execution layer for custom web frameworks and headless CMS platforms.",
+    status: "disconnected",
+    status_message: "Not configured",
+    capabilities: ["CREATE_DRAFT", "UPDATE_CONTENT", "WEBHOOK_EVENTS"],
     config: {},
   },
 ];
@@ -351,7 +349,7 @@ export default function IntegrationsPage() {
                 </div>
               </div>
 
-              {/* Initial Crawl Notification Banner after connecting */}
+              {/* Initial Analysis Notification Banner after connecting */}
               {isWpConnected && (
                 <div className="flex items-center justify-between p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs text-emerald-800">
                   <div className="flex items-center gap-3">
@@ -366,7 +364,7 @@ export default function IntegrationsPage() {
                     className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-xl transition-colors shrink-0 flex items-center gap-1"
                   >
                     {crawlStarted ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    {crawlStarted ? "Crawling Site..." : "Run Initial Website Crawl"}
+                    {crawlStarted ? "Analyzing Site..." : "Analyze Website"}
                   </button>
                 </div>
               )}

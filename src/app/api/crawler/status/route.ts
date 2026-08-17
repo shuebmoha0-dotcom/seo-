@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { CrawlerService } from '@/lib/crawler/crawlerService';
+import { CrawlService } from '@/lib/crawler/crawlService';
 
 export async function GET(request: Request) {
   try {
@@ -11,17 +11,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'crawl_id and task_id parameters are required.' }, { status: 400 });
     }
 
-    const crawlerService = new CrawlerService();
-    const result = await crawlerService.pollAndProcess(crawl_id, task_id);
+    const crawlService = new CrawlService();
+    const result = await crawlService.getAnalysisStatus(crawl_id, task_id);
 
     return NextResponse.json({
       success: true,
       status: result.status,
       progress: result.progress,
       result: result.result,
+      error_message: result.error_message,
     });
   } catch (error: any) {
-    console.error('[Crawler Status] Error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to poll crawl status.' }, { status: 500 });
+    console.error('[CrawlService Status] Error:', error);
+    return NextResponse.json({ error: 'Unable to check website analysis status.' }, { status: 500 });
   }
 }

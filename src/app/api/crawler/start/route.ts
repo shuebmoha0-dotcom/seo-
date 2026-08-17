@@ -1,29 +1,30 @@
 import { NextResponse } from 'next/server';
-import { CrawlerService } from '@/lib/crawler/crawlerService';
+import { CrawlService } from '@/lib/crawler/crawlService';
 import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { website_id, project_id, target_url, max_pages, max_depth, site_tech } = body;
+    const { website_id, project_id, target_url, max_pages, max_depth, site_tech, force_fresh } = body;
 
     if (!target_url) {
-      return NextResponse.json({ error: 'Target URL is required.' }, { status: 400 });
+      return NextResponse.json({ error: 'Website URL is required.' }, { status: 400 });
     }
 
     const validation = validateAndNormalizeWordPressUrl(target_url);
     if (!validation.isValid || !validation.normalizedUrl) {
-      return NextResponse.json({ error: validation.error || 'Invalid target URL.' }, { status: 400 });
+      return NextResponse.json({ error: validation.error || 'Invalid website URL.' }, { status: 400 });
     }
 
-    const crawlerService = new CrawlerService();
-    const result = await crawlerService.startCrawl({
+    const crawlService = new CrawlService();
+    const result = await crawlService.getOrAnalyzeWebsite({
       websiteId: website_id || 'default',
       projectId: project_id,
       targetUrl: validation.normalizedUrl,
       siteTech: site_tech,
       maxPages: max_pages ? parseInt(max_pages, 10) : 100,
       maxDepth: max_depth ? parseInt(max_depth, 10) : 3,
+      forceFresh: !!force_fresh,
     });
 
     return NextResponse.json({
@@ -31,10 +32,12 @@ export async function POST(request: Request) {
       crawl_id: result.crawl_id,
       task_id: result.task_id,
       status: result.status,
-      target_url: result.target_url,
+      reused: result.reused,
+      result: result.result,
+      message: result.message,
     });
   } catch (error: any) {
-    console.error('[Crawler Start] Error:', error);
-    return NextResponse.json({ error: error.message || 'Failed to start crawl task.' }, { status: 500 });
+    console.error('[CrawlService Start] Error:', error);
+    return NextResponse.json({ error: 'Website analysis could not be started. Please verify the URL and try again.' }, { status: 500 });
   }
 }
