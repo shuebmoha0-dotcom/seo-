@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       websiteId: website.id,
     });
 
-    const completedState = await orchestrator.dispatchTask(workflowState);
+    const completedState = await orchestrator.executeWorkflow(workflowState);
 
     // 4. Update task execution status
     const finalStatus = completedState.current_stage === 'PAUSED_FOR_APPROVAL' ? 'waiting_for_approval' : 'completed';
