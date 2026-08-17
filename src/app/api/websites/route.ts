@@ -1,44 +1,69 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { WebsiteService } from '@/lib/services/websiteService';
+import { checkWebsiteLimit } from '@/lib/billing/entitlements';
+
+export async function GET(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    const websites = await WebsiteService.getUserWebsites(userId);
+    const limitInfo = await checkWebsiteLimit(userId);
+
+    return NextResponse.json({
+      websites,
+      plan_limit: limitInfo,
+    });
+  } catch (error: any) {
+    console.error('[Websites GET] Error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to fetch websites.' }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Fallback user ID for demo/testing if auth isn't populated
     const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    const body = await request.json();
 
-    const { url, repo_owner, repo_name } = await request.json();
-    const domain = new URL(url).hostname;
+    const result = await WebsiteService.createWebsiteWithIntegration(userId, body);
 
-    // Insert Website
-    const { data: website, error: siteError } = await supabase
-      .from('websites')
-      .upsert({ user_id: userId, domain, url }, { onConflict: 'user_id,domain' })
-      .select()
-      .single();
+    if (!result.success) {
+      return NextResponse.json({ error: result.error || 'Failed to create website.' }, { status: 400 });
+    }
 
-    if (siteError) throw siteError;
-
-    // Insert Repository
-    const { data: repo, error: repoError } = await supabase
-      .from('repositories')
-      .upsert({
-        website_id: website.id,
-        provider: 'github',
-        repo_owner,
-        repo_name,
-        branch: 'main'
-      }, { onConflict: 'website_id' })
-      .select()
-      .single();
-
-    if (repoError) throw repoError;
-
-    return NextResponse.json({ website, repository: repo });
+    return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Error creating website record:', error);
+    console.error('[Websites POST] Error:', error);
+    return NextResponse.json({ error: error.message || 'Failed to create website.' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const website_id = searchParams.get('id');
+
+    if (!website_id) {
+      return NextResponse.json({ error: 'website id is required' }, { status: 400 });
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
+    const result = await WebsiteService.deleteWebsite(userId, website_id);
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Website deleted successfully.' });
+  } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -1,8 +1,11 @@
 "use client";
 
-import { Calendar, Bell, ChevronDown } from "lucide-react";
+import { Calendar, Bell, ChevronDown, Globe, Plus } from "lucide-react";
+import { useWebsite } from "@/lib/context/WebsiteContext";
 
 export function DashboardHeader() {
+  const { currentWebsite, openAddModal } = useWebsite();
+
   return (
     <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
       <div>
@@ -10,11 +13,29 @@ export function DashboardHeader() {
           Welcome back, Alex 👋
         </h1>
         <p className="text-neutral-500 text-sm mt-0.5">
-          Your SEO agent is working hard to grow your organic traffic.
+          {currentWebsite
+            ? `SEO Autopilot is optimizing ${currentWebsite.domain} (${currentWebsite.platform || "Active"}).`
+            : "Connect your website to start autonomous SEO growth."}
         </p>
       </div>
 
       <div className="flex items-center gap-3 self-start md:self-auto">
+        {/* Active Website Pill */}
+        {currentWebsite ? (
+          <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-indigo-600" />
+            <span>{currentWebsite.domain}</span>
+          </div>
+        ) : (
+          <button
+            onClick={openAddModal}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Connect Website</span>
+          </button>
+        )}
+
         {/* Agent Active Pill */}
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

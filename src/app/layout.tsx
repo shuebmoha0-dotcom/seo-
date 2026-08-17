@@ -9,16 +9,19 @@ export const metadata: Metadata = {
   description: "Your autonomous SEO employee that understands, researches, and executes.",
 };
 
+import { Providers } from "@/components/Providers";
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-neutral-950 text-neutral-50 antialiased min-h-screen selection:bg-indigo-500/30`}>
-        <div className="fixed inset-0 z-[-1] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/20 via-neutral-950 to-neutral-950"></div>
-        {children}
+    <html lang="en">
+      <body className={`${inter.className} bg-white text-neutral-900 antialiased min-h-screen selection:bg-indigo-500/20`}>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

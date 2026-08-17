@@ -25,6 +25,8 @@ import {
   Network,
 } from "lucide-react";
 
+import { WebsiteSwitcher } from "@/components/WebsiteSwitcher";
+
 export function Sidebar() {
   const pathname = usePathname();
 
@@ -54,7 +56,7 @@ export function Sidebar() {
     <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col justify-between min-h-screen p-4 select-none shrink-0">
       <div>
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-3 px-3 py-2 mb-6 group">
+        <Link href="/" className="flex items-center gap-3 px-3 py-2 mb-4 group">
           <div className="p-2 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] group-hover:scale-105 transition-transform">
             <Sparkles className="w-5 h-5 text-white" />
           </div>
@@ -63,6 +65,11 @@ export function Sidebar() {
             <span className="text-[10px] text-neutral-500 font-medium tracking-wide">Autonomous SEO Agent</span>
           </div>
         </Link>
+
+        {/* Central Website Switcher */}
+        <div className="mb-4">
+          <WebsiteSwitcher />
+        </div>
 
         {/* Navigation */}
         <nav className="space-y-0.5">

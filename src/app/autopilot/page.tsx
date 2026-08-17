@@ -2,17 +2,26 @@
 
 import React, { useState } from 'react';
 import { Sidebar } from '@/components/Sidebar';
-import { Bot, Play, Pause, Trash2, Clock, Calendar, CheckCircle2, AlertCircle, ArrowRight, Activity, Plus } from 'lucide-react';
+import { Bot, Play, Pause, Trash2, Clock, Calendar, CheckCircle2, AlertCircle, ArrowRight, Activity, Plus, Globe } from 'lucide-react';
+import { useWebsite } from '@/lib/context/WebsiteContext';
 
 export default function AutopilotPage() {
+  const { websites, currentWebsite } = useWebsite();
   const [prompt, setPrompt] = useState('');
+  const [selectedWebsiteId, setSelectedWebsiteId] = useState<string>('');
   const [isParsing, setIsParsing] = useState(false);
 
-  // Mock tasks based on the user's requirements
+  // Default selected website
+  const activeSiteId = selectedWebsiteId || currentWebsite?.id || 'default';
+  const activeSite = websites.find(w => w.id === activeSiteId) || currentWebsite;
+
+  // Tasks based on the user's requirements
   const [tasks, setTasks] = useState([
     {
       id: 'task_1',
       goal: 'Write one SEO article every day.',
+      website_domain: currentWebsite?.domain || 'example.com',
+      website_id: activeSiteId,
       schedule: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
       status: 'active',
       last_run: 'Today 09:00',
@@ -22,21 +31,14 @@ export default function AutopilotPage() {
     {
       id: 'task_2',
       goal: 'Research competitors and analyze SERP.',
+      website_domain: currentWebsite?.domain || 'example.com',
+      website_id: activeSiteId,
       schedule: { frequency: 'daily', time: '18:00', timezone: 'UTC' },
       status: 'active',
       last_run: 'Yesterday 18:00',
       next_run: 'Today 18:00',
       approvals: 0
     },
-    {
-      id: 'task_3',
-      goal: 'Find 10 new keyword opportunities.',
-      schedule: { frequency: 'weekly', day_of_week: 'Monday', time: '09:00', timezone: 'UTC' },
-      status: 'paused',
-      last_run: 'Last Monday 09:00',
-      next_run: 'Paused',
-      approvals: 0
-    }
   ]);
 
   const [frequencyOverride, setFrequencyOverride] = useState('auto');
@@ -139,10 +141,28 @@ export default function AutopilotPage() {
                     />
                   </div>
                   
+                  {/* Website Selector */}
+                  <select 
+                    value={selectedWebsiteId || currentWebsite?.id || ""}
+                    onChange={(e) => setSelectedWebsiteId(e.target.value)}
+                    className="bg-white border border-neutral-200 rounded-xl px-3 text-neutral-700 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer text-xs"
+                    disabled={isParsing}
+                  >
+                    {websites.length > 0 ? (
+                      websites.map(w => (
+                        <option key={w.id} value={w.id}>
+                          🌐 {w.domain}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="default">{currentWebsite?.domain || "Default Website"}</option>
+                    )}
+                  </select>
+
                   <select 
                     value={frequencyOverride}
                     onChange={(e) => setFrequencyOverride(e.target.value)}
-                    className="bg-white border border-neutral-200 rounded-xl px-4 text-neutral-700 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer"
+                    className="bg-white border border-neutral-200 rounded-xl px-4 text-neutral-700 font-medium focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm cursor-pointer text-xs"
                     disabled={isParsing}
                   >
                     <option value="auto">Auto-detect Schedule (AI)</option>
