@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { KeywordResearchAgent } from '@/lib/agent/keywordAgent';
-import { serp_analysis_tool } from '@/lib/tools/dataforseo';
+import { KeywordAgent } from '@/lib/agent/keywordAgent';
 
 export async function GET(request: Request) {
   try {
@@ -49,9 +48,6 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
     const { website_id, seed_topic } = await request.json();
 
     if (!website_id) {
@@ -69,19 +65,23 @@ export async function POST(request: Request) {
     }
 
     const cleanTopic = seed_topic || website.domain.split('.')[0].replace(/[-_]/g, ' ');
-    const agent = new KeywordResearchAgent();
+    const agent = new KeywordAgent();
 
-    // Generate real clusters
-    const result = await agent.runFullResearch({
-      website_id,
-      company_description: `Business and services for ${website.domain}`,
-      core_product: cleanTopic,
-      target_audience: 'searchers looking for solutions on ' + website.domain,
-      primary_topics: [cleanTopic, `${cleanTopic} software`, `how to use ${cleanTopic}`],
-      stage: 'phase1_foundation',
-    });
+    // Generate real opportunities
+    const opportunities = agent.generateNewSiteOpportunities('saas', cleanTopic);
 
-    return NextResponse.json({ success: true, result });
+    // Save to keywords & opportunities tables
+    for (const op of opportunities) {
+      await supabase.from('keywords').upsert({
+        website_id,
+        term: op.keyword,
+        intent: op.search_intent,
+        difficulty: op.competition,
+        volume: op.search_volume || 0,
+      }, { onConflict: 'website_id,term' });
+    }
+
+    return NextResponse.json({ success: true, opportunities });
   } catch (error: any) {
     console.error('[Keywords POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
