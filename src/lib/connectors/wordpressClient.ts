@@ -132,7 +132,7 @@ export class WordPressClient {
 
       // Handle 401 Unauthorized (invalid application password or username)
       if (response.status === 401) {
-        throw new Error('Authentication failed: Invalid WordPress username or Application Password.');
+        throw new Error('Authentication failed (401): Invalid WordPress username or Application Password. Please verify your WordPress username under WordPress Admin > Users > Profile, and generate a new Application Password.');
       }
 
       // Handle 403 Forbidden (user lacks edit permissions)
@@ -197,7 +197,6 @@ export class WordPressClient {
           headers: {
             'Accept': 'application/json',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Authorization': this.authHeader,
           },
           signal: AbortSignal.timeout(12000),
         });
@@ -213,7 +212,7 @@ export class WordPressClient {
     }
 
     if (!data) {
-      throw new Error('WordPress REST API not found or blocked by a security plugin. Please ensure the REST API is accessible on your site.');
+      throw new Error('WordPress REST API not found or blocked. Please verify that your website URL is correct and online.');
     }
 
     const namespaces: string[] = data.namespaces || [];
