@@ -157,6 +157,33 @@ export default function IntegrationsPage() {
   const [customFeedback, setCustomFeedback] = useState<{ ok?: boolean; message?: string; capabilities?: string[] } | null>(null);
 
   const [analysisStarted, setAnalysisStarted] = useState(false);
+  const [oauthError, setOauthError] = useState<string | null>(null);
+
+  const initiateOAuth = async (provider: string) => {
+    setOauthError(null);
+    let authUrl = `/api/integrations/${provider}/auth`;
+    if (provider === "google_search_console") authUrl = "/api/integrations/gsc/auth";
+    else if (provider === "google_analytics") authUrl = "/api/integrations/ga4/auth";
+    else if (provider === "github") authUrl = "/api/integrations/github/auth";
+
+    try {
+      const res = await fetch(authUrl);
+      if (res.redirected) {
+        window.location.href = res.url;
+        return;
+      }
+      const data = await res.json().catch(() => null);
+      if (data && data.configured === false) {
+        setOauthError(data.error);
+        return;
+      }
+      if (res.ok && res.url) {
+        window.location.href = res.url;
+      }
+    } catch (err: any) {
+      setOauthError(err.message || "Failed to initiate authorization.");
+    }
+  };
 
   // 1. Fetch live database integrations & check URL query params on mount
   useEffect(() => {
@@ -664,6 +691,17 @@ export default function IntegrationsPage() {
                         {item.status === "connected" && (
                           <>
                             <button
+                              onClick={() => {
+                                if (item.provider === "google_search_console") openGscPropertySelector(item.id);
+                                else if (item.provider === "google_analytics") openGa4PropertySelector(item.id);
+                                else if (item.provider === "github") openGithubRepoSelector(item.id);
+                                else if (item.provider === "wordpress") setShowWpModal(true);
+                                else if (item.provider === "custom_api") setShowCustomApiModal(true);
+                              }}
+                              className="text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                              <Settings2 className="w-3 h-3" /> Configure
+                            </button>
+                            <button
                               onClick={() => handleVerify(item.id)}
                               disabled={item.is_testing}
                               className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
@@ -681,8 +719,8 @@ export default function IntegrationsPage() {
                         {item.status === "action_required" && (
                           <button
                             onClick={() => {
-                              if (item.provider === "google_search_console") window.location.href = "/api/integrations/gsc/auth";
-                              else if (item.provider === "google_analytics") window.location.href = "/api/integrations/ga4/auth";
+                              if (item.provider === "google_search_console") initiateOAuth("google_search_console");
+                              else if (item.provider === "google_analytics") initiateOAuth("google_analytics");
                               else if (item.provider === "github") setShowGithubModal(true);
                             }}
                             className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
@@ -693,8 +731,8 @@ export default function IntegrationsPage() {
                         {item.status === "disconnected" && (
                           <button
                             onClick={() => {
-                              if (item.provider === "google_search_console") window.location.href = "/api/integrations/gsc/auth";
-                              else if (item.provider === "google_analytics") window.location.href = "/api/integrations/ga4/auth";
+                              if (item.provider === "google_search_console") initiateOAuth("google_search_console");
+                              else if (item.provider === "google_analytics") initiateOAuth("google_analytics");
                               else if (item.provider === "github") setShowGithubModal(true);
                               else if (item.provider === "wordpress") { setShowWpModal(true); setWpFeedback(null); }
                               else if (item.provider === "custom_api") { setShowCustomApiModal(true); setCustomFeedback(null); }
@@ -1103,6 +1141,33 @@ export default function IntegrationsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 6. Administrator Configuration Required Modal ── */}
+      {oauthError && (
+        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2 text-amber-700">
+                <ShieldAlert className="w-5 h-5 text-amber-600" /> Administrator Configuration Required
+              </h3>
+              <button type="button" onClick={() => setOauthError(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
+              <p className="font-semibold">{oauthError}</p>
+              <p className="text-[11px] text-amber-700">
+                To enable official OAuth login in your local or production deployment, configure the credentials in your <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env.local</code> file.
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button type="button" onClick={() => setOauthError(null)} className="bg-neutral-900 hover:bg-neutral-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors">
+                Understood
+              </button>
+            </div>
           </div>
         </div>
       )}
