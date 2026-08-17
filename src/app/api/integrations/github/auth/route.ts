@@ -1,0 +1,25 @@
+import { NextResponse } from 'next/server';
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const website_id = searchParams.get('website_id') || 'default';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const redirectUri = `${siteUrl}/api/integrations/github/callback`;
+    const scope = encodeURIComponent('repo,read:user,user:email');
+    const state = encodeURIComponent(JSON.stringify({ website_id }));
+
+    if (!clientId || clientId.includes('your-')) {
+      const callbackUrl = `/api/integrations/github/callback?code=simulated_github_auth_code&state=${state}`;
+      return NextResponse.redirect(new URL(callbackUrl, request.url));
+    }
+
+    const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${state}`;
+
+    return NextResponse.redirect(authUrl);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || 'Failed to start GitHub OAuth' }, { status: 500 });
+  }
+}
