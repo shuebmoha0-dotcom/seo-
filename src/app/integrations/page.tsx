@@ -132,7 +132,7 @@ export default function IntegrationsPage() {
 
   // GitHub Modal State
   const [showGithubModal, setShowGithubModal] = useState(false);
-  const [githubRepos, setGithubRepos] = useState<Array<{ full_name: string; name: string; owner: string; default_branch: string }>>([]);
+  const [githubRepos, setGithubRepos] = useState<Array<{ full_name: string; name: string; owner: string; default_branch: string; private?: boolean }>>([]);
   const [selectedGithubRepo, setSelectedGithubRepo] = useState("");
   const [githubBranches, setGithubBranches] = useState<string[]>(["main"]);
   const [selectedGithubBranch, setSelectedGithubBranch] = useState("main");
