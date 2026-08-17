@@ -475,6 +475,8 @@ export default function TechnicalSEOPage() {
               <input type="checkbox" id="new_website" checked={form.is_new_website}
                 onChange={e => setForm(f => ({ ...f, is_new_website: e.target.checked }))}
                 className="w-4 h-4 accent-indigo-600" />
+              <label htmlFor="new_website" className="text-xs text-neutral-600">
+                New website mode — prioritize foundations (crawlability, indexability, HTTPS, sitemap, robots, canonicals)
               </label>
             </div>
           </form>

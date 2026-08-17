@@ -180,9 +180,8 @@ export default function CompetitorsPage() {
                 <Plus className="w-4 h-4" />
                 <span>Connect Website</span>
               </button>
-            </div>
           ) : competitors.length === 0 && !loading && !scanning ? (
-            /* ── STATE 2: WEBSITE CONNECTED BUT NO COMPETITORS COLLECTED YET ── */}
+            /* ── STATE 2: WEBSITE CONNECTED BUT NO COMPETITORS COLLECTED YET ── */
             <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-4 max-w-lg mx-auto mt-12">
               <div className="w-12 h-12 bg-white border border-neutral-200 rounded-2xl flex items-center justify-center mx-auto text-neutral-400">
                 <Crosshair className="w-6 h-6 text-indigo-600" />
