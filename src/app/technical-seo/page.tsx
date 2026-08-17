@@ -8,7 +8,8 @@ import {
   RotateCcw, Filter, Download, RefreshCw, ArrowRight, GitBranch,
   CheckSquare, Eye, Layers, Clock
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useWebsite } from "@/lib/context/WebsiteContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Severity = "critical" | "high" | "medium" | "low" | "info";
@@ -76,39 +77,7 @@ interface CrawlResult {
   site_tech: SiteTech;
 }
 
-// ─── Demo data ────────────────────────────────────────────────────────────────
-const DEMO: CrawlResult = {
-  total_urls_found: 13, total_urls_crawled: 13,
-  urls_200: 10, urls_301: 1, urls_302: 0, urls_404: 1,
-  urls_5xx: 0, urls_noindex: 3, urls_indexed: 8,
-  urls_orphaned: 2, broken_internal_links: 1,
-  crawlability_score: 81, indexability_score: 74, technical_health_score: 77,
-  site_tech: "nextjs",
-  urls: [
-    { url: "https://seautopilot.io/", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 15, is_orphan: false, has_schema: true, word_count: 850, h1: "Your Autonomous SEO Agent", robots_directive: "index, follow", canonical_url: "https://seautopilot.io/" },
-    { url: "https://seautopilot.io/blog", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 6, is_orphan: false, has_schema: false, word_count: 420 },
-    { url: "https://seautopilot.io/blog/ai-seo-agent", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 3, is_orphan: false, has_schema: false, word_count: 2400, h1: "AI SEO Agent Guide" },
-    { url: "https://seautopilot.io/blog/old-post", status_code: 200, is_indexable: true, in_sitemap: false, internal_links_in: 0, is_orphan: true, has_schema: false, word_count: 180, has_thin_content: true },
-    { url: "https://seautopilot.io/pricing", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 8, is_orphan: false, has_schema: true, word_count: 600, canonical_url: "https://seautopilot.io/pricing" },
-    { url: "https://seautopilot.io/features", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 5, is_orphan: false, has_schema: false, word_count: 950 },
-    { url: "https://seautopilot.io/about", status_code: 200, is_indexable: true, in_sitemap: false, internal_links_in: 2, is_orphan: false, has_schema: false, word_count: 350 },
-    { url: "https://seautopilot.io/old-page", status_code: 301, is_indexable: false, in_sitemap: true, internal_links_in: 1, is_orphan: false, has_schema: false, redirect_target: "/features" },
-    { url: "https://seautopilot.io/api/legacy", status_code: 404, is_indexable: false, in_sitemap: false, internal_links_in: 3, is_orphan: false, has_schema: false },
-    { url: "https://seautopilot.io/docs", status_code: 200, is_indexable: false, in_sitemap: false, internal_links_in: 2, is_orphan: true, has_schema: false, robots_directive: "noindex" },
-    { url: "https://seautopilot.io/login", status_code: 200, is_indexable: false, in_sitemap: false, internal_links_in: 4, is_orphan: false, has_schema: false, robots_directive: "noindex" },
-    { url: "https://seautopilot.io/blog/post-2", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 1, is_orphan: false, has_schema: false, word_count: 1800 },
-    { url: "https://seautopilot.io/blog/post-3", status_code: 200, is_indexable: true, in_sitemap: true, internal_links_in: 1, is_orphan: false, has_schema: false, word_count: 1650 },
-  ],
-  issues: [
-    { id: "i1", category: "broken_links", severity: "high", issue_type: "broken_internal_links", title: "1 page returning 404", description: "/api/legacy returns 404 and has 3 internal links pointing to it.", evidence: "https://seautopilot.io/api/legacy", affected_urls: ["https://seautopilot.io/api/legacy"], affected_url_count: 1, sample_url: "https://seautopilot.io/api/legacy", seo_impact: "Wastes crawl budget; broken links leak link equity.", business_impact: "3 internal links lead to a dead end.", recommended_fix: "Set up a 301 redirect from /api/legacy to a relevant page, or update all 3 internal links pointing to it.", estimated_effort: "minutes", risk_level: "medium", automation_level: "requires_approval", status: "open" },
-    { id: "i2", category: "orphan_pages", severity: "high", issue_type: "orphan_pages", title: "2 orphan pages with no internal links", description: "/blog/old-post and /docs have zero internal links. Google may not discover or value these regularly.", affected_urls: ["https://seautopilot.io/blog/old-post", "https://seautopilot.io/docs"], affected_url_count: 2, sample_url: "https://seautopilot.io/blog/old-post", seo_impact: "Orphan pages receive minimal PageRank and irregular crawling.", business_impact: "Content not supported by site structure.", recommended_fix: "Add relevant internal links to these pages from related articles, or add noindex if they serve no SEO purpose.", estimated_effort: "hours", risk_level: "low", automation_level: "semi_auto", status: "open" },
-    { id: "i3", category: "canonicals", severity: "medium", issue_type: "missing_canonical", title: "7 indexable pages missing canonical tags", description: "7 pages that could appear in search results have no canonical tag. This can cause duplicate content issues.", affected_urls: ["https://seautopilot.io/blog", "https://seautopilot.io/blog/ai-seo-agent", "https://seautopilot.io/features"], affected_url_count: 7, sample_url: "https://seautopilot.io/blog", seo_impact: "Without canonicals, Google chooses the canonical itself — sometimes incorrectly.", business_impact: "Potential duplicate content dilution across blog pages.", recommended_fix: "Add self-referencing canonical tags via Next.js metadata API in layout.tsx or individual page.tsx files.", estimated_effort: "minutes", risk_level: "low", automation_level: "semi_auto", status: "open" },
-    { id: "i4", category: "sitemap", severity: "medium", issue_type: "pages_missing_from_sitemap", title: "2 indexable pages not in XML sitemap", description: "/about and /blog/old-post are indexable but absent from the sitemap, reducing crawl discovery priority.", affected_urls: ["https://seautopilot.io/about"], affected_url_count: 2, sample_url: "https://seautopilot.io/about", seo_impact: "Pages not in sitemap rely solely on internal links for discovery.", business_impact: "New content may be crawled more slowly.", recommended_fix: "Add these pages to app/sitemap.ts in your Next.js project.", estimated_effort: "minutes", risk_level: "low", automation_level: "semi_auto", status: "open" },
-    { id: "i5", category: "duplicates", severity: "medium", issue_type: "duplicate_titles", title: "2 pages sharing duplicate title tags", description: "/blog/post-2 and /blog/post-3 appear to share the same title tag format.", affected_urls: ["https://seautopilot.io/blog/post-2", "https://seautopilot.io/blog/post-3"], affected_url_count: 2, sample_url: "https://seautopilot.io/blog/post-2", seo_impact: "Duplicate titles confuse search engines about page relevance.", business_impact: "Reduced CTR from generic SERP snippets.", recommended_fix: "Write unique, descriptive title tags for each blog post in your CMS or page metadata.", estimated_effort: "hours", risk_level: "low", automation_level: "semi_auto", status: "open" },
-    { id: "i6", category: "indexability", severity: "medium", issue_type: "thin_content", title: "1 indexable page with thin content", description: "/blog/old-post has only ~180 words. Thin content may be seen as low-value.", affected_urls: ["https://seautopilot.io/blog/old-post"], affected_url_count: 1, sample_url: "https://seautopilot.io/blog/old-post", seo_impact: "May reduce overall domain content quality signals.", business_impact: "Page unlikely to rank.", recommended_fix: "Expand the article, redirect to a better resource, or add noindex.", estimated_effort: "days", risk_level: "low", automation_level: "manual", status: "open" },
-    { id: "i7", category: "sitemap", severity: "low", issue_type: "redirected_url_in_sitemap", title: "Redirected URL present in XML sitemap", description: "/old-page returns 301 but remains in the sitemap. Sitemaps should only contain canonical, indexable URLs.", affected_urls: ["https://seautopilot.io/old-page"], affected_url_count: 1, sample_url: "https://seautopilot.io/old-page", seo_impact: "Minor crawl budget inefficiency.", business_impact: "Minimal.", recommended_fix: "Remove /old-page from the sitemap and replace with the final destination URL if appropriate.", estimated_effort: "minutes", risk_level: "low", automation_level: "auto", status: "open" },
-  ],
-};
+
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const SEVERITY_CONFIG: Record<Severity, { label: string; color: string; dot: string; bg: string }> = {
@@ -325,25 +294,44 @@ function IssueCard({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TechnicalSEOPage() {
+  const { currentWebsite, openAddModal } = useWebsite();
+
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [result, setResult] = useState<CrawlResult | null>(DEMO);
+  const [result, setResult] = useState<CrawlResult | null>(null);
   const [crawling, setCrawling] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [issues, setIssues] = useState<TechnicalIssue[]>(DEMO.issues);
+  const [issues, setIssues] = useState<TechnicalIssue[]>([]);
   const [filterSeverity, setFilterSeverity] = useState<Severity | "all">("all");
   const [filterStatus, setFilterStatus] = useState<IssueStatus | "all">("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [urlSearch, setUrlSearch] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    start_url: "https://seautopilot.io",
-    site_tech: "nextjs",
-    max_urls: "500",
+    start_url: "",
+    site_tech: "unknown",
+    max_urls: "50",
     is_new_website: false,
   });
 
+  useEffect(() => {
+    if (currentWebsite) {
+      setForm(f => ({
+        ...f,
+        start_url: currentWebsite.url,
+        site_tech: currentWebsite.platform === "wordpress" ? "wordpress"
+          : currentWebsite.platform === "nextjs" ? "nextjs"
+          : currentWebsite.platform === "shopify" ? "shopify"
+          : "unknown"
+      }));
+    }
+  }, [currentWebsite?.id]);
+
   const handleCrawl = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.start_url.trim()) return;
+
     setCrawling(true);
+    setError(null);
     try {
       const res = await fetch("/api/agent/technical/crawl", {
         method: "POST",
@@ -356,10 +344,18 @@ export default function TechnicalSEOPage() {
         }),
       });
       const data = await res.json();
-      if (data.result) { setResult(data.result); setIssues(data.result.issues); }
-      else { setResult(DEMO); setIssues(DEMO.issues); }
-    } catch { setResult(DEMO); setIssues(DEMO.issues); }
-    finally { setCrawling(false); setActiveTab("overview"); }
+      if (data.result) {
+        setResult(data.result);
+        setIssues(data.result.issues || []);
+      } else {
+        setError(data.error || "Crawl completed without issues.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to execute technical crawl.");
+    } finally {
+      setCrawling(false);
+      setActiveTab("overview");
+    }
   };
 
   const handleStatusChange = (id: string, status: IssueStatus) => {
@@ -479,11 +475,19 @@ export default function TechnicalSEOPage() {
               <input type="checkbox" id="new_website" checked={form.is_new_website}
                 onChange={e => setForm(f => ({ ...f, is_new_website: e.target.checked }))}
                 className="w-4 h-4 accent-indigo-600" />
-              <label htmlFor="new_website" className="text-xs text-neutral-600">
-                New website mode — prioritize foundations (crawlability, indexability, HTTPS, sitemap, robots, canonicals)
               </label>
             </div>
           </form>
+
+          {!r && !crawling && (
+            <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-lg mx-auto">
+              <Wrench className="w-8 h-8 text-neutral-400 mx-auto" />
+              <h3 className="text-base font-bold text-neutral-900">No Technical Crawl Data Yet</h3>
+              <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                Enter your website URL above and click &ldquo;Start Crawl&rdquo; to analyze crawlability, status codes, canonicals, and indexability issues.
+              </p>
+            </div>
+          )}
 
           {r && (
             <>
