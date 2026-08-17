@@ -4,7 +4,10 @@ import { WordPressClient } from '@/lib/connectors/wordpressClient';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { site_url, username, application_password, seo_plugin } = body;
+    const site_url = body.site_url || body.url || body.siteUrl;
+    const username = body.username;
+    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword;
+    const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
 
     if (!site_url || !username || !application_password) {
       return NextResponse.json(

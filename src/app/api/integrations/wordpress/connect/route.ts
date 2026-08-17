@@ -22,7 +22,11 @@ const WORDPRESS_CAPABILITIES = [
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { site_url, username, application_password, seo_plugin, website_id, project_id } = body;
+    const site_url = body.site_url || body.url || body.siteUrl;
+    const username = body.username;
+    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword;
+    const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
+    const { website_id, project_id } = body;
 
     if (!site_url || !username || !application_password) {
       return NextResponse.json(
