@@ -214,7 +214,7 @@ export class WebsiteService {
           siteUrl: normalizedUrl,
           username: payload.wordpress_config.username,
           applicationPassword: payload.wordpress_config.app_password,
-          seoPlugin: payload.wordpress_config.seo_plugin || 'none',
+          seoPlugin: (payload.wordpress_config.seo_plugin as any) || 'none',
         });
 
         const test = await wpClient.testConnection();
@@ -231,7 +231,7 @@ export class WebsiteService {
             provider: 'wordpress',
             display_name: 'WordPress',
             status: 'connected',
-            status_message: `Connected to ${test.details?.site_name || domain} as @${payload.wordpress_config.username}`,
+            status_message: `Connected to ${test.siteName || domain} as @${payload.wordpress_config.username}`,
             config: {
               site_url: normalizedUrl,
               username: payload.wordpress_config.username,

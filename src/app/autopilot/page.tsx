@@ -67,10 +67,12 @@ export default function AutopilotPage() {
         setTasks([{
           id: data.task.task_id,
           goal: data.task.goal,
+          website_domain: activeSite?.domain || "example.com",
+          website_id: activeSiteId,
           schedule: data.task.schedule,
           status: 'active',
           last_run: 'Never',
-          next_run: 'Tomorrow ' + data.task.schedule.time,
+          next_run: 'Tomorrow ' + (data.task.schedule?.time || "09:00"),
           approvals: 0
         }, ...tasks]);
         setPrompt('');
@@ -230,7 +232,7 @@ export default function AutopilotPage() {
                     </h3>
                     <p className="text-sm text-indigo-600 font-medium flex items-center gap-1.5 mt-3">
                       <Clock className="w-3.5 h-3.5" />
-                      Every {task.schedule.frequency === 'daily' ? 'day' : task.schedule.day_of_week} at {task.schedule.time}
+                      Every {task.schedule?.frequency === 'daily' ? 'day' : (task.schedule as any)?.day_of_week || 'week'} at {task.schedule?.time}
                     </p>
                   </div>
 

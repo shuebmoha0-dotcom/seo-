@@ -71,9 +71,10 @@ Never ask the user for their website URL because the website context is already 
 
     const pending_tasks: AgentTask[] = object.initial_tasks.map((t: any) => ({
       ...t,
-      project_id: boundContext.project_id || 'default',
+      project_id: boundContext.projectId || (boundContext as any).project_id || 'default',
       source_agent: 'USER',
       status: 'PENDING',
+      priority: t.priority as any,
       created_at: new Date().toISOString(),
       input_data: {
         ...(t.input_data || {}),
@@ -86,7 +87,7 @@ Never ask the user for their website URL because the website context is already 
 
     return {
       workflow_id: `wf_${Date.now()}`,
-      project_id: boundContext.project_id || 'default',
+      project_id: boundContext.projectId || (boundContext as any).project_id || 'default',
       current_stage: 'RUNNING',
       completed_steps: [],
       pending_tasks,
@@ -120,7 +121,7 @@ Never ask the user for their website URL because the website context is already 
 
       console.log(`[Orchestrator] Found ${readyTasks.length} ready tasks to execute.`);
 
-      // 2. Dispatch tasks concurrently (or sequentially for safety)
+      // 2. Dispatch tasks sequentially
       for (const task of readyTasks) {
         state.active_tasks.push(task);
         state.pending_tasks = state.pending_tasks.filter(t => t.task_id !== task.task_id);
@@ -134,29 +135,26 @@ Never ask the user for their website URL because the website context is already 
           
           // Record step in history
           state.history.push({
-            step_id: `step_${Date.now()}`,
-            agent: task.target_agent,
-            action: task.task_type,
-            timestamp: new Date().toISOString(),
-            status: result.status,
+            date: new Date().toISOString(),
+            action: `${task.target_agent}:${task.task_type}`,
             data: result
           });
 
-          // 3. Dynamic Expansion (Self-Correction & Autonomous Next Steps)
-          if (result.next_suggested_tasks && result.next_suggested_tasks.length > 0) {
-            console.log(`[Orchestrator] ${task.target_agent} suggested ${result.next_suggested_tasks.length} new tasks! Adding to DAG.`);
-            for (const newTask of result.next_suggested_tasks) {
+          // 3. Dynamic Expansion (Follow-up Tasks)
+          if (result.next_agents && result.next_agents.length > 0) {
+            console.log(`[Orchestrator] ${task.target_agent} suggested ${result.next_agents.length} follow up agents.`);
+            for (const nextAgent of result.next_agents) {
               state.pending_tasks.push({
                 task_id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
                 project_id: state.project_id,
                 source_agent: task.target_agent,
-                target_agent: newTask.target_agent || 'Orchestrator',
-                task_type: newTask.task_type || 'ANALYZE',
-                objective: newTask.objective || 'Follow up task',
-                input_data: newTask.input_data || {},
+                target_agent: nextAgent,
+                task_type: 'FOLLOW_UP',
+                objective: `Follow up task from ${task.target_agent}`,
+                input_data: task.input_data,
                 status: 'PENDING',
-                priority: newTask.priority || 'medium',
-                dependencies: [task.task_id], // naturally depends on the task that created it
+                priority: 'medium',
+                dependencies: [task.task_id],
                 created_at: new Date().toISOString()
               });
             }
@@ -166,11 +164,8 @@ Never ask the user for their website URL because the website context is already 
           console.error(`[Orchestrator] Error running task ${task.task_id} with ${task.target_agent}:`, error);
           state.active_tasks = state.active_tasks.filter(t => t.task_id !== task.task_id);
           state.history.push({
-            step_id: `step_${Date.now()}`,
-            agent: task.target_agent,
-            action: task.task_type,
-            timestamp: new Date().toISOString(),
-            status: 'FAILED',
+            date: new Date().toISOString(),
+            action: `${task.target_agent}:FAILED`,
             data: { error: error.message }
           });
         }
@@ -321,10 +316,15 @@ Never ask the user for their website URL because the website context is already 
     }
 
     return {
-      status: 'SUCCESS',
+      task_id: task.task_id,
+      agent: task.target_agent,
+      status: 'COMPLETED',
       findings,
+      opportunities: [],
+      recommendations: [],
+      evidence: findings.join('\n'),
       proposed_actions,
-      requires_approval
+      requires_approval,
     };
   }
 }
