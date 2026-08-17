@@ -8,7 +8,7 @@
 import { google, searchconsole_v1 } from 'googleapis';
 
 export interface GSCPerformanceRow {
-  keys?: string[];
+  keys?: string[] | null;
   clicks?: number;
   impressions?: number;
   ctr?: number;
