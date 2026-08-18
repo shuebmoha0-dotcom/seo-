@@ -1,14 +1,19 @@
 /**
  * Production WordPress REST API Client
  * 
- * Implements full REST API discovery (/wp-json/ and /wp-json/wp/v2/),
- * URL normalization, redirect handling, Application Password authentication,
- * error classification (401, 403, 404, 429, 5xx), and Rank Math detection.
+ * Flow:
+ * 1. Normalize Website URL to canonical origin (e.g. https://bizaigenius.com)
+ * 2. Primary REST API Discovery: GET https://{site}/wp-json/
+ * 3. Status Handling: 200 OK -> continue; 403 -> blocked by security layer; 404 -> not found
+ * 4. Authentication: GET /wp-json/wp/v2/users/me with Basic Auth (Application Password)
+ * 5. Rank Math: Optional detection after successful authentication
  * 
- * Credentials are never logged in plaintext or exposed to the client.
+ * Never logs credentials in plaintext or exposes them to the client.
  */
 
 import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
+
+const USER_AGENT = 'SEO-Autopilot-WordPress-Connector/1.0';
 
 export type WordPressSEOPlugin = 'yoast' | 'rankmath' | 'aioseo' | 'none';
 
@@ -81,17 +86,10 @@ export interface WordPressConnectionTestResult {
   rankMathDetected?: boolean;
   stages: {
     restApiDetected: boolean;
-    restV2Detected: boolean;
     authSuccessful: boolean;
     rankMathDetected: boolean;
   };
   message: string;
-  diagnostic?: {
-    httpStatus?: number;
-    finalUrl?: string;
-    contentType?: string;
-    safeSummary?: string;
-  };
 }
 
 export class WordPressClient {
@@ -115,7 +113,6 @@ export class WordPressClient {
   }
 
   private get authHeader(): string {
-    // WordPress Application Passwords use Basic Auth format: username:app_password
     const token = Buffer.from(`${this.username}:${this.applicationPassword}`).toString('base64');
     return `Basic ${token}`;
   }
@@ -133,7 +130,7 @@ export class WordPressClient {
     const headers: Record<string, string> = {
       'Authorization': this.authHeader,
       'Accept': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEOAutopilot/1.0',
+      'User-Agent': USER_AGENT,
       ...(options.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers as Record<string, string> || {}),
     };
@@ -146,14 +143,17 @@ export class WordPressClient {
         signal: AbortSignal.timeout(15000),
       });
 
+      // Safe Diagnostic Logging (Never log credentials)
+      console.log(`[WordPressClient] Request: ${options.method || 'GET'} ${url} -> HTTP ${response.status} (Final: ${response.url})`);
+
       // Handle 401 Unauthorized
       if (response.status === 401) {
-        throw new Error('WordPress authentication failed. Please check your WordPress username and Application Password.');
+        throw new Error('WordPress authentication failed (HTTP 401). Invalid username or Application Password. Please verify your WordPress username (WordPress Admin > Users > Profile) and generate a fresh Application Password.');
       }
 
       // Handle 403 Forbidden
       if (response.status === 403) {
-        throw new Error('WordPress rejected the request. Please check user permissions or security plugin settings.');
+        throw new Error('WordPress rejected the authenticated request (HTTP 403). The user account lacks permissions or a security plugin/WAF is blocking REST API authorization headers.');
       }
 
       // Handle 404 Not Found
@@ -180,7 +180,7 @@ export class WordPressClient {
           const errorJson = await response.json();
           if (errorJson?.message) errMessage = errorJson.message;
         } catch {
-          // ignore
+          // ignore parsing error
         }
         throw new Error(errMessage);
       }
@@ -189,102 +189,118 @@ export class WordPressClient {
       return { data, headers: response.headers, status: response.status, finalUrl: response.url };
     } catch (err: any) {
       if (err.name === 'TimeoutError') {
-        throw new Error('WordPress site request timed out. Please check if your site is online and responsive.');
+        throw new Error('WordPress site request timed out (15s). Please check if your site is online and responsive.');
       }
       throw err;
     }
   }
 
   /**
-   * STEP 3 & 4: Discover WordPress REST API root and follow redirects to canonical origin
+   * STEP 1, 2, 3: Primary REST API Discovery (GET /wp-json/ first)
    */
   async getSiteInfo(): Promise<WordPressSiteInfo> {
-    const endpoints = [
-      `${this.siteUrl}/wp-json/`,
-      `${this.siteUrl}/?rest_route=/`,
-      `${this.siteUrl}/index.php?rest_route=/`,
-    ];
+    const primaryUrl = `${this.siteUrl}/wp-json/`;
 
-    let lastStatus = 0;
-    let lastUrl = endpoints[0];
-    let lastContentType = '';
-    let lastSummary = '';
-
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url, {
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          },
-          redirect: 'follow',
-          signal: AbortSignal.timeout(12000),
-        });
-
-        lastStatus = res.status;
-        lastUrl = res.url || url;
-        lastContentType = res.headers.get('content-type') || '';
-
-        if (res.ok) {
-          const text = await res.text();
-          lastSummary = text.slice(0, 200);
-          try {
-            const data = JSON.parse(text);
-            const namespaces: string[] = data.namespaces || [];
-
-            // Update canonical siteUrl if redirected
-            if (res.url) {
-              const parsedRedirect = new URL(res.url);
-              this.siteUrl = `${parsedRedirect.protocol}//${parsedRedirect.hostname}${parsedRedirect.port ? `:${parsedRedirect.port}` : ''}`;
-              this.apiBaseUrl = `${this.siteUrl}/wp-json/wp/v2`;
-            }
-
-            return {
-              name: data.name || new URL(this.siteUrl).hostname,
-              description: data.description || '',
-              url: data.url || this.siteUrl,
-              home: data.home || this.siteUrl,
-              gmt_offset: data.gmt_offset || '0',
-              namespaces,
-              rest_base: url,
-              has_yoast: namespaces.includes('yoast/v1'),
-              has_rankmath: namespaces.includes('rankmath/v1'),
-              has_aioseo: namespaces.includes('aioseo/v1'),
-            };
-          } catch {
-            // Not valid JSON
-          }
-        }
-      } catch (err: any) {
-        lastSummary = err.message || 'Network error';
-      }
-    }
-
-    throw new Error(`WordPress REST API discovery failed (HTTP ${lastStatus || 'ERR'} on ${lastUrl}). Content-Type: ${lastContentType || 'unknown'}. Details: ${lastSummary || 'No response'}`);
-  }
-
-  /**
-   * STEP 3 (Part 2): Test /wp-json/wp/v2/ endpoint
-   */
-  async verifyRestV2(): Promise<boolean> {
-    const v2Url = `${this.siteUrl}/wp-json/wp/v2/`;
+    let res: Response;
     try {
-      const res = await fetch(v2Url, {
+      res = await fetch(primaryUrl, {
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': USER_AGENT,
         },
         redirect: 'follow',
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(12000),
       });
-      return res.ok;
-    } catch {
-      return false;
+    } catch (err: any) {
+      console.error(`[WordPressClient] Discovery network error on ${primaryUrl}:`, err.message);
+      throw new Error(`Could not reach WordPress site at ${primaryUrl}: ${err.message}`);
     }
+
+    // Safe Diagnostic Logging
+    const contentType = res.headers.get('content-type') || 'unknown';
+    console.log(`[WordPressClient] Discovery: GET ${primaryUrl} -> HTTP ${res.status} ${res.statusText} (Final URL: ${res.url}, Content-Type: ${contentType})`);
+
+    // Handle HTTP 403 Forbidden on Discovery
+    if (res.status === 403) {
+      throw new Error('WordPress REST API is being blocked (HTTP 403). Your website or security layer is rejecting REST API requests. Check your WordPress security plugin, Cloudflare/WAF, or hosting firewall.');
+    }
+
+    // Handle HTTP 404 (Try ?rest_route=/ fallback only if /wp-json/ genuinely returns 404)
+    if (res.status === 404) {
+      const fallbackUrl = `${this.siteUrl}/?rest_route=/`;
+      try {
+        const fallbackRes = await fetch(fallbackUrl, {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': USER_AGENT,
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (fallbackRes.ok) {
+          const text = await fallbackRes.text();
+          const data = JSON.parse(text);
+          return this.formatSiteInfo(data, fallbackUrl, fallbackRes.url);
+        }
+      } catch {
+        // ignore fallback failure
+      }
+
+      throw new Error('WordPress REST API was not found (HTTP 404). Ensure REST API permalinks are enabled under WordPress Settings > Permalinks.');
+    }
+
+    // Handle HTTP 429 Rate Limiting
+    if (res.status === 429) {
+      throw new Error('WordPress is rate limiting connection requests (HTTP 429). Please wait a moment and retry.');
+    }
+
+    // Handle HTTP 5xx Server Error
+    if (res.status >= 500) {
+      throw new Error(`WordPress server returned an error (HTTP ${res.status}). Please check your server or PHP error logs.`);
+    }
+
+    if (!res.ok) {
+      throw new Error(`WordPress REST API request returned HTTP ${res.status}: ${res.statusText}`);
+    }
+
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`WordPress REST API response was not valid JSON. Content-Type: ${contentType}. Body preview: ${text.slice(0, 150)}`);
+    }
+
+    return this.formatSiteInfo(data, primaryUrl, res.url);
+  }
+
+  private formatSiteInfo(data: any, endpointUrl: string, finalUrl: string): WordPressSiteInfo {
+    const namespaces: string[] = data.namespaces || [];
+
+    // Follow redirect to canonical origin
+    if (finalUrl) {
+      const parsedRedirect = new URL(finalUrl);
+      this.siteUrl = `${parsedRedirect.protocol}//${parsedRedirect.hostname}${parsedRedirect.port ? `:${parsedRedirect.port}` : ''}`;
+      this.apiBaseUrl = `${this.siteUrl}/wp-json/wp/v2`;
+    }
+
+    return {
+      name: data.name || new URL(this.siteUrl).hostname,
+      description: data.description || '',
+      url: data.url || this.siteUrl,
+      home: data.home || this.siteUrl,
+      gmt_offset: data.gmt_offset || '0',
+      namespaces,
+      rest_base: endpointUrl,
+      has_yoast: namespaces.includes('yoast/v1'),
+      has_rankmath: namespaces.includes('rankmath/v1'),
+      has_aioseo: namespaces.includes('aioseo/v1'),
+    };
   }
 
   /**
-   * STEP 6: Test Authenticated WordPress Access (/users/me)
+   * STEP 4: Authenticated Access Test (/wp-json/wp/v2/users/me)
    */
   async getCurrentUser(): Promise<WordPressUser> {
     const { data } = await this.request<any>('/users/me?context=edit');
@@ -298,19 +314,17 @@ export class WordPressClient {
   }
 
   /**
-   * STEP 8: Comprehensive Step-by-Step Connection Test Pipeline
+   * STEP 7 & 8: Complete Connection Pipeline
    */
   async testConnection(): Promise<WordPressConnectionTestResult> {
     const stages = {
       restApiDetected: false,
-      restV2Detected: false,
       authSuccessful: false,
       rankMathDetected: false,
     };
 
+    // Stage 1: REST API Discovery (GET /wp-json/)
     let siteInfo: WordPressSiteInfo;
-
-    // Stage 1: REST API Discovery (/wp-json/)
     try {
       siteInfo = await this.getSiteInfo();
       stages.restApiDetected = true;
@@ -324,11 +338,7 @@ export class WordPressClient {
       };
     }
 
-    // Stage 2: REST API v2 Verification (/wp-json/wp/v2/)
-    const v2Ok = await this.verifyRestV2();
-    stages.restV2Detected = v2Ok;
-
-    // Stage 3: Authenticated Request (/users/me)
+    // Stage 2: Authentication Test (GET /wp-json/wp/v2/users/me)
     let user: WordPressUser;
     try {
       user = await this.getCurrentUser();
@@ -344,7 +354,7 @@ export class WordPressClient {
       };
     }
 
-    // Stage 4: Rank Math Detection (Optional)
+    // Stage 3: Rank Math Detection (Optional)
     const hasRankMath = siteInfo.has_rankmath;
     stages.rankMathDetected = hasRankMath;
 
@@ -370,7 +380,7 @@ export class WordPressClient {
   }
 
   /**
-   * Helper: Retrieve posts
+   * Retrieve posts
    */
   async getPosts(params: {
     page?: number;
@@ -397,7 +407,7 @@ export class WordPressClient {
   }
 
   /**
-   * 5. Get single post by ID
+   * Get single post by ID
    */
   async getPost(postId: number): Promise<WordPressPostOutput> {
     const { data } = await this.request<any>(`/posts/${postId}`);
@@ -418,7 +428,7 @@ export class WordPressClient {
   }
 
   /**
-   * 6. Create post with SEO metadata adapter
+   * Create post with SEO metadata adapter
    */
   async createPost(input: WordPressPostInput): Promise<WordPressPostOutput> {
     const payload: Record<string, any> = {
@@ -469,7 +479,7 @@ export class WordPressClient {
   }
 
   /**
-   * 7. Update post with SEO metadata adapter
+   * Update post with SEO metadata adapter
    */
   async updatePost(postId: number, input: Partial<WordPressPostInput>): Promise<WordPressPostOutput> {
     const payload: Record<string, any> = {};
@@ -518,7 +528,7 @@ export class WordPressClient {
   }
 
   /**
-   * 8. Delete post
+   * Delete post
    */
   async deletePost(postId: number, force = false): Promise<boolean> {
     const { data } = await this.request<any>(`/posts/${postId}?force=${force}`, {
@@ -528,7 +538,7 @@ export class WordPressClient {
   }
 
   /**
-   * 9. Upload media
+   * Upload media
    */
   async uploadMedia(params: {
     buffer: Buffer | Uint8Array;
@@ -567,21 +577,21 @@ export class WordPressClient {
   }
 
   /**
-   * 10. Set featured image on post
+   * Set featured image on post
    */
   async setFeaturedImage(postId: number, mediaId: number): Promise<WordPressPostOutput> {
     return this.updatePost(postId, { featured_media: mediaId });
   }
 
   /**
-   * 11. Publish post
+   * Publish post
    */
   async publishPost(postId: number): Promise<WordPressPostOutput> {
     return this.updatePost(postId, { status: 'publish' });
   }
 
   /**
-   * 12. Verify publication
+   * Verify publication
    */
   async verifyPublication(postId: number): Promise<{
     postId: number;

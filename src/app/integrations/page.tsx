@@ -1017,11 +1017,26 @@ export default function IntegrationsPage() {
             </p>
 
             {wpFeedback && (
-              <div className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
+              <div className={`p-3.5 rounded-xl text-xs border ${
                 wpFeedback.ok ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
               }`}>
-                {wpFeedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-                <span className="whitespace-pre-line leading-relaxed font-medium">{wpFeedback.message}</span>
+                <div className="flex items-start gap-2">
+                  {wpFeedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                  <div className="flex-1">
+                    <span className="whitespace-pre-line leading-relaxed font-medium block">{wpFeedback.message}</span>
+                    {!wpFeedback.ok && (
+                      <button
+                        type="button"
+                        onClick={e => handleConnectWp(e as any)}
+                        disabled={wpSaving}
+                        className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg font-semibold text-[11px] transition-colors"
+                      >
+                        {wpSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        Retry Connection
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
