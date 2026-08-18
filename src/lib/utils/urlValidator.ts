@@ -73,8 +73,8 @@ export function validateAndNormalizeWordPressUrl(inputUrl: string): URLValidatio
     }
   }
 
-  // Normalize: Strip trailing slash and path extras unless specified
-  const normalizedUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '')}`;
+  // Normalize: Lowercase hostname, strip trailing slash and path extras unless specified
+  const normalizedUrl = `${parsed.protocol}//${hostname}${parsed.port ? `:${parsed.port}` : ''}${parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/$/, '')}`;
 
   return {
     isValid: true,

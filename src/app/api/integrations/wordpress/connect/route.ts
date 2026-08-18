@@ -44,12 +44,7 @@ export async function POST(request: Request) {
     });
 
     const testResult = await client.testConnection();
-    if (!testResult.ok) {
-      return NextResponse.json({
-        success: false,
-        error: testResult.message,
-      }, { status: 400 });
-    }
+    const isConnected = testResult.ok;
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -68,11 +63,13 @@ export async function POST(request: Request) {
         seo_plugin: testResult.detectedPlugin || seo_plugin || 'none',
       },
       capabilities: WORDPRESS_CAPABILITIES,
-      status: 'connected',
-      status_message: `Connected to ${testResult.siteName || site_url} as ${testResult.username || username}`,
+      status: isConnected ? 'connected' : 'action_required',
+      status_message: isConnected
+        ? `Connected to ${testResult.siteName || site_url} as ${testResult.username || username}`
+        : `Auth verification notice: ${testResult.message}`,
       last_tested_at: new Date().toISOString(),
-      last_success_at: new Date().toISOString(),
-      last_synced_at: new Date().toISOString(),
+      last_success_at: isConnected ? new Date().toISOString() : null,
+      last_synced_at: isConnected ? new Date().toISOString() : null,
       has_access_token: true,
       updated_at: new Date().toISOString(),
     };

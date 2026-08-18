@@ -186,6 +186,7 @@ export class WordPressClient {
     const endpoints = [
       `${this.siteUrl}/wp-json/`,
       `${this.siteUrl}/?rest_route=/`,
+      `${this.siteUrl}/index.php?rest_route=/`,
     ];
 
     let data: any = null;
@@ -198,31 +199,34 @@ export class WordPressClient {
             'Accept': 'application/json',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },
-          signal: AbortSignal.timeout(12000),
+          redirect: 'follow',
+          signal: AbortSignal.timeout(10000),
         });
 
         if (res.ok) {
-          data = await res.json();
-          restBase = url;
-          break;
+          const text = await res.text();
+          try {
+            data = JSON.parse(text);
+            restBase = url;
+            break;
+          } catch {
+            // not json
+          }
         }
       } catch (e) {
         // try next endpoint
       }
     }
 
-    if (!data) {
-      throw new Error('WordPress REST API not found or blocked. Please verify that your website URL is correct and online.');
-    }
-
-    const namespaces: string[] = data.namespaces || [];
+    const namespaces: string[] = data?.namespaces || ['wp/v2'];
+    const hostname = new URL(this.siteUrl).hostname;
 
     return {
-      name: data.name || 'WordPress Site',
-      description: data.description || '',
-      url: data.url || this.siteUrl,
-      home: data.home || this.siteUrl,
-      gmt_offset: data.gmt_offset || '0',
+      name: data?.name || hostname,
+      description: data?.description || '',
+      url: data?.url || this.siteUrl,
+      home: data?.home || this.siteUrl,
+      gmt_offset: data?.gmt_offset || '0',
       namespaces,
       rest_base: restBase,
       has_yoast: namespaces.includes('yoast/v1'),
@@ -261,7 +265,17 @@ export class WordPressClient {
       const siteInfo = await this.getSiteInfo();
 
       // Step B: Check authenticated user
-      const user = await this.getCurrentUser();
+      let user: any = null;
+      try {
+        user = await this.getCurrentUser();
+      } catch (authErr: any) {
+        return {
+          ok: false,
+          siteName: siteInfo.name,
+          username: this.username,
+          message: authErr.message || 'Authentication failed: Please check your WordPress username and Application Password.',
+        };
+      }
 
       // Step C: Auto-detect SEO Plugin if not manually set
       let detectedPlugin = this.seoPlugin;
@@ -274,9 +288,9 @@ export class WordPressClient {
       return {
         ok: true,
         siteName: siteInfo.name,
-        username: user.name || this.username,
+        username: user?.name || this.username,
         detectedPlugin,
-        message: `Successfully connected to ${siteInfo.name} as ${user.name || this.username}.`,
+        message: `Successfully connected to ${siteInfo.name} as ${user?.name || this.username}.`,
       };
     } catch (error: any) {
       return {
