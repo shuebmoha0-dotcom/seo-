@@ -136,12 +136,29 @@ export class WordPressClient {
     };
 
     try {
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         ...options,
         headers,
         redirect: 'follow',
         signal: AbortSignal.timeout(15000),
       });
+
+      // If custom UA got 403, retry with standard browser headers in case of strict WAF UA rules
+      if (response.status === 403) {
+        const browserResponse = await fetch(url, {
+          ...options,
+          headers: {
+            ...headers,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(15000),
+        });
+        if (browserResponse.ok || browserResponse.status !== 403) {
+          response = browserResponse;
+        }
+      }
 
       // Safe Diagnostic Logging (Never log credentials)
       console.log(`[WordPressClient] Request: ${options.method || 'GET'} ${url} -> HTTP ${response.status} (Final: ${response.url})`);
@@ -211,6 +228,22 @@ export class WordPressClient {
         redirect: 'follow',
         signal: AbortSignal.timeout(12000),
       });
+
+      // If custom UA got 403, retry with standard browser headers in case of strict UA blocking
+      if (res.status === 403) {
+        const browserRes = await fetch(primaryUrl, {
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(12000),
+        });
+        if (browserRes.ok) {
+          res = browserRes;
+        }
+      }
     } catch (err: any) {
       console.error(`[WordPressClient] Discovery network error on ${primaryUrl}:`, err.message);
       throw new Error(`Could not reach WordPress site at ${primaryUrl}: ${err.message}`);
