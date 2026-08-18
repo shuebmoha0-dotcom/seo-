@@ -35,8 +35,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       site_name: testResult.siteName,
+      canonical_url: testResult.canonicalUrl,
       username: testResult.username,
       detected_plugin: testResult.detectedPlugin,
+      rank_math_detected: testResult.rankMathDetected,
+      stages: testResult.stages,
       message: testResult.message,
     });
   } catch (error: any) {

@@ -520,15 +520,23 @@ export default function IntegrationsPage() {
 
       const data = await res.json();
       if (data.success) {
+        setWpFeedback({ ok: true, message: data.message });
         setIntegrations(prev => prev.map(i => i.provider === "wordpress" ? {
           ...i,
           status: "connected",
-          status_message: `Connected to ${data.site_name || wpForm.site_url}`,
-          config: { site_url: wpForm.site_url, username: data.username || wpForm.username, seo_plugin: data.seo_plugin || wpForm.seo_plugin },
+          status_message: `Connected to ${data.site_name || wpForm.site_url} as @${data.username || wpForm.username}`,
+          config: {
+            site_url: data.canonical_url || wpForm.site_url,
+            username: data.username || wpForm.username,
+            seo_plugin: data.seo_plugin || wpForm.seo_plugin,
+            rank_math_detected: data.rank_math_detected,
+          },
           last_tested: "Just now",
         } : i));
-        setShowWpModal(false);
-        setWpFeedback(null);
+        setTimeout(() => {
+          setShowWpModal(false);
+          setWpFeedback(null);
+        }, 2000);
       } else {
         setWpFeedback({ ok: false, message: data.error || "Failed to save WordPress connection." });
       }
@@ -1013,7 +1021,7 @@ export default function IntegrationsPage() {
                 wpFeedback.ok ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
               }`}>
                 {wpFeedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
-                <span>{wpFeedback.message}</span>
+                <span className="whitespace-pre-line leading-relaxed font-medium">{wpFeedback.message}</span>
               </div>
             )}
 

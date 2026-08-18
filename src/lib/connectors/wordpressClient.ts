@@ -1,11 +1,11 @@
 /**
  * Production WordPress REST API Client
  * 
- * Uses WordPress Application Passwords for authentication.
- * Handles API discovery, rate limiting, retries with exponential backoff,
- * media uploads, SEO metadata adapters, and publishing verification.
+ * Implements full REST API discovery (/wp-json/ and /wp-json/wp/v2/),
+ * URL normalization, redirect handling, Application Password authentication,
+ * error classification (401, 403, 404, 429, 5xx), and Rank Math detection.
  * 
- * Credentials are never logged or exposed to agents or frontend.
+ * Credentials are never logged in plaintext or exposed to the client.
  */
 
 import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
@@ -71,16 +71,31 @@ export interface WordPressPostOutput {
   tags: number[];
 }
 
-export interface WordPressPaginatedResult<T> {
-  data: T[];
-  total: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
+export interface WordPressConnectionTestResult {
+  ok: boolean;
+  siteName?: string;
+  canonicalUrl?: string;
+  username?: string;
+  wpVersion?: string;
+  detectedPlugin?: string;
+  rankMathDetected?: boolean;
+  stages: {
+    restApiDetected: boolean;
+    restV2Detected: boolean;
+    authSuccessful: boolean;
+    rankMathDetected: boolean;
+  };
+  message: string;
+  diagnostic?: {
+    httpStatus?: number;
+    finalUrl?: string;
+    contentType?: string;
+    safeSummary?: string;
+  };
 }
 
 export class WordPressClient {
-  private siteUrl: string;
+  public siteUrl: string;
   private username: string;
   private applicationPassword: string;
   private seoPlugin: WordPressSEOPlugin;
@@ -94,7 +109,7 @@ export class WordPressClient {
 
     this.siteUrl = urlValidation.normalizedUrl;
     this.username = credentials.username.trim();
-    this.applicationPassword = credentials.applicationPassword.trim();
+    this.applicationPassword = credentials.applicationPassword.trim().replace(/\s+/g, '');
     this.seoPlugin = credentials.seoPlugin || 'none';
     this.apiBaseUrl = `${this.siteUrl}/wp-json/wp/v2`;
   }
@@ -108,17 +123,17 @@ export class WordPressClient {
   /**
    * Safe fetch with retries on 429/5xx, timeouts, and sanitized error messages
    */
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestInit = {},
     retries = 2
-  ): Promise<{ data: T; headers: Headers }> {
+  ): Promise<{ data: T; headers: Headers; status: number; finalUrl: string }> {
     const url = endpoint.startsWith('http') ? endpoint : `${this.apiBaseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
     const headers: Record<string, string> = {
       'Authorization': this.authHeader,
       'Accept': 'application/json',
-      'User-Agent': 'SEOAutopilot-WordPressConnector/1.0',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 SEOAutopilot/1.0',
       ...(options.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers as Record<string, string> || {}),
     };
@@ -127,22 +142,23 @@ export class WordPressClient {
       const response = await fetch(url, {
         ...options,
         headers,
-        signal: AbortSignal.timeout(15000), // 15 second timeout
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15000),
       });
 
-      // Handle 401 Unauthorized (invalid application password or username)
+      // Handle 401 Unauthorized
       if (response.status === 401) {
-        throw new Error('Authentication failed (401): Invalid WordPress username or Application Password. Please verify your WordPress username under WordPress Admin > Users > Profile, and generate a new Application Password.');
+        throw new Error('WordPress authentication failed. Please check your WordPress username and Application Password.');
       }
 
-      // Handle 403 Forbidden (user lacks edit permissions)
+      // Handle 403 Forbidden
       if (response.status === 403) {
-        throw new Error('Permission denied: The WordPress user does not have permission to perform this action.');
+        throw new Error('WordPress rejected the request. Please check user permissions or security plugin settings.');
       }
 
       // Handle 404 Not Found
       if (response.status === 404) {
-        throw new Error(`WordPress resource not found (404). Endpoint: ${endpoint}`);
+        throw new Error(`WordPress REST endpoint was not found (HTTP 404): ${endpoint}`);
       }
 
       // Handle 429 Rate Limiting with exponential backoff
@@ -159,18 +175,18 @@ export class WordPressClient {
       }
 
       if (!response.ok) {
-        let errMessage = `WordPress error (${response.status}): ${response.statusText}`;
+        let errMessage = `WordPress server returned an error (HTTP ${response.status}): ${response.statusText}`;
         try {
           const errorJson = await response.json();
           if (errorJson?.message) errMessage = errorJson.message;
         } catch {
-          // ignore parsing error
+          // ignore
         }
         throw new Error(errMessage);
       }
 
       const data = (await response.json()) as T;
-      return { data, headers: response.headers };
+      return { data, headers: response.headers, status: response.status, finalUrl: response.url };
     } catch (err: any) {
       if (err.name === 'TimeoutError') {
         throw new Error('WordPress site request timed out. Please check if your site is online and responsive.');
@@ -180,7 +196,7 @@ export class WordPressClient {
   }
 
   /**
-   * 1. Discover WordPress REST API and retrieve site details
+   * STEP 3 & 4: Discover WordPress REST API root and follow redirects to canonical origin
    */
   async getSiteInfo(): Promise<WordPressSiteInfo> {
     const endpoints = [
@@ -189,8 +205,10 @@ export class WordPressClient {
       `${this.siteUrl}/index.php?rest_route=/`,
     ];
 
-    let data: any = null;
-    let restBase = `${this.siteUrl}/wp-json/`;
+    let lastStatus = 0;
+    let lastUrl = endpoints[0];
+    let lastContentType = '';
+    let lastSummary = '';
 
     for (const url of endpoints) {
       try {
@@ -200,285 +218,347 @@ export class WordPressClient {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },
           redirect: 'follow',
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(12000),
         });
+
+        lastStatus = res.status;
+        lastUrl = res.url || url;
+        lastContentType = res.headers.get('content-type') || '';
 
         if (res.ok) {
           const text = await res.text();
+          lastSummary = text.slice(0, 200);
           try {
-            data = JSON.parse(text);
-            restBase = url;
-            break;
+            const data = JSON.parse(text);
+            const namespaces: string[] = data.namespaces || [];
+
+            // Update canonical siteUrl if redirected
+            if (res.url) {
+              const parsedRedirect = new URL(res.url);
+              this.siteUrl = `${parsedRedirect.protocol}//${parsedRedirect.hostname}${parsedRedirect.port ? `:${parsedRedirect.port}` : ''}`;
+              this.apiBaseUrl = `${this.siteUrl}/wp-json/wp/v2`;
+            }
+
+            return {
+              name: data.name || new URL(this.siteUrl).hostname,
+              description: data.description || '',
+              url: data.url || this.siteUrl,
+              home: data.home || this.siteUrl,
+              gmt_offset: data.gmt_offset || '0',
+              namespaces,
+              rest_base: url,
+              has_yoast: namespaces.includes('yoast/v1'),
+              has_rankmath: namespaces.includes('rankmath/v1'),
+              has_aioseo: namespaces.includes('aioseo/v1'),
+            };
           } catch {
-            // not json
+            // Not valid JSON
           }
         }
-      } catch (e) {
-        // try next endpoint
+      } catch (err: any) {
+        lastSummary = err.message || 'Network error';
       }
     }
 
-    const namespaces: string[] = data?.namespaces || ['wp/v2'];
-    const hostname = new URL(this.siteUrl).hostname;
-
-    return {
-      name: data?.name || hostname,
-      description: data?.description || '',
-      url: data?.url || this.siteUrl,
-      home: data?.home || this.siteUrl,
-      gmt_offset: data?.gmt_offset || '0',
-      namespaces,
-      rest_base: restBase,
-      has_yoast: namespaces.includes('yoast/v1'),
-      has_rankmath: namespaces.includes('rankmath/v1'),
-      has_aioseo: namespaces.includes('aioseo/v1'),
-    };
+    throw new Error(`WordPress REST API discovery failed (HTTP ${lastStatus || 'ERR'} on ${lastUrl}). Content-Type: ${lastContentType || 'unknown'}. Details: ${lastSummary || 'No response'}`);
   }
 
   /**
-   * 2. Verify credentials and get current user info with permissions
+   * STEP 3 (Part 2): Test /wp-json/wp/v2/ endpoint
+   */
+  async verifyRestV2(): Promise<boolean> {
+    const v2Url = `${this.siteUrl}/wp-json/wp/v2/`;
+    try {
+      const res = await fetch(v2Url, {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+        redirect: 'follow',
+        signal: AbortSignal.timeout(10000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * STEP 6: Test Authenticated WordPress Access (/users/me)
    */
   async getCurrentUser(): Promise<WordPressUser> {
     const { data } = await this.request<any>('/users/me?context=edit');
     return {
       id: data.id,
-      name: data.name,
-      slug: data.slug,
+      name: data.name || this.username,
+      slug: data.slug || '',
       roles: data.roles || [],
       capabilities: data.capabilities || {},
     };
   }
 
   /**
-   * 3. Comprehensive Connection Test
+   * STEP 8: Comprehensive Step-by-Step Connection Test Pipeline
    */
-  async testConnection(): Promise<{
-    ok: boolean;
-    siteName?: string;
-    username?: string;
-    wpVersion?: string;
-    detectedPlugin?: string;
-    message: string;
-  }> {
+  async testConnection(): Promise<WordPressConnectionTestResult> {
+    const stages = {
+      restApiDetected: false,
+      restV2Detected: false,
+      authSuccessful: false,
+      rankMathDetected: false,
+    };
+
+    let siteInfo: WordPressSiteInfo;
+
+    // Stage 1: REST API Discovery (/wp-json/)
     try {
-      // Step A: Check REST discovery
-      const siteInfo = await this.getSiteInfo();
-
-      // Step B: Check authenticated user
-      let user: any = null;
-      try {
-        user = await this.getCurrentUser();
-      } catch (authErr: any) {
-        return {
-          ok: false,
-          siteName: siteInfo.name,
-          username: this.username,
-          message: authErr.message || 'Authentication failed: Please check your WordPress username and Application Password.',
-        };
-      }
-
-      // Step C: Auto-detect SEO Plugin if not manually set
-      let detectedPlugin = this.seoPlugin;
-      if (this.seoPlugin === 'none') {
-        if (siteInfo.has_yoast) detectedPlugin = 'yoast';
-        else if (siteInfo.has_rankmath) detectedPlugin = 'rankmath';
-        else if (siteInfo.has_aioseo) detectedPlugin = 'aioseo';
-      }
-
-      return {
-        ok: true,
-        siteName: siteInfo.name,
-        username: user?.name || this.username,
-        detectedPlugin,
-        message: `Successfully connected to ${siteInfo.name} as ${user?.name || this.username}.`,
-      };
-    } catch (error: any) {
+      siteInfo = await this.getSiteInfo();
+      stages.restApiDetected = true;
+    } catch (err: any) {
       return {
         ok: false,
-        message: error.message || 'Connection test failed. Please verify your site URL and Application Password.',
+        canonicalUrl: this.siteUrl,
+        username: this.username,
+        stages,
+        message: err.message || 'REST API discovery failed on your WordPress site.',
       };
     }
+
+    // Stage 2: REST API v2 Verification (/wp-json/wp/v2/)
+    const v2Ok = await this.verifyRestV2();
+    stages.restV2Detected = v2Ok;
+
+    // Stage 3: Authenticated Request (/users/me)
+    let user: WordPressUser;
+    try {
+      user = await this.getCurrentUser();
+      stages.authSuccessful = true;
+    } catch (authErr: any) {
+      return {
+        ok: false,
+        siteName: siteInfo.name,
+        canonicalUrl: this.siteUrl,
+        username: this.username,
+        stages,
+        message: authErr.message || 'WordPress authentication failed. Please check username and Application Password.',
+      };
+    }
+
+    // Stage 4: Rank Math Detection (Optional)
+    const hasRankMath = siteInfo.has_rankmath;
+    stages.rankMathDetected = hasRankMath;
+
+    let detectedPlugin = this.seoPlugin;
+    if (this.seoPlugin === 'none') {
+      if (hasRankMath) detectedPlugin = 'rankmath';
+      else if (siteInfo.has_yoast) detectedPlugin = 'yoast';
+      else if (siteInfo.has_aioseo) detectedPlugin = 'aioseo';
+    }
+
+    const pluginMsg = hasRankMath ? '✓ Rank Math detected' : '○ Rank Math not detected';
+
+    return {
+      ok: true,
+      siteName: siteInfo.name,
+      canonicalUrl: this.siteUrl,
+      username: user.name || this.username,
+      detectedPlugin,
+      rankMathDetected: hasRankMath,
+      stages,
+      message: `✓ REST API detected\n✓ Authentication successful\n✓ WordPress connected\n${pluginMsg}`,
+    };
   }
 
   /**
-   * 4. Retrieve Posts with pagination
+   * Helper: Retrieve posts
    */
   async getPosts(params: {
     page?: number;
     per_page?: number;
     status?: string;
     search?: string;
-    categories?: number[];
-    tags?: number[];
-  } = {}): Promise<WordPressPaginatedResult<WordPressPostOutput>> {
+  } = {}): Promise<any> {
     const page = params.page || 1;
-    const perPage = Math.min(params.per_page || 10, 50);
+    const perPage = params.per_page || 10;
     const searchParams = new URLSearchParams({
       page: page.toString(),
       per_page: perPage.toString(),
       status: params.status || 'any',
       context: 'view',
     });
-
     if (params.search) searchParams.set('search', params.search);
-    if (params.categories?.length) searchParams.set('categories', params.categories.join(','));
-    if (params.tags?.length) searchParams.set('tags', params.tags.join(','));
 
-    const { data, headers } = await this.request<WordPressPostOutput[]>(`/posts?${searchParams.toString()}`);
-
-    const total = parseInt(headers.get('X-WP-Total') || data.length.toString(), 10);
-    const totalPages = parseInt(headers.get('X-WP-TotalPages') || '1', 10);
-
+    const { data, headers } = await this.request<any[]>(`/posts?${searchParams.toString()}`);
     return {
       data,
-      total,
-      totalPages,
-      page,
-      perPage,
+      total: parseInt(headers.get('X-WP-Total') || data.length.toString(), 10),
+      totalPages: parseInt(headers.get('X-WP-TotalPages') || '1', 10),
     };
   }
 
   /**
-   * 5. Get a single post by ID
+   * 5. Get single post by ID
    */
   async getPost(postId: number): Promise<WordPressPostOutput> {
-    const { data } = await this.request<WordPressPostOutput>(`/posts/${postId}?context=edit`);
-    return data;
+    const { data } = await this.request<any>(`/posts/${postId}`);
+    return {
+      id: data.id,
+      title: data.title,
+      content: data.content,
+      excerpt: data.excerpt,
+      slug: data.slug,
+      status: data.status,
+      link: data.link,
+      date: data.date,
+      modified: data.modified,
+      featured_media: data.featured_media || 0,
+      categories: data.categories || [],
+      tags: data.tags || [],
+    };
   }
 
   /**
-   * 6. Create a Post (Default status = 'draft')
+   * 6. Create post with SEO metadata adapter
    */
   async createPost(input: WordPressPostInput): Promise<WordPressPostOutput> {
-    const body: Record<string, any> = {
+    const payload: Record<string, any> = {
       title: input.title,
       content: input.content,
       status: input.status || 'draft',
-      ...(input.excerpt ? { excerpt: input.excerpt } : {}),
-      ...(input.slug ? { slug: input.slug } : {}),
-      ...(input.category_ids?.length ? { categories: input.category_ids } : {}),
-      ...(input.tag_ids?.length ? { tags: input.tag_ids } : {}),
-      ...(input.featured_media ? { featured_media: input.featured_media } : {}),
-      ...(input.author_id ? { author: input.author_id } : {}),
     };
 
-    // Apply SEO plugin metadata fields
-    const meta = this.buildSEOMetaFields(input);
-    if (Object.keys(meta).length > 0) {
-      body.meta = meta;
+    if (input.excerpt) payload.excerpt = input.excerpt;
+    if (input.slug) payload.slug = input.slug;
+    if (input.category_ids?.length) payload.categories = input.category_ids;
+    if (input.tag_ids?.length) payload.tags = input.tag_ids;
+    if (input.featured_media) payload.featured_media = input.featured_media;
+
+    if (this.seoPlugin === 'yoast' || this.seoPlugin === 'rankmath') {
+      const meta: Record<string, any> = {};
+      if (this.seoPlugin === 'yoast') {
+        if (input.seo_title) meta._yoast_wpseo_title = input.seo_title;
+        if (input.meta_description) meta._yoast_wpseo_metadesc = input.meta_description;
+        if (input.canonical_url) meta._yoast_wpseo_canonical = input.canonical_url;
+      } else if (this.seoPlugin === 'rankmath') {
+        if (input.seo_title) meta.rank_math_title = input.seo_title;
+        if (input.meta_description) meta.rank_math_description = input.meta_description;
+        if (input.canonical_url) meta.rank_math_canonical_url = input.canonical_url;
+      }
+      if (Object.keys(meta).length > 0) payload.meta = meta;
     }
 
-    const { data } = await this.request<WordPressPostOutput>('/posts', {
+    const { data } = await this.request<any>('/posts', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
-
-    return data;
-  }
-
-  /**
-   * 7. Update an existing Post
-   */
-  async updatePost(postId: number, input: Partial<WordPressPostInput>): Promise<WordPressPostOutput> {
-    const body: Record<string, any> = {};
-    if (input.title !== undefined) body.title = input.title;
-    if (input.content !== undefined) body.content = input.content;
-    if (input.excerpt !== undefined) body.excerpt = input.excerpt;
-    if (input.status !== undefined) body.status = input.status;
-    if (input.slug !== undefined) body.slug = input.slug;
-    if (input.category_ids !== undefined) body.categories = input.category_ids;
-    if (input.tag_ids !== undefined) body.tags = input.tag_ids;
-    if (input.featured_media !== undefined) body.featured_media = input.featured_media;
-
-    const meta = this.buildSEOMetaFields(input as WordPressPostInput);
-    if (Object.keys(meta).length > 0) {
-      body.meta = meta;
-    }
-
-    const { data } = await this.request<WordPressPostOutput>(`/posts/${postId}`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-
-    return data;
-  }
-
-  /**
-   * 8. Publish an approved Post
-   */
-  async publishPost(postId: number): Promise<WordPressPostOutput> {
-    const { data } = await this.request<WordPressPostOutput>(`/posts/${postId}`, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'publish' }),
-    });
-
-    return data;
-  }
-
-  /**
-   * 9. Verify Publication
-   */
-  async verifyPublication(postId: number): Promise<{
-    isPublished: boolean;
-    url: string;
-    title: string;
-    publishedAt: string;
-  }> {
-    const post = await this.getPost(postId);
-    const isPublished = post.status === 'publish';
 
     return {
-      isPublished,
-      url: post.link,
-      title: post.title.rendered,
-      publishedAt: post.date,
+      id: data.id,
+      title: data.title,
+      content: data.content,
+      excerpt: data.excerpt,
+      slug: data.slug,
+      status: data.status,
+      link: data.link,
+      date: data.date,
+      modified: data.modified,
+      featured_media: data.featured_media || 0,
+      categories: data.categories || [],
+      tags: data.tags || [],
     };
   }
 
   /**
-   * 10. Upload Media Asset (Image / Document)
+   * 7. Update post with SEO metadata adapter
    */
-  async uploadMedia(params: {
-    buffer: Buffer | Blob | Uint8Array;
-    filename: string;
-    mimeType?: string;
-    title?: string;
-    altText?: string;
-    caption?: string;
-  }): Promise<{ id: number; url: string; title: string }> {
-    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
-    const mime = params.mimeType || 'image/webp';
+  async updatePost(postId: number, input: Partial<WordPressPostInput>): Promise<WordPressPostOutput> {
+    const payload: Record<string, any> = {};
+    if (input.title !== undefined) payload.title = input.title;
+    if (input.content !== undefined) payload.content = input.content;
+    if (input.status !== undefined) payload.status = input.status;
+    if (input.excerpt !== undefined) payload.excerpt = input.excerpt;
+    if (input.slug !== undefined) payload.slug = input.slug;
+    if (input.category_ids) payload.categories = input.category_ids;
+    if (input.tag_ids) payload.tags = input.tag_ids;
+    if (input.featured_media !== undefined) payload.featured_media = input.featured_media;
 
-    // Build raw multipart form data payload
-    const formData = new FormData();
-    const blob = params.buffer instanceof Blob 
-      ? params.buffer 
-      : new Blob([params.buffer as any], { type: mime });
-
-    formData.append('file', blob, params.filename);
-    if (params.title) formData.append('title', params.title);
-    if (params.altText) formData.append('alt_text', params.altText);
-    if (params.caption) formData.append('caption', params.caption);
-
-    const res = await fetch(`${this.apiBaseUrl}/media`, {
-      method: 'POST',
-      headers: {
-        'Authorization': this.authHeader,
-        'Accept': 'application/json',
-      },
-      body: formData,
-    });
-
-    if (!res.ok) {
-      let errText = `Media upload failed (${res.status})`;
-      try {
-        const json = await res.json();
-        if (json.message) errText = json.message;
-      } catch {}
-      throw new Error(errText);
+    if (input.seo_title || input.meta_description || input.canonical_url) {
+      const meta: Record<string, any> = {};
+      if (this.seoPlugin === 'yoast') {
+        if (input.seo_title) meta._yoast_wpseo_title = input.seo_title;
+        if (input.meta_description) meta._yoast_wpseo_metadesc = input.meta_description;
+        if (input.canonical_url) meta._yoast_wpseo_canonical = input.canonical_url;
+      } else if (this.seoPlugin === 'rankmath') {
+        if (input.seo_title) meta.rank_math_title = input.seo_title;
+        if (input.meta_description) meta.rank_math_description = input.meta_description;
+        if (input.canonical_url) meta.rank_math_canonical_url = input.canonical_url;
+      }
+      if (Object.keys(meta).length > 0) payload.meta = meta;
     }
 
-    const data = await res.json();
+    const { data } = await this.request<any>(`/posts/${postId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    return {
+      id: data.id,
+      title: data.title,
+      content: data.content,
+      excerpt: data.excerpt,
+      slug: data.slug,
+      status: data.status,
+      link: data.link,
+      date: data.date,
+      modified: data.modified,
+      featured_media: data.featured_media || 0,
+      categories: data.categories || [],
+      tags: data.tags || [],
+    };
+  }
+
+  /**
+   * 8. Delete post
+   */
+  async deletePost(postId: number, force = false): Promise<boolean> {
+    const { data } = await this.request<any>(`/posts/${postId}?force=${force}`, {
+      method: 'DELETE',
+    });
+    return !!data.deleted;
+  }
+
+  /**
+   * 9. Upload media
+   */
+  async uploadMedia(params: {
+    buffer: Buffer | Uint8Array;
+    filename: string;
+    altText?: string;
+    title?: string;
+    caption?: string;
+  }): Promise<{ id: number; url: string; title: string }> {
+    const headers: Record<string, string> = {
+      'Content-Disposition': `attachment; filename="${params.filename}"`,
+      'Content-Type': 'image/webp',
+    };
+
+    const { data } = await this.request<any>('/media', {
+      method: 'POST',
+      headers,
+      body: params.buffer as any,
+    });
+
+    if (params.altText || params.title || params.caption) {
+      await this.request<any>(`/media/${data.id}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          alt_text: params.altText || '',
+          title: params.title || params.filename,
+          caption: params.caption || '',
+        }),
+      });
+    }
+
     return {
       id: data.id,
       url: data.source_url || data.guid?.rendered || '',
@@ -487,49 +567,36 @@ export class WordPressClient {
   }
 
   /**
-   * 11. Helper to attach a featured image to a post
+   * 10. Set featured image on post
    */
-  async setFeaturedImage(postId: number, mediaId: number): Promise<void> {
-    await this.request(`/posts/${postId}`, {
-      method: 'POST',
-      body: JSON.stringify({ featured_media: mediaId }),
-    });
+  async setFeaturedImage(postId: number, mediaId: number): Promise<WordPressPostOutput> {
+    return this.updatePost(postId, { featured_media: mediaId });
   }
 
   /**
-   * 12. Read Categories & Tags
+   * 11. Publish post
    */
-  async getCategories(): Promise<Array<{ id: number; name: string; slug: string; count: number }>> {
-    const { data } = await this.request<any[]>('/categories?per_page=100');
-    return data.map(c => ({ id: c.id, name: c.name, slug: c.slug, count: c.count }));
-  }
-
-  async getTags(): Promise<Array<{ id: number; name: string; slug: string; count: number }>> {
-    const { data } = await this.request<any[]>('/tags?per_page=100');
-    return data.map(t => ({ id: t.id, name: t.name, slug: t.slug, count: t.count }));
+  async publishPost(postId: number): Promise<WordPressPostOutput> {
+    return this.updatePost(postId, { status: 'publish' });
   }
 
   /**
-   * Helper to construct SEO metadata fields for Yoast, Rank Math, or All-in-One SEO
+   * 12. Verify publication
    */
-  private buildSEOMetaFields(input: WordPressPostInput): Record<string, any> {
-    const meta: Record<string, any> = {};
-
-    if (this.seoPlugin === 'yoast') {
-      if (input.seo_title) meta._yoast_wpseo_title = input.seo_title;
-      if (input.meta_description) meta._yoast_wpseo_metadesc = input.meta_description;
-      if (input.canonical_url) meta._yoast_wpseo_canonical = input.canonical_url;
-    } else if (this.seoPlugin === 'rankmath') {
-      if (input.seo_title) meta.rank_math_title = input.seo_title;
-      if (input.meta_description) meta.rank_math_description = input.meta_description;
-      if (input.canonical_url) meta.rank_math_canonical_url = input.canonical_url;
-      if (input.schema) meta.rank_math_schema = JSON.stringify(input.schema);
-    } else if (this.seoPlugin === 'aioseo') {
-      if (input.seo_title) meta._aioseo_title = input.seo_title;
-      if (input.meta_description) meta._aioseo_description = input.meta_description;
-      if (input.canonical_url) meta._aioseo_canonical_url = input.canonical_url;
-    }
-
-    return meta;
+  async verifyPublication(postId: number): Promise<{
+    postId: number;
+    isPublished: boolean;
+    url: string;
+    status: string;
+    title: string;
+  }> {
+    const post = await this.getPost(postId);
+    return {
+      postId: post.id,
+      isPublished: post.status === 'publish',
+      url: post.link,
+      status: post.status,
+      title: post.title.rendered,
+    };
   }
 }

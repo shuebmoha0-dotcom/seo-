@@ -44,7 +44,13 @@ export async function POST(request: Request) {
     });
 
     const testResult = await client.testConnection();
-    const isConnected = testResult.ok;
+    if (!testResult.ok) {
+      return NextResponse.json({
+        success: false,
+        error: testResult.message,
+        stages: testResult.stages,
+      }, { status: 400 });
+    }
 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -57,19 +63,18 @@ export async function POST(request: Request) {
       provider: 'wordpress',
       display_name: 'WordPress',
       config: {
-        site_url: site_url.replace(/\/$/, ''),
+        site_url: testResult.canonicalUrl || site_url.replace(/\/$/, ''),
         username: testResult.username || username,
         site_name: testResult.siteName || 'WordPress Site',
         seo_plugin: testResult.detectedPlugin || seo_plugin || 'none',
+        rank_math_detected: testResult.rankMathDetected || false,
       },
       capabilities: WORDPRESS_CAPABILITIES,
-      status: isConnected ? 'connected' : 'action_required',
-      status_message: isConnected
-        ? `Connected to ${testResult.siteName || site_url} as ${testResult.username || username}`
-        : `Auth verification notice: ${testResult.message}`,
+      status: 'connected',
+      status_message: `Connected to ${testResult.siteName || site_url} as @${testResult.username || username}`,
       last_tested_at: new Date().toISOString(),
-      last_success_at: isConnected ? new Date().toISOString() : null,
-      last_synced_at: isConnected ? new Date().toISOString() : null,
+      last_success_at: new Date().toISOString(),
+      last_synced_at: new Date().toISOString(),
       has_access_token: true,
       updated_at: new Date().toISOString(),
     };
@@ -135,9 +140,12 @@ export async function POST(request: Request) {
       success: true,
       integration_id: integrationId,
       site_name: testResult.siteName,
+      canonical_url: testResult.canonicalUrl,
       username: testResult.username,
       seo_plugin: testResult.detectedPlugin,
-      message: `Connected successfully to ${testResult.siteName}!`,
+      rank_math_detected: testResult.rankMathDetected,
+      stages: testResult.stages,
+      message: testResult.message,
     });
   } catch (error: any) {
     console.error('[WordPress Connect] Error:', error);
