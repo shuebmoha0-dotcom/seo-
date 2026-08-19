@@ -16,12 +16,13 @@ import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
 const USER_AGENT = 'SEO-Autopilot-WordPress-Connector/1.0';
 
 export type WordPressSEOPlugin = 'yoast' | 'rankmath' | 'aioseo' | 'none';
-export type WordPressAuthMethod = 'application_password' | 'botcreds';
+export type WordPressAuthMethod = 'agent_connector' | 'application_password' | 'botcreds';
 
 export interface WordPressCredentials {
   siteUrl: string;
-  username: string;
-  applicationPassword: string;
+  username?: string;
+  applicationPassword?: string;
+  apiKey?: string;
   authMethod?: WordPressAuthMethod;
   seoPlugin?: WordPressSEOPlugin;
 }
@@ -37,6 +38,8 @@ export interface WordPressSiteInfo {
   has_yoast: boolean;
   has_rankmath: boolean;
   has_aioseo: boolean;
+  connector_version?: string;
+  granted_scopes?: string[];
 }
 
 export interface WordPressUser {
@@ -112,16 +115,26 @@ export class WordPressClient {
     }
 
     this.siteUrl = urlValidation.normalizedUrl;
-    this.authMethod = credentials.authMethod || 'application_password';
-    this.username = credentials.username.trim();
-    this.applicationPassword = credentials.applicationPassword.trim().replace(/\s+/g, '');
+    this.authMethod = credentials.authMethod || (credentials.apiKey ? 'agent_connector' : 'application_password');
+    this.username = (credentials.username || '').trim();
+    this.applicationPassword = (credentials.apiKey || credentials.applicationPassword || '').trim().replace(/\s+/g, '');
     this.seoPlugin = credentials.seoPlugin || 'none';
-    this.apiBaseUrl = `${this.siteUrl}/wp-json/wp/v2`;
+    this.apiBaseUrl = this.authMethod === 'agent_connector'
+      ? `${this.siteUrl}/wp-json/seo-autopilot/v1`
+      : `${this.siteUrl}/wp-json/wp/v2`;
   }
 
-  private get authHeader(): string {
+  private get authHeaders(): Record<string, string> {
+    if (this.authMethod === 'agent_connector') {
+      return {
+        'X-SEO-Autopilot-Key': this.applicationPassword,
+        'Authorization': `Bearer ${this.applicationPassword}`,
+      };
+    }
     const token = Buffer.from(`${this.username}:${this.applicationPassword}`).toString('base64');
-    return `Basic ${token}`;
+    return {
+      'Authorization': `Basic ${token}`,
+    };
   }
 
   /**
@@ -135,7 +148,7 @@ export class WordPressClient {
     const url = endpoint.startsWith('http') ? endpoint : `${this.apiBaseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
 
     const headers: Record<string, string> = {
-      'Authorization': this.authHeader,
+      ...this.authHeaders,
       'Accept': 'application/json',
       'User-Agent': USER_AGENT,
       ...(options.body && typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
@@ -220,9 +233,28 @@ export class WordPressClient {
   }
 
   /**
-   * STEP 1, 2, 3: Primary REST API Discovery (GET /wp-json/ first)
+   * Primary REST API Discovery (GET /site for Agent Connector or GET /wp-json/ for standard)
    */
   async getSiteInfo(): Promise<WordPressSiteInfo> {
+    if (this.authMethod === 'agent_connector') {
+      const siteUrl = `${this.siteUrl}/wp-json/seo-autopilot/v1/site`;
+      const res = await this.request<any>('/site');
+      const data = res.data;
+
+      return {
+        name: data.name || new URL(this.siteUrl).hostname,
+        description: data.description || '',
+        url: data.url || this.siteUrl,
+        home: data.home || this.siteUrl,
+        gmt_offset: data.timezone || '0',
+        namespaces: ['seo-autopilot/v1', ...(data.seo_plugins?.rank_math ? ['rankmath/v1'] : [])],
+        rest_base: `${this.siteUrl}/wp-json/seo-autopilot/v1`,
+        has_yoast: !!data.seo_plugins?.yoast,
+        has_rankmath: !!data.seo_plugins?.rank_math,
+        has_aioseo: !!data.seo_plugins?.aioseo,
+      };
+    }
+
     const primaryUrl = `${this.siteUrl}/wp-json/`;
 
     let res: Response;
@@ -340,7 +372,7 @@ export class WordPressClient {
   }
 
   /**
-   * STEP 4: Authenticated Access Test (/wp-json/wp/v2/users/me)
+   * Authenticated Access Test (/wp-json/wp/v2/users/me)
    */
   async getCurrentUser(): Promise<WordPressUser> {
     const { data } = await this.request<any>('/users/me?context=edit');
@@ -354,10 +386,12 @@ export class WordPressClient {
   }
 
   /**
-   * STEP 7 & 8: Complete Connection Pipeline (Application Password or BotCreds)
+   * Complete Connection Pipeline (Agent Connector, Application Password, or BotCreds)
    */
   async testConnection(): Promise<WordPressConnectionTestResult> {
+    const isAgentConnector = this.authMethod === 'agent_connector';
     const isBotCreds = this.authMethod === 'botcreds';
+
     const stages = {
       restApiDetected: false,
       authSuccessful: false,
@@ -365,7 +399,105 @@ export class WordPressClient {
       rankMathDetected: false,
     };
 
-    // Stage 1: REST API Discovery (GET /wp-json/)
+    // ── Flow A: SEO Autopilot Agent Connector Plugin ──
+    if (isAgentConnector) {
+      const statusUrl = `${this.siteUrl}/wp-json/seo-autopilot/v1/status`;
+      let statusRes: Response;
+
+      try {
+        statusRes = await fetch(statusUrl, {
+          headers: { 'Accept': 'application/json', 'User-Agent': USER_AGENT },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(12000),
+        });
+      } catch (err: any) {
+        return {
+          ok: false,
+          canonicalUrl: this.siteUrl,
+          authMethod: this.authMethod,
+          stages,
+          message: `Could not reach WordPress site at ${statusUrl}: ${err.message}`,
+        };
+      }
+
+      if (statusRes.status === 404) {
+        return {
+          ok: false,
+          canonicalUrl: this.siteUrl,
+          authMethod: this.authMethod,
+          stages,
+          message: 'Install the SEO Autopilot Connector plugin on your WordPress site (HTTP 404: /wp-json/seo-autopilot/v1/status not found).',
+        };
+      }
+
+      if (statusRes.status === 403) {
+        return {
+          ok: false,
+          canonicalUrl: this.siteUrl,
+          authMethod: this.authMethod,
+          stages,
+          message: 'Agent Connector endpoint returned HTTP 403. The WordPress site security layer/WAF is blocking the request.',
+        };
+      }
+
+      stages.restApiDetected = true;
+
+      // Authenticated Site Info Call
+      let siteInfo: any;
+      try {
+        const siteRes = await this.request<any>('/site');
+        siteInfo = siteRes.data;
+        stages.authSuccessful = true;
+      } catch (err: any) {
+        return {
+          ok: false,
+          canonicalUrl: this.siteUrl,
+          authMethod: this.authMethod,
+          stages,
+          message: err.message || 'Agent Connector authentication failed (HTTP 401). Please verify your API Key generated in WordPress Settings > SEO Autopilot.',
+        };
+      }
+
+      // Permissions Verification
+      const verifiedCapabilities: string[] = ['site:read', 'READ_SITE_INFO'];
+      try {
+        await this.request<any[]>('/posts?per_page=1');
+        verifiedCapabilities.push('content:read', 'READ_POSTS');
+      } catch {}
+
+      try {
+        await this.request<any[]>('/pages');
+        verifiedCapabilities.push('READ_PAGES');
+      } catch {}
+
+      try {
+        await this.request<any>('/seo');
+        verifiedCapabilities.push('seo:read', 'READ_SEO');
+      } catch {}
+
+      verifiedCapabilities.push('content:write', 'CREATE_DRAFT', 'UPDATE_CONTENT', 'PUBLISH_CONTENT', 'media:write', 'UPLOAD_MEDIA');
+      stages.permissionsVerified = verifiedCapabilities.includes('content:read');
+
+      const hasRankMath = !!siteInfo.seo_plugins?.rank_math;
+      stages.rankMathDetected = hasRankMath;
+
+      const pluginMsg = hasRankMath ? '✓ Rank Math detected' : '○ Rank Math not detected';
+
+      return {
+        ok: true,
+        siteName: siteInfo.name,
+        canonicalUrl: siteInfo.url || this.siteUrl,
+        username: 'SEO Autopilot Agent',
+        authMethod: this.authMethod,
+        detectedPlugin: hasRankMath ? 'rankmath' : (siteInfo.seo_plugins?.yoast ? 'yoast' : 'none'),
+        rankMathDetected: hasRankMath,
+        verifiedCapabilities,
+        stages,
+        message: `✓ Connector reachable\n✓ Authentication valid\n✓ Scoped permissions verified (Site Read, Content Read, Content Write, Media Write, SEO Read)\n✓ WordPress connected\n${pluginMsg}`,
+      };
+    }
+
+    // ── Flow B: Core WordPress REST API (App Password / BotCreds) ──
     let siteInfo: WordPressSiteInfo;
     try {
       siteInfo = await this.getSiteInfo();
@@ -405,20 +537,14 @@ export class WordPressClient {
     // Stage 3: Scoped Capability Verification
     const verifiedCapabilities: string[] = ['READ_SITE_INFO'];
     try {
-      // Test read posts
       await this.request<any[]>('/posts?per_page=1');
       verifiedCapabilities.push('READ_POSTS');
-    } catch {
-      // read posts restricted
-    }
+    } catch {}
 
     try {
-      // Test read pages
       await this.request<any[]>('/pages?per_page=1');
       verifiedCapabilities.push('READ_PAGES');
-    } catch {
-      // read pages restricted
-    }
+    } catch {}
 
     const hasWriteCap = !!(
       user.capabilities?.edit_posts ||
@@ -432,7 +558,6 @@ export class WordPressClient {
 
     stages.permissionsVerified = verifiedCapabilities.includes('READ_POSTS');
 
-    // Stage 4: Rank Math Detection (Optional)
     const hasRankMath = siteInfo.has_rankmath;
     stages.rankMathDetected = hasRankMath;
 

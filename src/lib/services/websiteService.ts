@@ -42,7 +42,7 @@ export interface AddWebsitePayload {
   wordpress_config?: {
     username: string;
     app_password: string;
-    auth_method?: 'application_password' | 'botcreds';
+    auth_method?: 'agent_connector' | 'application_password' | 'botcreds';
     seo_plugin?: string;
   };
   custom_api_config?: {
@@ -210,13 +210,14 @@ export class WebsiteService {
     let integrationResult: any = null;
 
     // E. Setup Selected Execution Integration
-    if (payload.connection_type === 'wordpress' && payload.wordpress_config) {
+    if (payload.connection_type === 'wordpress' && payload.wordpress_config?.app_password) {
       try {
-        const authMethod = payload.wordpress_config.auth_method === 'botcreds' ? 'botcreds' : 'application_password';
+        const authMethod = payload.wordpress_config.auth_method || 'agent_connector';
         const wpClient = new WordPressClient({
           siteUrl: normalizedUrl,
-          username: payload.wordpress_config.username,
+          username: payload.wordpress_config.username || (authMethod === 'agent_connector' ? 'SEO Autopilot Agent' : ''),
           applicationPassword: payload.wordpress_config.app_password,
+          apiKey: payload.wordpress_config.app_password,
           authMethod,
           seoPlugin: (payload.wordpress_config.seo_plugin as any) || 'none',
         });
@@ -224,6 +225,10 @@ export class WebsiteService {
         const connectionTest = await wpClient.testConnection();
         const isConnected = connectionTest.ok;
         const encryptedPass = encryptCredential(payload.wordpress_config.app_password);
+
+        let methodDisplay = 'Application Password';
+        if (authMethod === 'agent_connector') methodDisplay = 'Agent Connector Plugin';
+        else if (authMethod === 'botcreds') methodDisplay = 'BotCreds';
 
         const { data: wpInt } = await supabase
           .from('integrations')
@@ -233,11 +238,11 @@ export class WebsiteService {
             display_name: 'WordPress',
             status: isConnected ? 'connected' : 'action_required',
             status_message: isConnected 
-              ? `Connected to ${connectionTest.siteName || domain} via ${authMethod === 'botcreds' ? 'BotCreds' : 'Application Password'} as @${payload.wordpress_config.username}`
+              ? `Connected to ${connectionTest.siteName || domain} via ${methodDisplay}`
               : `Auth check: ${connectionTest.message}`,
             config: {
               site_url: connectionTest.canonicalUrl || normalizedUrl,
-              username: payload.wordpress_config.username,
+              username: payload.wordpress_config.username || 'SEO Autopilot Agent',
               auth_method: authMethod,
               seo_plugin: payload.wordpress_config.seo_plugin || 'none',
               rank_math_detected: connectionTest.rankMathDetected || false,
@@ -253,7 +258,7 @@ export class WebsiteService {
         if (wpInt) {
           await supabase.from('integration_credentials').upsert({
             integration_id: wpInt.id,
-            credential_type: authMethod === 'botcreds' ? 'botcreds' : 'app_password',
+            credential_type: authMethod,
             encrypted_value: encryptedPass,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'integration_id,credential_type' });

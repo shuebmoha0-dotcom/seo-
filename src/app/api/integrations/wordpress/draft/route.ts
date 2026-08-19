@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       .from('integration_credentials')
       .select('encrypted_value, credential_type')
       .eq('integration_id', integration.id)
-      .in('credential_type', ['app_password', 'botcreds'])
+      .in('credential_type', ['agent_connector', 'app_password', 'botcreds'])
       .maybeSingle();
 
     if (credError || !creds?.encrypted_value) {
@@ -42,7 +42,8 @@ export async function POST(request: Request) {
       siteUrl: integration.config?.site_url,
       username: integration.config?.username,
       applicationPassword,
-      authMethod: integration.config?.auth_method || (creds.credential_type === 'botcreds' ? 'botcreds' : 'application_password'),
+      apiKey: applicationPassword,
+      authMethod: integration.config?.auth_method || creds.credential_type,
       seoPlugin: integration.config?.seo_plugin || 'none',
     });
 

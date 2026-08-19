@@ -44,6 +44,7 @@ export class WordPressConnector implements IConnector {
       siteUrl: config.site_url,
       username: config.app_username,
       applicationPassword: config.app_password,
+      apiKey: config.app_password,
       authMethod: config.auth_method || 'application_password',
       seoPlugin: config.seo_plugin,
     });

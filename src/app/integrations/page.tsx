@@ -5,7 +5,7 @@ import {
   Globe, Search, BarChart2, Layers, GitBranch, FileCode, CheckCircle2,
   AlertCircle, ShieldAlert, RefreshCw, Loader2, ArrowRight, Shield, Zap,
   DollarSign, CheckSquare, XCircle, Info, ExternalLink, Cpu, Key, HelpCircle,
-  Code2, Check, Settings2
+  Code2, Check, Settings2, Download
 } from "lucide-react";
 import { useState, useEffect } from "react";
 
@@ -115,13 +115,13 @@ export default function IntegrationsPage() {
     site_url: string;
     username: string;
     app_password: string;
-    auth_method: 'application_password' | 'botcreds';
+    auth_method: 'agent_connector' | 'application_password' | 'botcreds';
     seo_plugin: string;
   }>({
     site_url: "",
     username: "",
     app_password: "",
-    auth_method: "application_password",
+    auth_method: "agent_connector",
     seo_plugin: "none",
   });
   const [wpTesting, setWpTesting] = useState(false);
@@ -1056,48 +1056,90 @@ export default function IntegrationsPage() {
               {/* Authentication Method Selector */}
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Authentication Method</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => setWpForm(f => ({ ...f, auth_method: 'application_password' }))}
-                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all ${
-                      wpForm.auth_method === 'application_password'
-                        ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950 font-semibold shadow-xs'
+                    onClick={() => setWpForm(f => ({ ...f, auth_method: 'agent_connector' }))}
+                    className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                      wpForm.auth_method === 'agent_connector'
+                        ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-semibold shadow-xs ring-1 ring-indigo-200'
                         : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:bg-neutral-100'
                     }`}
                   >
-                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
-                      wpForm.auth_method === 'application_password' ? 'border-indigo-600' : 'border-neutral-400'
-                    }`}>
-                      {wpForm.auth_method === 'application_password' && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                        wpForm.auth_method === 'agent_connector' ? 'border-indigo-600' : 'border-neutral-400'
+                      }`}>
+                        {wpForm.auth_method === 'agent_connector' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                      </div>
+                      <span className="text-[11px] leading-tight">Agent Plugin</span>
                     </div>
-                    <div>
-                      <div className="text-xs leading-tight">Application Password</div>
-                      <div className="text-[10px] text-neutral-500 font-normal mt-0.5">Native WordPress</div>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-medium w-fit">Recommended</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setWpForm(f => ({ ...f, auth_method: 'application_password' }))}
+                    className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                      wpForm.auth_method === 'application_password'
+                        ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-semibold shadow-xs ring-1 ring-indigo-200'
+                        : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:bg-neutral-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                        wpForm.auth_method === 'application_password' ? 'border-indigo-600' : 'border-neutral-400'
+                      }`}>
+                        {wpForm.auth_method === 'application_password' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                      </div>
+                      <span className="text-[11px] leading-tight">App Password</span>
                     </div>
+                    <span className="text-[9px] text-neutral-400">Native Core</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setWpForm(f => ({ ...f, auth_method: 'botcreds' }))}
-                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2.5 transition-all ${
+                    className={`p-2 rounded-xl border text-left flex flex-col justify-between transition-all ${
                       wpForm.auth_method === 'botcreds'
-                        ? 'bg-indigo-50/80 border-indigo-300 text-indigo-950 font-semibold shadow-xs'
+                        ? 'bg-indigo-50/90 border-indigo-300 text-indigo-950 font-semibold shadow-xs ring-1 ring-indigo-200'
                         : 'bg-neutral-50 border-neutral-200 text-neutral-700 hover:bg-neutral-100'
                     }`}
                   >
-                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
-                      wpForm.auth_method === 'botcreds' ? 'border-indigo-600' : 'border-neutral-400'
-                    }`}>
-                      {wpForm.auth_method === 'botcreds' && <div className="w-2 h-2 rounded-full bg-indigo-600" />}
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                        wpForm.auth_method === 'botcreds' ? 'border-indigo-600' : 'border-neutral-400'
+                      }`}>
+                        {wpForm.auth_method === 'botcreds' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                      </div>
+                      <span className="text-[11px] leading-tight">BotCreds</span>
                     </div>
-                    <div>
-                      <div className="text-xs leading-tight">BotCreds</div>
-                      <div className="text-[10px] text-neutral-500 font-normal mt-0.5">Scoped Agent Access</div>
-                    </div>
+                    <span className="text-[9px] text-neutral-400">Scoped Agent</span>
                   </button>
                 </div>
               </div>
+
+              {/* Plugin Download Banner for Agent Connector */}
+              {wpForm.auth_method === 'agent_connector' && (
+                <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl flex items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
+                      <span>⚡</span> SEO Autopilot Agent Connector Plugin
+                    </div>
+                    <p className="text-[11px] text-indigo-800 leading-tight">
+                      Install on WordPress → Go to <strong>Settings &gt; SEO Autopilot</strong> → Click <strong>Generate Key</strong>.
+                    </p>
+                  </div>
+                  <a
+                    href="/api/integrations/wordpress/plugin"
+                    download="seo-autopilot-connector.zip"
+                    className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-[11px] transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download .zip
+                  </a>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">WordPress Site URL</label>
@@ -1105,36 +1147,52 @@ export default function IntegrationsPage() {
                   className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none focus:border-indigo-500" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
-                    {wpForm.auth_method === 'botcreds' ? 'BotCreds Agent / Username' : 'WordPress Username'}
-                  </label>
-                  <input type="text" value={wpForm.username} onChange={e => setWpForm(f => ({ ...f, username: e.target.value }))} required placeholder={wpForm.auth_method === 'botcreds' ? 'agent_seo' : 'editor_user'}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none focus:border-indigo-500" />
+              {wpForm.auth_method !== 'agent_connector' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
+                      {wpForm.auth_method === 'botcreds' ? 'BotCreds Agent / Username' : 'WordPress Username'}
+                    </label>
+                    <input type="text" value={wpForm.username} onChange={e => setWpForm(f => ({ ...f, username: e.target.value }))} required placeholder={wpForm.auth_method === 'botcreds' ? 'agent_seo' : 'editor_user'}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none focus:border-indigo-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">SEO Plugin (Optional)</label>
+                    <select value={wpForm.seo_plugin} onChange={e => setWpForm(f => ({ ...f, seo_plugin: e.target.value }))}
+                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-700 focus:outline-none focus:border-indigo-500">
+                      <option value="none">Auto-Detect / Native</option>
+                      <option value="yoast">Yoast SEO</option>
+                      <option value="rankmath">Rank Math</option>
+                      <option value="aioseo">All-in-One SEO</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">SEO Plugin (Optional)</label>
-                  <select value={wpForm.seo_plugin} onChange={e => setWpForm(f => ({ ...f, seo_plugin: e.target.value }))}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-700 focus:outline-none focus:border-indigo-500">
-                    <option value="none">Auto-Detect / Native</option>
-                    <option value="yoast">Yoast SEO</option>
-                    <option value="rankmath">Rank Math</option>
-                    <option value="aioseo">All-in-One SEO</option>
-                  </select>
-                </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
-                  {wpForm.auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password'}
+                  {wpForm.auth_method === 'agent_connector'
+                    ? 'SEO Autopilot API Secret Key'
+                    : (wpForm.auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password')}
                 </label>
-                <input type="password" value={wpForm.app_password} onChange={e => setWpForm(f => ({ ...f, app_password: e.target.value }))} required placeholder={wpForm.auth_method === 'botcreds' ? 'Generated in WP Admin → Settings → BotCreds' : 'xxxx xxxx xxxx xxxx'}
-                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 font-mono focus:outline-none focus:border-indigo-500" />
+                <input
+                  type="password"
+                  value={wpForm.app_password}
+                  onChange={e => setWpForm(f => ({ ...f, app_password: e.target.value }))}
+                  required
+                  placeholder={
+                    wpForm.auth_method === 'agent_connector'
+                      ? 'seo_live_xxxxxxxxxxxxxxxxxxxxxxxx'
+                      : (wpForm.auth_method === 'botcreds' ? 'Generated in WP Admin → Settings → BotCreds' : 'xxxx xxxx xxxx xxxx')
+                  }
+                  className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 font-mono focus:outline-none focus:border-indigo-500"
+                />
                 <p className="text-[10px] text-neutral-400 mt-1">
-                  {wpForm.auth_method === 'botcreds'
-                    ? 'Generated via the BotCreds Agent Access plugin (WordPress Admin → Settings → BotCreds or Tools → Agent Access).'
-                    : 'Generated in WordPress Admin → Users → Profile → Application Passwords.'}
+                  {wpForm.auth_method === 'agent_connector'
+                    ? 'Generated via the SEO Autopilot Connector plugin (WordPress Admin → Settings → SEO Autopilot).'
+                    : (wpForm.auth_method === 'botcreds'
+                        ? 'Generated via the BotCreds Agent Access plugin (WordPress Admin → Settings → BotCreds).'
+                        : 'Generated in WordPress Admin → Users → Profile → Application Passwords.')}
                 </p>
               </div>
 

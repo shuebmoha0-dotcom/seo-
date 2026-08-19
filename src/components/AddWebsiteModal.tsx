@@ -11,7 +11,7 @@ export function AddWebsiteModal() {
     url: "",
     name: "",
     connection_type: "wordpress" as "wordpress" | "github" | "custom_api" | "none",
-    wp_auth_method: "application_password" as "application_password" | "botcreds",
+    wp_auth_method: "agent_connector" as "agent_connector" | "application_password" | "botcreds",
     wp_username: "",
     wp_app_password: "",
     wp_seo_plugin: "none",
@@ -41,13 +41,17 @@ export function AddWebsiteModal() {
     };
 
     if (form.connection_type === "wordpress") {
-      if (!form.wp_username || !form.wp_app_password) {
-        setError(`WordPress Username and ${form.wp_auth_method === 'botcreds' ? 'BotCreds Key' : 'Application Password'} are required.`);
+      if (!form.wp_app_password || (form.wp_auth_method !== 'agent_connector' && !form.wp_username)) {
+        let fieldName = 'Application Password';
+        if (form.wp_auth_method === 'agent_connector') fieldName = 'SEO Autopilot API Key';
+        else if (form.wp_auth_method === 'botcreds') fieldName = 'BotCreds Key';
+
+        setError(`Please provide your ${fieldName}.`);
         setSubmitting(false);
         return;
       }
       payload.wordpress_config = {
-        username: form.wp_username,
+        username: form.wp_username || (form.wp_auth_method === 'agent_connector' ? 'SEO Autopilot Agent' : ''),
         app_password: form.wp_app_password,
         auth_method: form.wp_auth_method,
         seo_plugin: form.wp_seo_plugin,
@@ -186,13 +190,30 @@ export function AddWebsiteModal() {
               </div>
 
               {/* Auth Method Selector */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, wp_auth_method: 'agent_connector' }))}
+                  className={`p-2 rounded-lg border text-left flex items-center gap-1.5 transition-all ${
+                    form.wp_auth_method === 'agent_connector'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-semibold'
+                      : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                    form.wp_auth_method === 'agent_connector' ? 'border-indigo-600' : 'border-neutral-400'
+                  }`}>
+                    {form.wp_auth_method === 'agent_connector' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                  </div>
+                  <span className="text-[10px] font-medium leading-tight">Agent Plugin</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, wp_auth_method: 'application_password' }))}
-                  className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all ${
+                  className={`p-2 rounded-lg border text-left flex items-center gap-1.5 transition-all ${
                     form.wp_auth_method === 'application_password'
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-semibold'
                       : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                   }`}
                 >
@@ -201,15 +222,15 @@ export function AddWebsiteModal() {
                   }`}>
                     {form.wp_auth_method === 'application_password' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
                   </div>
-                  <span className="text-[11px]">App Password</span>
+                  <span className="text-[10px] leading-tight">App Pass</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, wp_auth_method: 'botcreds' }))}
-                  className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all ${
+                  className={`p-2 rounded-lg border text-left flex items-center gap-1.5 transition-all ${
                     form.wp_auth_method === 'botcreds'
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-950 font-semibold'
                       : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
                   }`}
                 >
@@ -218,46 +239,55 @@ export function AddWebsiteModal() {
                   }`}>
                     {form.wp_auth_method === 'botcreds' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
                   </div>
-                  <span className="text-[11px]">BotCreds</span>
+                  <span className="text-[10px] leading-tight">BotCreds</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[10px] text-neutral-500 mb-1">
-                    {form.wp_auth_method === 'botcreds' ? 'Agent / Username *' : 'Username *'}
-                  </label>
-                  <input
-                    type="text"
-                    value={form.wp_username}
-                    onChange={e => setForm(f => ({ ...f, wp_username: e.target.value }))}
-                    placeholder={form.wp_auth_method === 'botcreds' ? 'agent_seo' : 'editor_admin'}
-                    className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500"
-                  />
+              {form.wp_auth_method !== 'agent_connector' && (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] text-neutral-500 mb-1">
+                      {form.wp_auth_method === 'botcreds' ? 'Agent / Username *' : 'Username *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={form.wp_username}
+                      onChange={e => setForm(f => ({ ...f, wp_username: e.target.value }))}
+                      placeholder={form.wp_auth_method === 'botcreds' ? 'agent_seo' : 'editor_admin'}
+                      className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-neutral-500 mb-1">SEO Plugin</label>
+                    <select
+                      value={form.wp_seo_plugin}
+                      onChange={e => setForm(f => ({ ...f, wp_seo_plugin: e.target.value }))}
+                      className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="none">Auto-Detect</option>
+                      <option value="yoast">Yoast SEO</option>
+                      <option value="rankmath">Rank Math</option>
+                      <option value="aioseo">All in One SEO</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] text-neutral-500 mb-1">SEO Plugin</label>
-                  <select
-                    value={form.wp_seo_plugin}
-                    onChange={e => setForm(f => ({ ...f, wp_seo_plugin: e.target.value }))}
-                    className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="none">Auto-Detect</option>
-                    <option value="yoast">Yoast SEO</option>
-                    <option value="rankmath">Rank Math</option>
-                    <option value="aioseo">All in One SEO</option>
-                  </select>
-                </div>
-              </div>
+              )}
+
               <div>
                 <label className="block text-[10px] text-neutral-500 mb-1">
-                  {form.wp_auth_method === 'botcreds' ? 'BotCreds Agent Key *' : 'Application Password *'}
+                  {form.wp_auth_method === 'agent_connector'
+                    ? 'SEO Autopilot API Key *'
+                    : (form.wp_auth_method === 'botcreds' ? 'BotCreds Agent Key *' : 'Application Password *')}
                 </label>
                 <input
                   type="password"
                   value={form.wp_app_password}
                   onChange={e => setForm(f => ({ ...f, wp_app_password: e.target.value }))}
-                  placeholder={form.wp_auth_method === 'botcreds' ? 'Generated in WP Admin → Settings → BotCreds' : 'xxxx xxxx xxxx xxxx'}
+                  placeholder={
+                    form.wp_auth_method === 'agent_connector'
+                      ? 'seo_live_xxxxxxxxxxxxxxxxxxxxxxxx'
+                      : (form.wp_auth_method === 'botcreds' ? 'Generated in WP Admin → Settings → BotCreds' : 'xxxx xxxx xxxx xxxx')
+                  }
                   className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-neutral-900 focus:outline-none focus:border-indigo-500"
                 />
               </div>

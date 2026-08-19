@@ -5,15 +5,20 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const site_url = body.site_url || body.url || body.siteUrl;
-    const username = body.username;
-    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
-    const auth_method = body.auth_method === 'botcreds' ? 'botcreds' : 'application_password';
+    const auth_method = body.auth_method === 'agent_connector'
+      ? 'agent_connector'
+      : (body.auth_method === 'botcreds' ? 'botcreds' : 'application_password');
+    const username = body.username || (auth_method === 'agent_connector' ? 'SEO Autopilot Agent' : '');
+    const application_password = body.api_key || body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
     const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
 
-    if (!site_url || !username || !application_password) {
-      const fieldName = auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password';
+    if (!site_url || !application_password || (auth_method !== 'agent_connector' && !username)) {
+      let fieldName = 'Application Password';
+      if (auth_method === 'agent_connector') fieldName = 'SEO Autopilot API Key';
+      else if (auth_method === 'botcreds') fieldName = 'BotCreds Agent Key';
+
       return NextResponse.json(
-        { ok: false, error: `Site URL, WordPress username, and ${fieldName} are required.` },
+        { ok: false, error: `Site URL and ${fieldName} are required.` },
         { status: 400 }
       );
     }
@@ -22,6 +27,7 @@ export async function POST(request: Request) {
       siteUrl: site_url,
       username,
       applicationPassword: application_password,
+      apiKey: application_password,
       authMethod: auth_method,
       seoPlugin: seo_plugin || 'none',
     });

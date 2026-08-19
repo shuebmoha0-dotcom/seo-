@@ -25,14 +25,14 @@ export async function POST(request: Request) {
       .from('integration_credentials')
       .select('encrypted_value, credential_type')
       .eq('integration_id', integration.id)
-      .in('credential_type', ['app_password', 'botcreds'])
+      .in('credential_type', ['agent_connector', 'app_password', 'botcreds'])
       .maybeSingle();
 
     if (credError || !creds?.encrypted_value) {
       return NextResponse.json({ ok: false, error: 'No stored credentials found for this WordPress site.' }, { status: 400 });
     }
 
-    // 3. Decrypt password or botcreds key
+    // 3. Decrypt password or API key
     const applicationPassword = decryptCredential(creds.encrypted_value);
     if (!applicationPassword) {
       return NextResponse.json({ ok: false, error: 'Failed to decrypt credentials.' }, { status: 500 });
@@ -43,7 +43,8 @@ export async function POST(request: Request) {
       siteUrl: integration.config?.site_url,
       username: integration.config?.username,
       applicationPassword,
-      authMethod: integration.config?.auth_method || (creds.credential_type === 'botcreds' ? 'botcreds' : 'application_password'),
+      apiKey: applicationPassword,
+      authMethod: integration.config?.auth_method || creds.credential_type,
       seoPlugin: integration.config?.seo_plugin || 'none',
     });
 

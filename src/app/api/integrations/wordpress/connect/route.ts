@@ -23,16 +23,21 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const site_url = body.site_url || body.url || body.siteUrl;
-    const username = body.username;
-    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
-    const auth_method = body.auth_method === 'botcreds' ? 'botcreds' : 'application_password';
+    const auth_method = body.auth_method === 'agent_connector'
+      ? 'agent_connector'
+      : (body.auth_method === 'botcreds' ? 'botcreds' : 'application_password');
+    const username = body.username || (auth_method === 'agent_connector' ? 'SEO Autopilot Agent' : '');
+    const application_password = body.api_key || body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
     const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
     const { website_id, project_id } = body;
 
-    if (!site_url || !username || !application_password) {
-      const fieldName = auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password';
+    if (!site_url || !application_password || (auth_method !== 'agent_connector' && !username)) {
+      let fieldName = 'Application Password';
+      if (auth_method === 'agent_connector') fieldName = 'SEO Autopilot API Key';
+      else if (auth_method === 'botcreds') fieldName = 'BotCreds Agent Key';
+
       return NextResponse.json(
-        { success: false, error: `Site URL, WordPress username, and ${fieldName} are required.` },
+        { success: false, error: `Site URL and ${fieldName} are required.` },
         { status: 400 }
       );
     }
@@ -42,6 +47,7 @@ export async function POST(request: Request) {
       siteUrl: site_url,
       username,
       applicationPassword: application_password,
+      apiKey: application_password,
       authMethod: auth_method,
       seoPlugin: seo_plugin || 'none',
     });
@@ -58,10 +64,14 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // 2. Encrypt Application Password or BotCreds key
+    // 2. Encrypt API key or Password
     const encryptedPassword = encryptCredential(application_password);
 
     // 3. Upsert into integrations table
+    let methodDisplay = 'Application Password';
+    if (auth_method === 'agent_connector') methodDisplay = 'Agent Connector Plugin';
+    else if (auth_method === 'botcreds') methodDisplay = 'BotCreds';
+
     const integrationPayload: Record<string, any> = {
       provider: 'wordpress',
       display_name: 'WordPress',
@@ -75,7 +85,7 @@ export async function POST(request: Request) {
       },
       capabilities: testResult.verifiedCapabilities || WORDPRESS_CAPABILITIES,
       status: 'connected',
-      status_message: `Connected to ${testResult.siteName || site_url} via ${auth_method === 'botcreds' ? 'BotCreds' : 'Application Password'} as @${testResult.username || username}`,
+      status_message: `Connected to ${testResult.siteName || site_url} via ${methodDisplay}`,
       last_tested_at: new Date().toISOString(),
       last_success_at: new Date().toISOString(),
       last_synced_at: new Date().toISOString(),
@@ -109,7 +119,7 @@ export async function POST(request: Request) {
     if (integrationId) {
       await supabase.from('integration_credentials').upsert({
         integration_id: integrationId,
-        credential_type: auth_method === 'botcreds' ? 'botcreds' : 'app_password',
+        credential_type: auth_method,
         encrypted_value: encryptedPassword,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'integration_id,credential_type' });
