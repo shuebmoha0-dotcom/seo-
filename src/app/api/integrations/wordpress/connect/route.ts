@@ -24,13 +24,15 @@ export async function POST(request: Request) {
     const body = await request.json();
     const site_url = body.site_url || body.url || body.siteUrl;
     const username = body.username;
-    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword;
+    const application_password = body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
+    const auth_method = body.auth_method === 'botcreds' ? 'botcreds' : 'application_password';
     const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
     const { website_id, project_id } = body;
 
     if (!site_url || !username || !application_password) {
+      const fieldName = auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password';
       return NextResponse.json(
-        { success: false, error: 'Site URL, WordPress username, and Application Password are required.' },
+        { success: false, error: `Site URL, WordPress username, and ${fieldName} are required.` },
         { status: 400 }
       );
     }
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
       siteUrl: site_url,
       username,
       applicationPassword: application_password,
+      authMethod: auth_method,
       seoPlugin: seo_plugin || 'none',
     });
 
@@ -55,7 +58,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // 2. Encrypt Application Password
+    // 2. Encrypt Application Password or BotCreds key
     const encryptedPassword = encryptCredential(application_password);
 
     // 3. Upsert into integrations table
@@ -65,13 +68,14 @@ export async function POST(request: Request) {
       config: {
         site_url: testResult.canonicalUrl || site_url.replace(/\/$/, ''),
         username: testResult.username || username,
+        auth_method,
         site_name: testResult.siteName || 'WordPress Site',
         seo_plugin: testResult.detectedPlugin || seo_plugin || 'none',
         rank_math_detected: testResult.rankMathDetected || false,
       },
-      capabilities: WORDPRESS_CAPABILITIES,
+      capabilities: testResult.verifiedCapabilities || WORDPRESS_CAPABILITIES,
       status: 'connected',
-      status_message: `Connected to ${testResult.siteName || site_url} as @${testResult.username || username}`,
+      status_message: `Connected to ${testResult.siteName || site_url} via ${auth_method === 'botcreds' ? 'BotCreds' : 'Application Password'} as @${testResult.username || username}`,
       last_tested_at: new Date().toISOString(),
       last_success_at: new Date().toISOString(),
       last_synced_at: new Date().toISOString(),
@@ -105,7 +109,7 @@ export async function POST(request: Request) {
     if (integrationId) {
       await supabase.from('integration_credentials').upsert({
         integration_id: integrationId,
-        credential_type: 'app_password',
+        credential_type: auth_method === 'botcreds' ? 'botcreds' : 'app_password',
         encrypted_value: encryptedPassword,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'integration_id,credential_type' });

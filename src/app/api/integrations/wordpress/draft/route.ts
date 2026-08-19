@@ -26,10 +26,10 @@ export async function POST(request: Request) {
     // 2. Fetch and decrypt credentials
     const { data: creds, error: credError } = await supabase
       .from('integration_credentials')
-      .select('encrypted_value')
+      .select('encrypted_value, credential_type')
       .eq('integration_id', integration.id)
-      .eq('credential_type', 'app_password')
-      .single();
+      .in('credential_type', ['app_password', 'botcreds'])
+      .maybeSingle();
 
     if (credError || !creds?.encrypted_value) {
       return NextResponse.json({ error: 'Credentials for WordPress not found.' }, { status: 400 });
@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       siteUrl: integration.config?.site_url,
       username: integration.config?.username,
       applicationPassword,
+      authMethod: integration.config?.auth_method || (creds.credential_type === 'botcreds' ? 'botcreds' : 'application_password'),
       seoPlugin: integration.config?.seo_plugin || 'none',
     });
 

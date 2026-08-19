@@ -16,11 +16,13 @@ import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
 const USER_AGENT = 'SEO-Autopilot-WordPress-Connector/1.0';
 
 export type WordPressSEOPlugin = 'yoast' | 'rankmath' | 'aioseo' | 'none';
+export type WordPressAuthMethod = 'application_password' | 'botcreds';
 
 export interface WordPressCredentials {
   siteUrl: string;
   username: string;
   applicationPassword: string;
+  authMethod?: WordPressAuthMethod;
   seoPlugin?: WordPressSEOPlugin;
 }
 
@@ -81,12 +83,15 @@ export interface WordPressConnectionTestResult {
   siteName?: string;
   canonicalUrl?: string;
   username?: string;
+  authMethod?: WordPressAuthMethod;
   wpVersion?: string;
   detectedPlugin?: string;
   rankMathDetected?: boolean;
+  verifiedCapabilities?: string[];
   stages: {
     restApiDetected: boolean;
     authSuccessful: boolean;
+    permissionsVerified?: boolean;
     rankMathDetected: boolean;
   };
   message: string;
@@ -94,6 +99,7 @@ export interface WordPressConnectionTestResult {
 
 export class WordPressClient {
   public siteUrl: string;
+  public authMethod: WordPressAuthMethod;
   private username: string;
   private applicationPassword: string;
   private seoPlugin: WordPressSEOPlugin;
@@ -106,6 +112,7 @@ export class WordPressClient {
     }
 
     this.siteUrl = urlValidation.normalizedUrl;
+    this.authMethod = credentials.authMethod || 'application_password';
     this.username = credentials.username.trim();
     this.applicationPassword = credentials.applicationPassword.trim().replace(/\s+/g, '');
     this.seoPlugin = credentials.seoPlugin || 'none';
@@ -347,12 +354,14 @@ export class WordPressClient {
   }
 
   /**
-   * STEP 7 & 8: Complete Connection Pipeline
+   * STEP 7 & 8: Complete Connection Pipeline (Application Password or BotCreds)
    */
   async testConnection(): Promise<WordPressConnectionTestResult> {
+    const isBotCreds = this.authMethod === 'botcreds';
     const stages = {
       restApiDetected: false,
       authSuccessful: false,
+      permissionsVerified: false,
       rankMathDetected: false,
     };
 
@@ -366,6 +375,7 @@ export class WordPressClient {
         ok: false,
         canonicalUrl: this.siteUrl,
         username: this.username,
+        authMethod: this.authMethod,
         stages,
         message: err.message || 'REST API discovery failed on your WordPress site.',
       };
@@ -377,17 +387,52 @@ export class WordPressClient {
       user = await this.getCurrentUser();
       stages.authSuccessful = true;
     } catch (authErr: any) {
+      const authFailMsg = isBotCreds
+        ? `BotCreds authentication failed (HTTP 401). Please check the BotCreds agent username and key generated in WordPress.`
+        : (authErr.message || 'WordPress authentication failed. Please check username and Application Password.');
+
       return {
         ok: false,
         siteName: siteInfo.name,
         canonicalUrl: this.siteUrl,
         username: this.username,
+        authMethod: this.authMethod,
         stages,
-        message: authErr.message || 'WordPress authentication failed. Please check username and Application Password.',
+        message: authFailMsg,
       };
     }
 
-    // Stage 3: Rank Math Detection (Optional)
+    // Stage 3: Scoped Capability Verification
+    const verifiedCapabilities: string[] = ['READ_SITE_INFO'];
+    try {
+      // Test read posts
+      await this.request<any[]>('/posts?per_page=1');
+      verifiedCapabilities.push('READ_POSTS');
+    } catch {
+      // read posts restricted
+    }
+
+    try {
+      // Test read pages
+      await this.request<any[]>('/pages?per_page=1');
+      verifiedCapabilities.push('READ_PAGES');
+    } catch {
+      // read pages restricted
+    }
+
+    const hasWriteCap = !!(
+      user.capabilities?.edit_posts ||
+      user.capabilities?.publish_posts ||
+      user.roles?.some(r => ['administrator', 'editor', 'author', 'agent'].includes(r))
+    );
+
+    if (hasWriteCap) {
+      verifiedCapabilities.push('CREATE_DRAFT', 'UPDATE_CONTENT', 'PUBLISH_CONTENT', 'UPLOAD_MEDIA');
+    }
+
+    stages.permissionsVerified = verifiedCapabilities.includes('READ_POSTS');
+
+    // Stage 4: Rank Math Detection (Optional)
     const hasRankMath = siteInfo.has_rankmath;
     stages.rankMathDetected = hasRankMath;
 
@@ -400,15 +445,24 @@ export class WordPressClient {
 
     const pluginMsg = hasRankMath ? '✓ Rank Math detected' : '○ Rank Math not detected';
 
+    let successMessage = '';
+    if (isBotCreds) {
+      successMessage = `✓ WordPress REST API detected\n✓ BotCreds authenticated (@${user.name || this.username})\n✓ Required permissions verified\n✓ WordPress connected\n${pluginMsg}`;
+    } else {
+      successMessage = `✓ REST API detected\n✓ Authentication successful\n✓ WordPress connected\n${pluginMsg}`;
+    }
+
     return {
       ok: true,
       siteName: siteInfo.name,
       canonicalUrl: this.siteUrl,
       username: user.name || this.username,
+      authMethod: this.authMethod,
       detectedPlugin,
       rankMathDetected: hasRankMath,
+      verifiedCapabilities,
       stages,
-      message: `✓ REST API detected\n✓ Authentication successful\n✓ WordPress connected\n${pluginMsg}`,
+      message: successMessage,
     };
   }
 

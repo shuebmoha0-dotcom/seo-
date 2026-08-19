@@ -11,6 +11,7 @@ export function AddWebsiteModal() {
     url: "",
     name: "",
     connection_type: "wordpress" as "wordpress" | "github" | "custom_api" | "none",
+    wp_auth_method: "application_password" as "application_password" | "botcreds",
     wp_username: "",
     wp_app_password: "",
     wp_seo_plugin: "none",
@@ -41,13 +42,14 @@ export function AddWebsiteModal() {
 
     if (form.connection_type === "wordpress") {
       if (!form.wp_username || !form.wp_app_password) {
-        setError("WordPress Username and Application Password are required.");
+        setError(`WordPress Username and ${form.wp_auth_method === 'botcreds' ? 'BotCreds Key' : 'Application Password'} are required.`);
         setSubmitting(false);
         return;
       }
       payload.wordpress_config = {
         username: form.wp_username,
         app_password: form.wp_app_password,
+        auth_method: form.wp_auth_method,
         seo_plugin: form.wp_seo_plugin,
       };
     } else if (form.connection_type === "github") {
@@ -179,15 +181,57 @@ export function AddWebsiteModal() {
           {/* WordPress Configuration Fields */}
           {form.connection_type === "wordpress" && (
             <div className="p-3.5 bg-neutral-50 border border-neutral-200 rounded-xl space-y-3">
-              <span className="text-[10px] font-bold uppercase text-neutral-500 block">WordPress REST API Credentials</span>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase text-neutral-500 block">WordPress Authentication</span>
+              </div>
+
+              {/* Auth Method Selector */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, wp_auth_method: 'application_password' }))}
+                  className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all ${
+                    form.wp_auth_method === 'application_password'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold'
+                      : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                    form.wp_auth_method === 'application_password' ? 'border-indigo-600' : 'border-neutral-400'
+                  }`}>
+                    {form.wp_auth_method === 'application_password' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                  </div>
+                  <span className="text-[11px]">App Password</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, wp_auth_method: 'botcreds' }))}
+                  className={`p-2 rounded-lg border text-left flex items-center gap-2 transition-all ${
+                    form.wp_auth_method === 'botcreds'
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold'
+                      : 'bg-white border-neutral-200 text-neutral-600 hover:bg-neutral-50'
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                    form.wp_auth_method === 'botcreds' ? 'border-indigo-600' : 'border-neutral-400'
+                  }`}>
+                    {form.wp_auth_method === 'botcreds' && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />}
+                  </div>
+                  <span className="text-[11px]">BotCreds</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] text-neutral-500 mb-1">Username *</label>
+                  <label className="block text-[10px] text-neutral-500 mb-1">
+                    {form.wp_auth_method === 'botcreds' ? 'Agent / Username *' : 'Username *'}
+                  </label>
                   <input
                     type="text"
                     value={form.wp_username}
                     onChange={e => setForm(f => ({ ...f, wp_username: e.target.value }))}
-                    placeholder="editor_admin"
+                    placeholder={form.wp_auth_method === 'botcreds' ? 'agent_seo' : 'editor_admin'}
                     className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -206,12 +250,14 @@ export function AddWebsiteModal() {
                 </div>
               </div>
               <div>
-                <label className="block text-[10px] text-neutral-500 mb-1">Application Password *</label>
+                <label className="block text-[10px] text-neutral-500 mb-1">
+                  {form.wp_auth_method === 'botcreds' ? 'BotCreds Agent Key *' : 'Application Password *'}
+                </label>
                 <input
                   type="password"
                   value={form.wp_app_password}
                   onChange={e => setForm(f => ({ ...f, wp_app_password: e.target.value }))}
-                  placeholder="xxxx xxxx xxxx xxxx"
+                  placeholder={form.wp_auth_method === 'botcreds' ? 'Generated in WP Admin → Settings → BotCreds' : 'xxxx xxxx xxxx xxxx'}
                   className="w-full bg-white border border-neutral-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-neutral-900 focus:outline-none focus:border-indigo-500"
                 />
               </div>

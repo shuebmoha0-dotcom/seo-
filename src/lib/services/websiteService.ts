@@ -42,6 +42,7 @@ export interface AddWebsitePayload {
   wordpress_config?: {
     username: string;
     app_password: string;
+    auth_method?: 'application_password' | 'botcreds';
     seo_plugin?: string;
   };
   custom_api_config?: {
@@ -211,10 +212,12 @@ export class WebsiteService {
     // E. Setup Selected Execution Integration
     if (payload.connection_type === 'wordpress' && payload.wordpress_config) {
       try {
+        const authMethod = payload.wordpress_config.auth_method === 'botcreds' ? 'botcreds' : 'application_password';
         const wpClient = new WordPressClient({
           siteUrl: normalizedUrl,
           username: payload.wordpress_config.username,
           applicationPassword: payload.wordpress_config.app_password,
+          authMethod,
           seoPlugin: (payload.wordpress_config.seo_plugin as any) || 'none',
         });
 
@@ -230,14 +233,16 @@ export class WebsiteService {
             display_name: 'WordPress',
             status: isConnected ? 'connected' : 'action_required',
             status_message: isConnected 
-              ? `Connected to ${connectionTest.siteName || domain} as @${payload.wordpress_config.username}`
+              ? `Connected to ${connectionTest.siteName || domain} via ${authMethod === 'botcreds' ? 'BotCreds' : 'Application Password'} as @${payload.wordpress_config.username}`
               : `Auth check: ${connectionTest.message}`,
             config: {
-              site_url: normalizedUrl,
+              site_url: connectionTest.canonicalUrl || normalizedUrl,
               username: payload.wordpress_config.username,
+              auth_method: authMethod,
               seo_plugin: payload.wordpress_config.seo_plugin || 'none',
+              rank_math_detected: connectionTest.rankMathDetected || false,
             },
-            capabilities: ['CREATE_DRAFT', 'UPDATE_CONTENT', 'UPDATE_METADATA', 'PUBLISH_CONTENT'],
+            capabilities: connectionTest.verifiedCapabilities || ['CREATE_DRAFT', 'UPDATE_CONTENT', 'UPDATE_METADATA', 'PUBLISH_CONTENT'],
             last_tested_at: new Date().toISOString(),
             last_success_at: isConnected ? new Date().toISOString() : null,
             updated_at: new Date().toISOString(),
@@ -248,7 +253,7 @@ export class WebsiteService {
         if (wpInt) {
           await supabase.from('integration_credentials').upsert({
             integration_id: wpInt.id,
-            credential_type: 'app_password',
+            credential_type: authMethod === 'botcreds' ? 'botcreds' : 'app_password',
             encrypted_value: encryptedPass,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'integration_id,credential_type' });

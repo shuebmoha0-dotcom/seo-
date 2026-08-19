@@ -13,12 +13,13 @@ import type {
   GenericAction, ActionResult
 } from './types';
 import { ConnectorError, ConnectorErrors, ACTION_CAPABILITY_MAP } from './types';
-import { WordPressClient, WordPressSEOPlugin } from './wordpressClient';
+import { WordPressClient, WordPressSEOPlugin, WordPressAuthMethod } from './wordpressClient';
 
 export interface WordPressConfig {
   site_url: string;
   app_username: string;       // WordPress username
-  app_password: string;       // WordPress Application Password
+  app_password: string;       // WordPress Application Password or BotCreds key
+  auth_method?: WordPressAuthMethod;
   seo_plugin: WordPressSEOPlugin;
   default_author_id?: number;
   media_upload_path?: string;
@@ -43,6 +44,7 @@ export class WordPressConnector implements IConnector {
       siteUrl: config.site_url,
       username: config.app_username,
       applicationPassword: config.app_password,
+      authMethod: config.auth_method || 'application_password',
       seoPlugin: config.seo_plugin,
     });
   }
