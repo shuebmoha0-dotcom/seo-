@@ -145,7 +145,12 @@ export class WordPressClient {
     options: RequestInit = {},
     retries = 2
   ): Promise<{ data: T; headers: Headers; status: number; finalUrl: string }> {
-    const url = endpoint.startsWith('http') ? endpoint : `${this.apiBaseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    let url = endpoint.startsWith('http') ? endpoint : `${this.apiBaseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
+    if (this.authMethod === 'agent_connector' && this.applicationPassword) {
+      const sep = url.includes('?') ? '&' : '?';
+      url = `${url}${sep}seo_api_key=${encodeURIComponent(this.applicationPassword)}`;
+    }
 
     const headers: Record<string, string> = {
       ...this.authHeaders,
@@ -181,22 +186,7 @@ export class WordPressClient {
       }
 
       // Safe Diagnostic Logging (Never log credentials)
-      console.log(`[WordPressClient] Request: ${options.method || 'GET'} ${url} -> HTTP ${response.status} (Final: ${response.url})`);
-
-      // Handle 401 Unauthorized
-      if (response.status === 401) {
-        throw new Error('WordPress authentication failed (HTTP 401). Invalid username or Application Password. Please verify your WordPress username (WordPress Admin > Users > Profile) and generate a fresh Application Password.');
-      }
-
-      // Handle 403 Forbidden
-      if (response.status === 403) {
-        throw new Error('WordPress rejected the authenticated request (HTTP 403). The user account lacks permissions or a security plugin/WAF is blocking REST API authorization headers.');
-      }
-
-      // Handle 404 Not Found
-      if (response.status === 404) {
-        throw new Error(`WordPress REST endpoint was not found (HTTP 404): ${endpoint}`);
-      }
+      console.log(`[WordPressClient] Request: ${options.method || 'GET'} ${url.replace(/seo_api_key=[^&]+/i, 'seo_api_key=***')} -> HTTP ${response.status} (Final: ${response.url})`);
 
       // Handle 429 Rate Limiting with exponential backoff
       if (response.status === 429 && retries > 0) {
@@ -212,14 +202,33 @@ export class WordPressClient {
       }
 
       if (!response.ok) {
-        let errMessage = `WordPress server returned an error (HTTP ${response.status}): ${response.statusText}`;
+        let serverMessage = '';
         try {
           const errorJson = await response.json();
-          if (errorJson?.message) errMessage = errorJson.message;
+          if (errorJson?.message) serverMessage = errorJson.message;
         } catch {
           // ignore parsing error
         }
-        throw new Error(errMessage);
+
+        if (response.status === 401) {
+          if (this.authMethod === 'agent_connector') {
+            throw new Error(serverMessage || 'Invalid or revoked SEO Autopilot API Key (HTTP 401). Please verify the key generated in WordPress Settings > SEO Autopilot.');
+          }
+          if (this.authMethod === 'botcreds') {
+            throw new Error(serverMessage || 'BotCreds authentication failed (HTTP 401). Please verify the BotCreds agent username and key.');
+          }
+          throw new Error(serverMessage || 'WordPress authentication failed (HTTP 401). Invalid username or Application Password.');
+        }
+
+        if (response.status === 403) {
+          throw new Error(serverMessage || 'WordPress rejected the authenticated request (HTTP 403). The credential lacks required permissions or a security plugin/WAF is blocking REST API authorization headers.');
+        }
+
+        if (response.status === 404) {
+          throw new Error(serverMessage || `WordPress REST endpoint was not found (HTTP 404): ${endpoint}`);
+        }
+
+        throw new Error(serverMessage || `WordPress server returned an error (HTTP ${response.status}): ${response.statusText}`);
       }
 
       const data = (await response.json()) as T;

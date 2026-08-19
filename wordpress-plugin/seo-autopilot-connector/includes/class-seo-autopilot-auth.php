@@ -201,17 +201,36 @@ class SEO_Autopilot_Auth {
     }
 
     /**
-     * Extract key from Request Headers
+     * Extract key from Request Headers or Query Parameters (Fail-safe across all Apache/Nginx/Hostinger setups)
      */
     private static function extract_key_from_request(WP_REST_Request $request) {
+        // 1. Check custom header
         $custom_header = $request->get_header('x-seo-autopilot-key');
         if (!empty($custom_header)) {
             return trim($custom_header);
         }
 
+        // 2. Check $_SERVER for stripped custom header in FastCGI
+        if (!empty($_SERVER['HTTP_X_SEO_AUTOPILOT_KEY'])) {
+            return trim($_SERVER['HTTP_X_SEO_AUTOPILOT_KEY']);
+        }
+
+        // 3. Check standard Authorization Bearer header
         $auth_header = $request->get_header('authorization');
+        if (empty($auth_header)) {
+            $auth_header = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+        }
         if (!empty($auth_header) && preg_match('/Bearer\s+(\S+)/i', $auth_header, $matches)) {
             return trim($matches[1]);
+        }
+
+        // 4. Check query / body parameter fallback
+        $query_key = $request->get_param('seo_api_key');
+        if (empty($query_key)) {
+            $query_key = $_GET['seo_api_key'] ?? $_POST['seo_api_key'] ?? '';
+        }
+        if (!empty($query_key)) {
+            return trim($query_key);
         }
 
         return null;
