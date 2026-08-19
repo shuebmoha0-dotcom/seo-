@@ -410,6 +410,21 @@ export class WordPressClient {
           redirect: 'follow',
           signal: AbortSignal.timeout(12000),
         });
+
+        if (statusRes.status === 403) {
+          const browserRes = await fetch(statusUrl, {
+            headers: {
+              'Accept': 'application/json, text/plain, */*',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept-Language': 'en-US,en;q=0.9',
+            },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(12000),
+          });
+          if (browserRes.ok || browserRes.status !== 403) {
+            statusRes = browserRes;
+          }
+        }
       } catch (err: any) {
         return {
           ok: false,
