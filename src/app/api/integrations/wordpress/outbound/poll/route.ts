@@ -2,6 +2,19 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyOutboundRequest } from '@/lib/connectors/wordpressOutbound';
 
+export const dynamic = 'force-dynamic';
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': '*',
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const bodyText = await request.text();

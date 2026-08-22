@@ -3,7 +3,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes that are always public (no auth required)
 const PUBLIC_ROUTES = ['/', '/login', '/pricing', '/forgot-password', '/reset-password'];
-const PUBLIC_PREFIXES = ['/auth/', '/api/auth/'];
+const PUBLIC_PREFIXES = [
+  '/auth/',
+  '/api/auth/',
+  '/api/integrations/wordpress/outbound/',
+  '/api/integrations/wordpress/plugin',
+  '/api/webhooks/',
+];
 
 function isPublicRoute(pathname: string): boolean {
   if (PUBLIC_ROUTES.includes(pathname)) return true;
