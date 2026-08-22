@@ -15,8 +15,45 @@ export async function GET(request: Request) {
 
     if (website_id) query = query.eq('website_id', website_id);
 
-    const { data, error } = await query;
+    let { data, error } = await query;
     if (error) throw error;
+
+    // Check if WordPress outbound site is active and ensure it reflects in integrations
+    const { data: outboundSite } = await supabase
+      .from('wordpress_outbound_sites')
+      .select('*')
+      .eq('status', 'active')
+      .order('last_ping_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (outboundSite) {
+      const wpItem = (data || []).find((i: any) => i.provider === 'wordpress');
+      if (!wpItem) {
+        data = [
+          ...(data || []),
+          {
+            id: outboundSite.id,
+            provider: 'wordpress',
+            display_name: 'WordPress',
+            status: 'connected',
+            status_message: `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`,
+            config: {
+              site_url: outboundSite.site_url,
+              site_id: outboundSite.id,
+              connection_mode: 'outbound',
+              auth_method: 'agent_connector',
+              wp_version: outboundSite.wp_version,
+              plugin_version: outboundSite.plugin_version,
+            },
+            capabilities: ['READ_CONTENT', 'CREATE_DRAFT', 'UPDATE_CONTENT', 'PUBLISH_CONTENT', 'UPLOAD_MEDIA', 'UPDATE_METADATA', 'ADD_INTERNAL_LINK'],
+            last_tested_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+            last_synced_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+            last_success_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+          }
+        ];
+      }
+    }
 
     return NextResponse.json({ integrations: data || [] });
   } catch (error: any) {
