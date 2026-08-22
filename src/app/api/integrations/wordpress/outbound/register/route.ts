@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const secretHash = hashSecret(secret_key);
     const supabase = await createClient();
 
-    // 1. Resolve website_id if not explicitly provided
+    // 1. Resolve website_id or auto-create website for seamless onboarding
     let targetWebsiteId = website_id;
     if (!targetWebsiteId) {
       const hostname = new URL(normalizedUrl).hostname;
@@ -53,6 +53,21 @@ export async function POST(request: Request) {
 
       if (web?.id) {
         targetWebsiteId = web.id;
+      } else {
+        const { data: newWeb } = await supabase
+          .from('websites')
+          .insert({
+            domain: hostname,
+            name: site_name || hostname,
+            platform: 'wordpress',
+            status: 'active',
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (newWeb?.id) {
+          targetWebsiteId = newWeb.id;
+        }
       }
     }
 
