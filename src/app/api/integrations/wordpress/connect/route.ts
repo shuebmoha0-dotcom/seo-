@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { encryptCredential } from '@/lib/utils/encryption';
+import { hashSecret } from '@/lib/connectors/wordpressOutbound';
 
 const WORDPRESS_CAPABILITIES = [
   'READ_CONTENT',
@@ -123,6 +124,27 @@ export async function POST(request: Request) {
         encrypted_value: encryptedPassword,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'integration_id,credential_type' });
+
+      if (auth_method === 'agent_connector') {
+        await supabase.from('integration_credentials').upsert({
+          integration_id: integrationId,
+          credential_type: 'outbound_hmac_secret',
+          encrypted_value: encryptedPassword,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'integration_id,credential_type' });
+
+        // Ensure outbound site registry entry
+        const normUrl = (testResult.canonicalUrl || site_url).replace(/\/+$/, '').toLowerCase();
+        await supabase.from('wordpress_outbound_sites').upsert({
+          website_id: website_id || null,
+          site_url: normUrl,
+          site_name: testResult.siteName || 'WordPress Site',
+          hmac_secret_hash: hashSecret(application_password),
+          status: 'active',
+          last_ping_at: new Date().toISOString(),
+          last_sync_at: new Date().toISOString(),
+        }, { onConflict: 'site_url' });
+      }
     }
 
     // 5. Update website status if website_id provided

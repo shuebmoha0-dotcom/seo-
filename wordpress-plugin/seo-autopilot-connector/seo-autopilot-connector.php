@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       SEO Autopilot Agent Connector
  * Plugin URI:        https://seautopilot.io
- * Description:       Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via scoped, revocable API credentials without sharing user passwords.
- * Version:           1.0.1
+ * Description:       Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via outbound reverse-connection architecture without sharing passwords or requiring inbound access.
+ * Version:           1.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            SEO Autopilot Team
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-define('SEO_AUTOPILOT_VERSION', '1.0.1');
+define('SEO_AUTOPILOT_VERSION', '1.1.0');
 define('SEO_AUTOPILOT_API_VERSION', 'v1');
 define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -27,6 +27,8 @@ define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 // Require Core Subsystems
 require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-auth.php';
 require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-activity.php';
+require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-worker.php';
+require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-outbound.php';
 require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-rest.php';
 require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-admin.php';
 
@@ -58,6 +60,8 @@ final class SEO_Autopilot_Connector {
     public function init_subsystems() {
         SEO_Autopilot_Auth::instance();
         SEO_Autopilot_Activity::instance();
+        SEO_Autopilot_Outbound::instance();
+        SEO_Autopilot_Outbound::init_subsystem();
         SEO_Autopilot_REST::instance();
 
         if (is_admin()) {
@@ -68,10 +72,15 @@ final class SEO_Autopilot_Connector {
     public function activate() {
         SEO_Autopilot_Auth::init_db();
         SEO_Autopilot_Activity::init_db();
+        SEO_Autopilot_Outbound::init_subsystem();
+        if (SEO_Autopilot_Outbound::is_paired() && !wp_next_scheduled(SEO_Autopilot_Outbound::CRON_HOOK)) {
+            wp_schedule_event(time(), 'every_minute', SEO_Autopilot_Outbound::CRON_HOOK);
+        }
         flush_rewrite_rules();
     }
 
     public function deactivate() {
+        wp_clear_scheduled_hook(SEO_Autopilot_Outbound::CRON_HOOK);
         flush_rewrite_rules();
     }
 }

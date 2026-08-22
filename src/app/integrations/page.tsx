@@ -1121,23 +1121,28 @@ export default function IntegrationsPage() {
 
               {/* Plugin Download Banner for Agent Connector */}
               {wpForm.auth_method === 'agent_connector' && (
-                <div className="p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl flex items-center justify-between gap-3">
-                  <div className="space-y-0.5">
-                    <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
-                      <span>⚡</span> SEO Autopilot Agent Connector Plugin
+                <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
+                        <span>⚡</span> SEO Autopilot Outbound Connector Plugin (v1.1.0)
+                      </div>
+                      <p className="text-[11px] text-indigo-800 leading-tight">
+                        <strong>Outbound Reverse Architecture</strong>: WordPress initiates requests to our SaaS queue. Eliminates all 403 WAF/firewall blocks.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-indigo-800 leading-tight">
-                      Install on WordPress → Go to <strong>Settings &gt; SEO Autopilot</strong> → Click <strong>Generate Key</strong>.
-                    </p>
+                    <a
+                      href="/api/integrations/wordpress/plugin"
+                      download="seo-autopilot-connector.zip"
+                      className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-[11px] transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download .zip
+                    </a>
                   </div>
-                  <a
-                    href="/api/integrations/wordpress/plugin"
-                    download="seo-autopilot-connector.zip"
-                    className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-[11px] transition-colors shadow-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download .zip
-                  </a>
+                  <div className="text-[10px] text-indigo-700 bg-white/70 p-2 rounded-lg border border-indigo-100">
+                    <strong>Quick Setup:</strong> Install in WordPress &rarr; Go to <strong>Settings &gt; SEO Autopilot</strong> &rarr; Click <strong>Connect Outbound to SaaS</strong> (or paste the key below).
+                  </div>
                 </div>
               )}
 
