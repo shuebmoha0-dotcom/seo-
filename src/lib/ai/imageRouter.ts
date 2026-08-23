@@ -82,9 +82,49 @@ export const GeminiImageProvider: ImageProvider = {
     }
 
     const model = AI_CONFIG.GEMINI_IMAGE_MODEL;
+
+    // Support both generateContent (for Gemini Flash/Pro Image models) and predict (for Imagen models)
+    if (model.includes('gemini')) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
+          generationConfig: {
+            responseModalities: ['IMAGE'],
+          },
+        }),
+        signal: AbortSignal.timeout(AI_CONFIG.REQUEST_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Google AI Studio returned HTTP ${response.status}: ${errText}`);
+      }
+
+      const data = await response.json();
+      const part = data.candidates?.[0]?.content?.parts?.[0];
+
+      if (!part?.inlineData?.data) {
+        throw new Error('Gemini image generation returned empty inlineData.');
+      }
+
+      const mimeType = part.inlineData.mimeType || 'image/png';
+      const base64Data = `data:${mimeType};base64,${part.inlineData.data}`;
+
+      return {
+        url: base64Data,
+        base64: part.inlineData.data,
+      };
+    }
+
+    // Imagen format
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`;
 
-    // Map dimensions to aspect ratio
     let aspectRatio = '1:1';
     if (dimensions.includes('1792') || dimensions.includes('1200x630') || dimensions.includes('16:9')) {
       aspectRatio = '16:9';

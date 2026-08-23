@@ -17,7 +17,7 @@ export const AI_CONFIG = {
 
   // ── Image Models ────────────────────────────────────────────────────────────
   // Gemini Image Generation via Google AI Studio (Primary Image Provider)
-  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'imagen-3.0-generate-002',
+  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
 
   // Leonardo AI (Fallback Image Provider)
   LEONARDO_IMAGE_MODEL: process.env.LEONARDO_IMAGE_MODEL || 'lucid-origin',
