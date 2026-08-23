@@ -50,7 +50,12 @@ export async function GET(request: Request) {
             last_tested_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
             last_synced_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
             last_success_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
-          }
+            error_code: null,
+            error_detail: null,
+            connected_at: outboundSite.created_at || new Date().toISOString(),
+            has_access_token: true,
+            scopes: ['site:read', 'content:read', 'content:write', 'media:read', 'media:write', 'seo:read'],
+          } as any
         ];
       }
     }

@@ -34,7 +34,13 @@ const ROUTER_CONFIG: Record<AgentName, ModelConfig> = {
 };
 
 function getModel(provider: string, modelName: string): LanguageModel {
-  if (provider === 'anthropic') return anthropic(modelName) as LanguageModel;
+  if (provider === 'anthropic' && process.env.ANTHROPIC_API_KEY) {
+    return anthropic(modelName) as LanguageModel;
+  }
+  if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+    // Seamless fallback to GPT-4o if Anthropic key is not configured
+    return openai('gpt-4o') as LanguageModel;
+  }
   return openai(modelName) as LanguageModel;
 }
 
