@@ -1,52 +1,14 @@
-import { openai } from '@ai-sdk/openai';
-import { generateImage as aiGenerateImage } from 'ai';
+import { ImageRouter, ImageGenerationRequest, ImageGenerationResult } from '../ai/imageRouter';
 
-export interface ImageGenerationRequest {
-  topic: string;
-  purpose: string;
-  style: string;
-  dimensions?: '1024x1024' | '1024x1792' | '1792x1024';
-  brand_instructions?: string;
-}
-
-export interface ImageGenerationResult {
-  url: string;
-  metadata: {
-    prompt_used: string;
-    style: string;
-    timestamp: string;
-  };
-}
+export type { ImageGenerationRequest, ImageGenerationResult };
 
 /**
- * Platform-owned Image Generation Tool.
- * Wraps DALL-E 3 (or the configured image model) on the server side.
+ * Platform Image Generation Entrypoint
+ * Routes to Gemini via Google AI Studio as Primary Image Generator,
+ * and fails over to Leonardo AI if Gemini is unavailable.
  */
-export async function generate_image(request: ImageGenerationRequest): Promise<ImageGenerationResult> {
-  // Construct the prompt enforcing the platform rules
-  const prompt = `Create an image for the topic: "${request.topic}". 
-Purpose: ${request.purpose}. 
-Style: ${request.style}. 
-${request.brand_instructions ? `Brand instructions to follow strictly: ${request.brand_instructions}` : ''}
-The image should be high-quality, professional, and suitable for a SaaS website or blog. No text in the image unless strictly necessary.`;
-
-  try {
-    const { image } = await aiGenerateImage({
-      model: openai.image('dall-e-3'),
-      prompt,
-      size: request.dimensions || '1024x1024',
-    });
-
-    return {
-      url: image.base64 ? `data:image/png;base64,${image.base64}` : (image as any).url || '', // Handle type definition mismatch
-      metadata: {
-        prompt_used: prompt,
-        style: request.style,
-        timestamp: new Date().toISOString()
-      }
-    };
-  } catch (error) {
-    console.error('[Image Tool] Failed to generate image:', error);
-    throw new Error('Image generation failed.');
-  }
+export async function generate_image(request: ImageGenerationRequest, context?: any): Promise<ImageGenerationResult> {
+  return ImageRouter.generate(request, context);
 }
+
+export { ImageRouter };
