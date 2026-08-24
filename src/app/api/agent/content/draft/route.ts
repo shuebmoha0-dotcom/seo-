@@ -132,7 +132,7 @@ export async function POST(request: Request) {
       custom_rules: rules?.custom_rules || '',
     };
 
-    // Auto-load Project Memory & Custom Instructions from Supabase
+    // Auto-load Project Memory & Custom Instructions from Supabase (Strict Zero-Duplication)
     let projectInstructions = body.project_instructions || '';
     let projectMemory = body.project_memory || '';
 
@@ -146,20 +146,53 @@ export async function POST(request: Request) {
           .order('is_important', { ascending: false });
 
         if (memoryData && memoryData.length > 0) {
-          const memoryBlocks = memoryData.map((m: any) => `[${m.category.toUpperCase()}] ${m.content}`).join('\n\n');
-          projectMemory = projectMemory ? `${projectMemory}\n\n${memoryBlocks}` : memoryBlocks;
+          // 1. Separate custom instructions and knowledge bank from standard facts
+          const customInstrRow = memoryData.find((m: any) => m.source === 'project_custom_instructions');
+          const knowledgeBankRow = memoryData.find((m: any) => m.source === 'project_knowledge_bank');
+          const standardFacts = memoryData.filter(
+            (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+          );
+
+          if (!projectInstructions && customInstrRow?.content) {
+            projectInstructions = customInstrRow.content;
+          }
+
+          if (!projectMemory && knowledgeBankRow?.content) {
+            projectMemory = knowledgeBankRow.content;
+          }
+
+          // 2. Deduplicate standard facts by content
+          if (standardFacts.length > 0) {
+            const uniqueFacts = new Set<string>();
+            const factBlocks: string[] = [];
+
+            for (const f of standardFacts) {
+              const text = f.content?.trim();
+              if (text && !uniqueFacts.has(text)) {
+                uniqueFacts.add(text);
+                factBlocks.push(`[${f.category.toUpperCase()}] ${text}`);
+              }
+            }
+
+            if (factBlocks.length > 0) {
+              projectMemory = projectMemory
+                ? `${projectMemory}\n\n${factBlocks.join('\n\n')}`
+                : factBlocks.join('\n\n');
+            }
+          }
         }
 
-        const { data: websiteRules } = await supabase
-          .from('content_rules')
-          .select('*')
-          .eq('website_id', website_id)
-          .maybeSingle();
+        // Fallback to content_rules if custom instructions not yet found
+        if (!projectInstructions) {
+          const { data: websiteRules } = await supabase
+            .from('content_rules')
+            .select('custom_rules')
+            .eq('website_id', website_id)
+            .maybeSingle();
 
-        if (websiteRules?.custom_rules) {
-          projectInstructions = projectInstructions
-            ? `${projectInstructions}\n\n${websiteRules.custom_rules}`
-            : websiteRules.custom_rules;
+          if (websiteRules?.custom_rules) {
+            projectInstructions = websiteRules.custom_rules;
+          }
         }
       } catch (memErr) {
         console.warn('[Content Draft] Memory load error:', memErr);

@@ -114,23 +114,13 @@ export async function POST(request: Request) {
     if (type === 'instructions') {
       const safeInstructions = instructions ?? '';
 
-      // Save in project_memory (Guaranteed persistent storage)
-      const { data: existingInstr } = await supabase
+      // Overwrite/replace any previous custom instruction rows (guarantees zero duplication)
+      await supabase
         .from('project_memory')
-        .select('id')
-        .eq('source', 'project_custom_instructions')
-        .maybeSingle();
+        .delete()
+        .eq('source', 'project_custom_instructions');
 
-      if (existingInstr) {
-        await supabase
-          .from('project_memory')
-          .update({
-            content: safeInstructions,
-            website_id: website_id || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingInstr.id);
-      } else {
+      if (safeInstructions.trim()) {
         await supabase.from('project_memory').insert({
           website_id: website_id || null,
           category: 'brand',
@@ -180,22 +170,13 @@ export async function POST(request: Request) {
     if (type === 'knowledge_bank') {
       const safeKnowledge = knowledge_bank ?? '';
 
-      const { data: existingKnowledge } = await supabase
+      // Overwrite/replace any previous knowledge bank rows (guarantees zero duplication)
+      await supabase
         .from('project_memory')
-        .select('id')
-        .eq('source', 'project_knowledge_bank')
-        .maybeSingle();
+        .delete()
+        .eq('source', 'project_knowledge_bank');
 
-      if (existingKnowledge) {
-        await supabase
-          .from('project_memory')
-          .update({
-            content: safeKnowledge,
-            website_id: website_id || null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingKnowledge.id);
-      } else {
+      if (safeKnowledge.trim()) {
         await supabase.from('project_memory').insert({
           website_id: website_id || null,
           category: 'content_strategy',
