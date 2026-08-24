@@ -95,7 +95,7 @@ export const GeminiImageProvider: ImageProvider = {
         body: JSON.stringify({
           contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
           generationConfig: {
-            responseModalities: ['IMAGE'],
+            responseModalities: ['IMAGE', 'TEXT'],
           },
         }),
         signal: AbortSignal.timeout(AI_CONFIG.REQUEST_TIMEOUT_MS),
@@ -107,18 +107,19 @@ export const GeminiImageProvider: ImageProvider = {
       }
 
       const data = await response.json();
-      const part = data.candidates?.[0]?.content?.parts?.[0];
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((p: any) => p.inlineData?.data);
 
-      if (!part?.inlineData?.data) {
+      if (!imagePart?.inlineData?.data) {
         throw new Error('Gemini image generation returned empty inlineData.');
       }
 
-      const mimeType = part.inlineData.mimeType || 'image/png';
-      const base64Data = `data:${mimeType};base64,${part.inlineData.data}`;
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      const base64Data = `data:${mimeType};base64,${imagePart.inlineData.data}`;
 
       return {
         url: base64Data,
-        base64: part.inlineData.data,
+        base64: imagePart.inlineData.data,
       };
     }
 

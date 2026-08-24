@@ -266,10 +266,10 @@ Generate a tight, practical brief. Headings should serve the reader, not just in
         system: `You are an expert SEO content writer and strategist. Follow these instructions and guidelines strictly:
 
 ${projectInstructions ? `==================================================
-PROJECT CUSTOM INSTRUCTIONS & PERSONA (CLAUDE PROJECT GUIDELINES):
+CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
 ${projectInstructions}
 ==================================================\n` : ''}${projectMemory ? `==================================================
-PROJECT KNOWLEDGE BANK & REFERENCE CONTEXT:
+PROJECT KNOWLEDGE BASE & ACCUMULATED FACTS:
 ${projectMemory}
 ==================================================\n` : ''}CONTENT RULES:
 - Language: ${rules.language}
@@ -286,8 +286,8 @@ ${projectMemory}
 ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES:
+- CRITICAL: Embody the PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints throughout every section.
 - Write for the reader first, search engines second
-- Embody the project custom instructions, brand voice, and reference context throughout
 - Use the primary keyword naturally — do NOT force it into every paragraph
 - Short paragraphs. Clear sentences. No filler.
 - Do NOT invent statistics, features, or customer claims
@@ -476,13 +476,16 @@ Write the full article now. Include the H1 at the top. Follow the heading struct
       if (featuredImageUrl) {
         const imageMarkdown = `\n\n![${featuredImageAlt}](${featuredImageUrl})\n*${featuredImageAlt}*\n\n`;
 
-        if (content.includes('[IMAGE: featured')) {
-          content = content.replace(/\[IMAGE: featured[^\]]*\]/, imageMarkdown);
+        if (content.includes('[IMAGE: featured') || content.includes('[IMAGE:')) {
+          content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
         } else {
           // Place right after the H1 title
           content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
         }
       }
+
+      // Purge any remaining raw image markers from the text so no bracket prompt tags are ever visible
+      content = content.replace(/\n*\[IMAGE:[^\]]+\]\n*/g, '\n\n');
 
       for (let i = 0; i < brief.image_requirements.length; i++) {
         const req = brief.image_requirements[i];
@@ -499,6 +502,8 @@ Write the full article now. Include the H1 at the top. Follow the heading struct
       }
     } catch (imgErr: any) {
       console.warn('[ContentAgent] Automatic image generation failed gracefully:', imgErr.message || imgErr);
+      // Clean up bracket markers even on error so article text stays clean
+      content = content.replace(/\n*\[IMAGE:[^\]]+\]\n*/g, '\n\n');
       enrichedImages.push(...brief.image_requirements);
     }
 

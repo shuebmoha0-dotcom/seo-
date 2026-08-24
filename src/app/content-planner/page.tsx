@@ -113,6 +113,87 @@ export default function ContentPlannerPage() {
     working_title: "",
   });
   const [activeView, setActiveView] = useState<"preview" | "qa" | "meta" | "images">("preview");
+  const [previewMode, setPreviewMode] = useState<"formatted" | "raw">("formatted");
+
+  const renderFormattedArticle = (content: string) => {
+    if (!content) return <p className="text-xs text-neutral-500">No content body generated.</p>;
+
+    const blocks = content.split('\n\n');
+
+    return (
+      <div className="space-y-4">
+        {blocks.map((block, bIdx) => {
+          const trimmed = block.trim();
+          if (!trimmed) return null;
+
+          // Check for Image Markdown ![alt](url)
+          const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+          if (imgMatch) {
+            const alt = imgMatch[1];
+            const src = imgMatch[2];
+            return (
+              <figure key={bIdx} className="my-6 rounded-2xl overflow-hidden border border-neutral-200 shadow-sm bg-neutral-50">
+                <img src={src} alt={alt} className="w-full h-auto object-cover max-h-96" />
+                {alt && (
+                  <figcaption className="p-2.5 text-center text-xs text-neutral-500 italic bg-white border-t border-neutral-100">
+                    {alt}
+                  </figcaption>
+                )}
+              </figure>
+            );
+          }
+
+          // Check for H1 #
+          if (trimmed.startsWith('# ')) {
+            return (
+              <h1 key={bIdx} className="text-xl md:text-2xl font-bold text-neutral-900 tracking-tight mt-4 mb-2 pb-2 border-b border-neutral-200">
+                {trimmed.replace(/^#\s+/, '')}
+              </h1>
+            );
+          }
+
+          // Check for H2 ##
+          if (trimmed.startsWith('## ')) {
+            return (
+              <h2 key={bIdx} className="text-base md:text-lg font-bold text-neutral-900 tracking-tight mt-6 mb-2">
+                {trimmed.replace(/^##\s+/, '')}
+              </h2>
+            );
+          }
+
+          // Check for H3 ###
+          if (trimmed.startsWith('### ')) {
+            return (
+              <h3 key={bIdx} className="text-sm md:text-base font-bold text-neutral-800 tracking-tight mt-4 mb-1">
+                {trimmed.replace(/^###\s+/, '')}
+              </h3>
+            );
+          }
+
+          // Check for bullet list
+          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            const items = trimmed.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
+            return (
+              <ul key={bIdx} className="space-y-1.5 my-3 pl-5 list-disc text-xs text-neutral-700 leading-relaxed">
+                {items.map((item, iIdx) => (
+                  <li key={iIdx}>
+                    {item.replace(/^[-*]\s+/, '')}
+                  </li>
+                ))}
+              </ul>
+            );
+          }
+
+          // Standard paragraph
+          return (
+            <p key={bIdx} className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
+              {trimmed}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
 
   const fetchDrafts = async () => {
     try {
@@ -528,8 +609,46 @@ export default function ContentPlannerPage() {
                 {/* VIEW: PREVIEW */}
                 {activeView === "preview" && (
                   <div className="space-y-4">
+                    {/* View mode toggle & Copy action */}
+                    <div className="flex items-center justify-between bg-neutral-50 p-2 rounded-xl border border-neutral-200 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setPreviewMode("formatted")}
+                          className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                            previewMode === "formatted"
+                              ? "bg-white text-indigo-600 shadow-xs border border-neutral-200"
+                              : "text-neutral-600 hover:text-neutral-900"
+                          }`}
+                        >
+                          📖 Formatted Article View
+                        </button>
+                        <button
+                          onClick={() => setPreviewMode("raw")}
+                          className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors ${
+                            previewMode === "raw"
+                              ? "bg-white text-indigo-600 shadow-xs border border-neutral-200"
+                              : "text-neutral-600 hover:text-neutral-900"
+                          }`}
+                        >
+                          📝 Raw Markdown / Code
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (selectedDraft.content_body) {
+                            navigator.clipboard.writeText(selectedDraft.content_body);
+                            alert("Article copied to clipboard!");
+                          }
+                        }}
+                        className="bg-white hover:bg-neutral-100 text-neutral-700 px-3 py-1.5 rounded-lg font-semibold text-xs border border-neutral-200 transition-colors flex items-center gap-1 shadow-xs"
+                      >
+                        <span>📋 Copy Article</span>
+                      </button>
+                    </div>
+
                     {/* Featured Image Banner if present in draft */}
-                    {selectedDraft.images?.[0]?.image_url && (
+                    {selectedDraft.images?.[0]?.image_url && !selectedDraft.content_body?.includes(selectedDraft.images[0].image_url) && (
                       <div className="rounded-2xl overflow-hidden border border-neutral-200 max-h-80 w-full bg-neutral-100 shadow-xs">
                         <img
                           src={selectedDraft.images[0].image_url}
@@ -538,9 +657,16 @@ export default function ContentPlannerPage() {
                         />
                       </div>
                     )}
-                    <div className="prose prose-sm max-w-none text-neutral-800 bg-neutral-50/50 p-6 rounded-2xl border border-neutral-200 text-xs font-sans whitespace-pre-wrap leading-relaxed">
-                      {selectedDraft.content_body || "No content body generated."}
-                    </div>
+
+                    {previewMode === "formatted" ? (
+                      <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
+                        {renderFormattedArticle(selectedDraft.content_body || "")}
+                      </div>
+                    ) : (
+                      <div className="prose prose-sm max-w-none text-neutral-800 bg-neutral-50 p-6 rounded-2xl border border-neutral-200 text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                        {selectedDraft.content_body || "No content body generated."}
+                      </div>
+                    )}
                   </div>
                 )}
 
