@@ -6,7 +6,7 @@ import {
   Loader2, Clock, BookOpen, Image as ImageIcon, Link as LinkIcon, ChevronDown, ChevronRight,
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
-  PenLine, Cpu, Globe, Zap
+  PenLine, Cpu, Globe, Zap, Brain
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -272,19 +272,36 @@ export default function ContentPlannerPage() {
 
         {/* ── 1-CLICK INSTANT ARTICLE GENERATOR ── */}
         <div className="bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 border border-indigo-100 rounded-3xl p-6 mb-8 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-neutral-900">1-Click Autonomous Article Generator</h3>
-                <p className="text-xs text-neutral-500">
-                  Enter any keyword. AI writes 1,500+ words, generates Gemini visual illustrations, and creates SEO metadata automatically.
-                </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-neutral-900">1-Click Autonomous Article Generator</h3>
+                  <p className="text-xs text-neutral-500">
+                    Enter any keyword. AI writes 1,500+ words, generates Gemini visual illustrations, and creates SEO metadata automatically.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+
+            {/* Client Instructions Indicator Link */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white/90 border border-indigo-100/80 rounded-xl px-3.5 py-2 text-xs">
+              <div className="flex items-center gap-2 text-neutral-700">
+                <Brain className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-[11px]">
+                  <strong className="text-neutral-900">Project Custom Instructions Active:</strong> Brand persona &amp; guidelines are automatically applied to every draft.
+                </span>
+              </div>
+              <a
+                href="/memory"
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 hover:underline shrink-0"
+              >
+                <span>View / Edit Instructions</span>
+                <ArrowRight className="w-3 h-3" />
+              </a>
+            </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="relative flex-1 w-full">

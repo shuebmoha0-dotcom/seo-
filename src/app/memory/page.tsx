@@ -398,7 +398,7 @@ export default function ProjectMemoryPage() {
                         ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
                         : "bg-emerald-50 text-emerald-700 border-emerald-200"
                     }`}>
-                      {hasUnsavedInstructions ? "● Unsaved Changes" : "✓ Saved in Project Memory"}
+                      {hasUnsavedInstructions ? "● Unsaved Changes" : "✓ Saved & Active in Memory"}
                     </span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-0.5">
@@ -407,6 +407,19 @@ export default function ProjectMemoryPage() {
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      if (instructions) {
+                        navigator.clipboard.writeText(instructions);
+                        alert("Instructions copied to clipboard!");
+                      }
+                    }}
+                    disabled={!instructions}
+                    className="bg-neutral-100 hover:bg-neutral-200 disabled:opacity-40 text-neutral-700 font-semibold text-xs px-3 py-2.5 rounded-xl transition-colors flex items-center gap-1.5"
+                    title="Copy to clipboard"
+                  >
+                    <span>📋 Copy</span>
+                  </button>
                   <button
                     onClick={handleDeleteInstructions}
                     disabled={savingInstructions || !instructions}
@@ -467,7 +480,7 @@ export default function ProjectMemoryPage() {
                 />
 
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
-                  <span>Capacity: Up to 50,000+ characters</span>
+                  <span>Capacity: Up to 50,000+ characters (Claude Project workspace)</span>
                   <span>{instructions.length} characters • ~{Math.ceil(instructions.split(/\s+/).filter(Boolean).length)} words</span>
                 </div>
               </div>
