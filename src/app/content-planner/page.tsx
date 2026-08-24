@@ -321,9 +321,11 @@ export default function ContentPlannerPage() {
         throw new Error(data.error || "Failed to publish to WordPress");
       }
 
-      // Update state to published
+      // Only mark as 'published' if confirmed by WordPress or direct API; otherwise 'approved'
+      const targetStatus: DraftStatus = data.wordpress?.link ? "published" : "approved";
+
       setDrafts(prev => {
-        const updated = prev.map(d => d.id === target.id ? { ...d, status: "published" as DraftStatus } : d);
+        const updated = prev.map(d => d.id === target.id ? { ...d, status: targetStatus } : d);
         if (typeof window !== "undefined") {
           localStorage.setItem("seo_cached_drafts", JSON.stringify(updated));
         }
@@ -331,15 +333,15 @@ export default function ContentPlannerPage() {
       });
 
       if (selectedDraft?.id === target.id) {
-        setSelectedDraft(prev => prev ? { ...prev, status: "published" as DraftStatus } : null);
+        setSelectedDraft(prev => prev ? { ...prev, status: targetStatus } : null);
       }
 
       if (data.wordpress?.link) {
-        alert(`🎉 Article published live to WordPress!\n\nLive Link: ${data.wordpress.link}`);
+        alert(`🎉 Article published live on WordPress!\n\nLive Link: ${data.wordpress.link}`);
       } else if (data.push_warning) {
-        alert(`⚠️ Post status updated to Published. Note: Direct REST sync returned: ${data.push_warning}. Please verify your WordPress connection under Integrations.`);
+        alert(`⚠️ Post approved & queued for background sync.\n\nDirect REST notice: ${data.push_warning}`);
       } else {
-        alert("🎉 Article approved and queued for WordPress sync!");
+        alert("🎉 Article approved and queued for WordPress background sync!");
       }
     } catch (err: any) {
       console.error("Publish error:", err);
