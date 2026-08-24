@@ -2,11 +2,10 @@
 
 import { Sidebar } from "@/components/Sidebar";
 import {
-  Brain, Plus, Edit2, Trash2, Star, StarOff, AlertTriangle, CheckCircle2,
-  ChevronDown, ChevronRight, Search, Filter, Clock, Cpu, User,
-  Building2, Package, Users, Megaphone, FileText, Target, Trophy,
-  Link2, Lightbulb, FlaskConical, Wrench, Workflow, Info, Save,
-  X, RefreshCw, BookOpen, Sparkles, Check, ShieldCheck
+  Brain, Plus, Trash2, Star, AlertTriangle,
+  Search, Building2, Package, Users, Megaphone, FileText, Target, Trophy,
+  BookOpen, Lightbulb, FlaskConical, Wrench, Workflow, Save,
+  X, RefreshCw, Sparkles, ShieldCheck, Zap
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -43,7 +42,7 @@ const CATEGORIES: Record<MemoryCategory, { label: string; icon: any; color: stri
   seo_strategy:     { label: "SEO Strategy",      icon: Target,      color: "text-orange-600 bg-orange-50 border-orange-200" },
   competitors:      { label: "Competitors",       icon: Trophy,      color: "text-red-600 bg-red-50 border-red-200" },
   keywords:         { label: "Keywords",          icon: Search,      color: "text-cyan-600 bg-cyan-50 border-cyan-200" },
-  content:          { label: "Content",           icon: BookOpen,    color: "text-teal-600 bg-teal-50 border-teal-200" },
+  content:          { label: "Content & Topics",  icon: BookOpen,    color: "text-teal-600 bg-teal-50 border-teal-200" },
   preferences:      { label: "Preferences",       icon: Star,        color: "text-amber-600 bg-amber-50 border-amber-200" },
   decisions:        { label: "Decisions",         icon: Lightbulb,   color: "text-lime-600 bg-lime-50 border-lime-200" },
   experiments:      { label: "Experiments",       icon: FlaskConical,color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
@@ -54,18 +53,16 @@ const CATEGORIES: Record<MemoryCategory, { label: string; icon: any; color: stri
 export default function ProjectMemoryPage() {
   const { currentWebsite } = useWebsite();
 
-  const [activeTab, setActiveTab] = useState<"instructions" | "knowledge" | "vault">("instructions");
+  // 2 Clean Tabs: Instructions & Autonomous Memory
+  const [activeTab, setActiveTab] = useState<"instructions" | "vault">("instructions");
   const [instructions, setInstructions] = useState("");
   const [savedInstructionsSnapshot, setSavedInstructionsSnapshot] = useState("");
-  const [knowledgeBank, setKnowledgeBank] = useState("");
-  const [savedKnowledgeSnapshot, setSavedKnowledgeSnapshot] = useState("");
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingInstructions, setSavingInstructions] = useState(false);
-  const [savingKnowledge, setSavingKnowledge] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
-  // New Memory Modal state
+  // Add Memory Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMemoryCategory, setNewMemoryCategory] = useState<MemoryCategory>("brand");
   const [newMemoryContent, setNewMemoryContent] = useState("");
@@ -80,14 +77,9 @@ export default function ProjectMemoryPage() {
     try {
       if (typeof window !== "undefined") {
         const localInstr = localStorage.getItem("seo_project_instructions");
-        const localKnowledge = localStorage.getItem("seo_project_knowledge_bank");
         if (localInstr) {
           setInstructions(localInstr);
           setSavedInstructionsSnapshot(localInstr);
-        }
-        if (localKnowledge) {
-          setKnowledgeBank(localKnowledge);
-          setSavedKnowledgeSnapshot(localKnowledge);
         }
       }
 
@@ -103,12 +95,11 @@ export default function ProjectMemoryPage() {
           setSavedInstructionsSnapshot(data.instructions);
           if (typeof window !== "undefined") localStorage.setItem("seo_project_instructions", data.instructions);
         }
-        if (data.knowledge_bank) {
-          setKnowledgeBank(data.knowledge_bank);
-          setSavedKnowledgeSnapshot(data.knowledge_bank);
-          if (typeof window !== "undefined") localStorage.setItem("seo_project_knowledge_bank", data.knowledge_bank);
-        }
-        setMemories(data.memories || []);
+        // Filter out internal instruction markers from the memories vault view
+        const cleanMemories = (data.memories || []).filter(
+          (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+        );
+        setMemories(cleanMemories);
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
     } catch (err: any) {
@@ -123,7 +114,6 @@ export default function ProjectMemoryPage() {
   }, [currentWebsite?.id]);
 
   const hasUnsavedInstructions = instructions !== savedInstructionsSnapshot;
-  const hasUnsavedKnowledge = knowledgeBank !== savedKnowledgeSnapshot;
 
   const handleSaveInstructions = async () => {
     setSavingInstructions(true);
@@ -158,36 +148,25 @@ export default function ProjectMemoryPage() {
     }
   };
 
-  const handleSaveKnowledge = async () => {
-    setSavingKnowledge(true);
+  const handleDeleteInstructions = async () => {
+    if (!confirm("Are you sure you want to delete all Custom Instructions?")) return;
+    setSavingInstructions(true);
     setSaveError(null);
     try {
+      setInstructions("");
+      setSavedInstructionsSnapshot("");
       if (typeof window !== "undefined") {
-        localStorage.setItem("seo_project_knowledge_bank", knowledgeBank);
+        localStorage.removeItem("seo_project_instructions");
       }
 
-      const res = await fetch("/api/memory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          website_id: currentWebsite?.id,
-          type: "knowledge_bank",
-          knowledge_bank: knowledgeBank,
-        }),
+      await fetch(`/api/memory?type=instructions${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, {
+        method: "DELETE",
       });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to save knowledge bank to database");
-      }
-
-      setSavedKnowledgeSnapshot(knowledgeBank);
-      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err: any) {
-      console.error("Save knowledge error:", err);
-      setSaveError(err.message || "Failed to save knowledge bank");
+      console.error("Delete instructions error:", err);
+      setSaveError(err.message || "Failed to delete instructions");
     } finally {
-      setSavingKnowledge(false);
+      setSavingInstructions(false);
     }
   };
 
@@ -220,50 +199,6 @@ export default function ProjectMemoryPage() {
     }
   };
 
-  const handleDeleteInstructions = async () => {
-    if (!confirm("Are you sure you want to delete all Custom Project Instructions?")) return;
-    setSavingInstructions(true);
-    setSaveError(null);
-    try {
-      setInstructions("");
-      setSavedInstructionsSnapshot("");
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("seo_project_instructions");
-      }
-
-      await fetch(`/api/memory?type=instructions${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, {
-        method: "DELETE",
-      });
-    } catch (err: any) {
-      console.error("Delete instructions error:", err);
-      setSaveError(err.message || "Failed to delete instructions");
-    } finally {
-      setSavingInstructions(false);
-    }
-  };
-
-  const handleDeleteKnowledge = async () => {
-    if (!confirm("Are you sure you want to delete the Knowledge Bank context documents?")) return;
-    setSavingKnowledge(true);
-    setSaveError(null);
-    try {
-      setKnowledgeBank("");
-      setSavedKnowledgeSnapshot("");
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("seo_project_knowledge_bank");
-      }
-
-      await fetch(`/api/memory?type=knowledge_bank${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, {
-        method: "DELETE",
-      });
-    } catch (err: any) {
-      console.error("Delete knowledge error:", err);
-      setSaveError(err.message || "Failed to delete knowledge bank");
-    } finally {
-      setSavingKnowledge(false);
-    }
-  };
-
   const handleDeleteMemory = async (id: string) => {
     if (!confirm("Are you sure you want to delete this memory fact?")) return;
     try {
@@ -282,8 +217,11 @@ export default function ProjectMemoryPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const appendInstructionTemplate = (template: string) => {
-    setInstructions(prev => prev ? `${prev}\n\n${template}` : template);
+  const appendInstructionTemplate = (templateText: string) => {
+    setInstructions(prev => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed}\n\n${templateText}` : templateText;
+    });
   };
 
   return (
@@ -295,7 +233,8 @@ export default function ProjectMemoryPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span>Settings</span><span>&gt;</span>
+              <span>Settings</span>
+              <span>&gt;</span>
               <span className="text-neutral-700">Project Context</span>
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
@@ -303,7 +242,7 @@ export default function ProjectMemoryPage() {
               <span>Project Memory &amp; Custom Instructions</span>
             </h1>
             <p className="text-neutral-500 text-xs mt-0.5">
-              Brand persona guidelines, editorial rules, and reference knowledge repository automatically applied across all SEO workflows for {currentWebsite?.domain || "your website"}.
+              Brand persona guidelines and self-learning autonomous memory automatically applied across all SEO workflows for {currentWebsite?.domain || "your website"}.
             </p>
           </div>
 
@@ -325,7 +264,7 @@ export default function ProjectMemoryPage() {
           </div>
         </div>
 
-        {/* ── ALWAYS VISIBLE PERSISTENT ACTIVE STATUS BANNER ── */}
+        {/* ── PERSISTENT ACTIVE STATUS BANNER ── */}
         <div className="mb-6 p-4 bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -361,25 +300,28 @@ export default function ProjectMemoryPage() {
           </div>
         )}
 
-        {/* Tab Navigation */}
+        {/* ── 2 CLEAN TAB NAVIGATION ── */}
         <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 mb-6 text-xs font-bold">
-          {[
-            { id: "instructions", label: "📝 Custom Brand Instructions", desc: "Writing Persona & Rules" },
-            { id: "knowledge", label: "📚 Knowledge Base & Context Documents", desc: "Reference Repository" },
-            { id: "vault", label: `🧠 Structured Memory Vault (${memories.length})`, desc: "Categorized Knowledge" },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
-                activeTab === tab.id
-                  ? "bg-indigo-600 text-white shadow-xs"
-                  : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
-              }`}
-            >
-              <span>{tab.label}</span>
-            </button>
-          ))}
+          <button
+            onClick={() => setActiveTab("instructions")}
+            className={`px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === "instructions"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+            }`}
+          >
+            <span>📝 Custom Instructions</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("vault")}
+            className={`px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 ${
+              activeTab === "vault"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+            }`}
+          >
+            <span>🧠 Autonomous Project Memory ({memories.length})</span>
+          </button>
         </div>
 
         {/* ── TAB 1: CUSTOM BRAND INSTRUCTIONS ── */}
@@ -435,7 +377,7 @@ export default function ProjectMemoryPage() {
                     className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{savingInstructions ? "Saving..." : "Save Project Instructions"}</span>
+                    <span>{savingInstructions ? "Saving..." : "Save Instructions"}</span>
                   </button>
                 </div>
               </div>
@@ -476,7 +418,7 @@ export default function ProjectMemoryPage() {
                   onChange={e => setInstructions(e.target.value)}
                   placeholder="Enter your comprehensive brand instructions here (e.g. detailed writing guidelines, target persona, brand voice, forbidden topics, formatting standards)..."
                   className="w-full bg-neutral-50/70 border border-neutral-200 rounded-2xl p-5 text-xs text-neutral-900 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
-                  rows={16}
+                  rows={18}
                 />
 
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
@@ -488,73 +430,28 @@ export default function ProjectMemoryPage() {
           </div>
         )}
 
-        {/* ── TAB 2: KNOWLEDGE BANK & REFERENCE CONTEXT ── */}
-        {activeTab === "knowledge" && (
-          <div className="space-y-6">
-            <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-indigo-600" />
-                      Project Knowledge Bank &amp; Context Documents
-                    </h3>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      hasUnsavedKnowledge
-                        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
-                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    }`}>
-                      {hasUnsavedKnowledge ? "● Unsaved Changes" : "✓ Saved in Knowledge Bank"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Paste company whitepapers, product specs, pricing tables, competitor comparison matrices, and case study data. The AI agent references these facts when writing long-form content.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={handleDeleteKnowledge}
-                    disabled={savingKnowledge || !knowledgeBank}
-                    className="bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-600 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 border border-red-200"
-                    title="Delete Knowledge Bank"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Delete</span>
-                  </button>
-                  <button
-                    onClick={handleSaveKnowledge}
-                    disabled={savingKnowledge}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>{savingKnowledge ? "Saving to Database..." : "Save Knowledge Bank"}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Large Textarea Knowledge Workspace */}
-              <div className="space-y-2">
-                <textarea
-                  value={knowledgeBank}
-                  onChange={e => setKnowledgeBank(e.target.value)}
-                  placeholder="Paste multi-thousand word company information, product documentation, feature lists, pricing tiers, FAQs, case studies, or reference research..."
-                  className="w-full bg-neutral-50/70 border border-neutral-200 rounded-2xl p-5 text-xs text-neutral-900 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
-                  rows={18}
-                />
-
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
-                  <span>Context window utilization: Multi-document repository</span>
-                  <span>{knowledgeBank.length} characters • ~{Math.ceil(knowledgeBank.split(/\s+/).filter(Boolean).length)} words</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── TAB 3: STRUCTURED MEMORY VAULT ── */}
+        {/* ── TAB 2: AUTONOMOUS SELF-LEARNING PROJECT MEMORY ── */}
         {activeTab === "vault" && (
           <div className="space-y-6">
+            {/* Auto-learning Info Banner */}
+            <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3 text-xs text-indigo-900 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Zap className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <span className="font-bold">Autonomous Self-Learning Memory: </span>
+                  <span>The agent automatically indexes and remembers key topics, target audience insights, entity decisions, and technical facts from every written article and website audit.</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl transition-colors shrink-0 shadow-xs"
+              >
+                + Add Fact
+              </button>
+            </div>
+
             {/* Filter and Search Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white border border-neutral-200 p-4 rounded-2xl shadow-xs">
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
@@ -595,51 +492,67 @@ export default function ProjectMemoryPage() {
               </div>
             </div>
 
-            {/* Memories Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredMemories.map(m => {
-                const CatInfo = CATEGORIES[m.category] || CATEGORIES.brand;
-                const CatIcon = CatInfo.icon;
-                return (
-                  <div
-                    key={m.id}
-                    className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-xs space-y-3 hover:border-indigo-200 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${CatInfo.color}`}>
-                        <CatIcon className="w-3 h-3" />
-                        <span>{CatInfo.label}</span>
-                      </span>
+            {/* Memories Grid or Empty State */}
+            {filteredMemories.length === 0 ? (
+              <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-md mx-auto">
+                <Brain className="w-8 h-8 text-neutral-400 mx-auto" />
+                <h3 className="text-sm font-bold text-neutral-900">No Memory Facts Stored Yet</h3>
+                <p className="text-xs text-neutral-500">
+                  As articles are generated and audits run, key facts and topic decisions will automatically appear here.
+                </p>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors inline-block"
+                >
+                  + Add Custom Fact
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredMemories.map(m => {
+                  const CatInfo = CATEGORIES[m.category] || CATEGORIES.brand;
+                  const CatIcon = CatInfo.icon;
+                  return (
+                    <div
+                      key={m.id}
+                      className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-xs space-y-3 hover:border-indigo-200 transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${CatInfo.color}`}>
+                          <CatIcon className="w-3 h-3" />
+                          <span>{CatInfo.label}</span>
+                        </span>
 
-                      <div className="flex items-center gap-1.5">
-                        {m.is_important && (
-                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>Important</span>
-                          </span>
-                        )}
-                        <button
-                          onClick={() => handleDeleteMemory(m.id)}
-                          className="p-1 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Delete memory"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {m.is_important && (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                              <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                              <span>Important</span>
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteMemory(m.id)}
+                            className="p-1 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Delete memory"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-neutral-800 leading-relaxed font-sans font-medium">
+                        {m.content}
+                      </p>
+
+                      <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-2 border-t border-neutral-100">
+                        <span>Source: {m.source_detail || m.source}</span>
+                        <span>{new Date(m.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-
-                    <p className="text-xs text-neutral-800 leading-relaxed font-sans font-medium">
-                      {m.content}
-                    </p>
-
-                    <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-2 border-t border-neutral-100">
-                      <span>Source: {m.source}</span>
-                      <span>{new Date(m.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -663,10 +576,10 @@ export default function ProjectMemoryPage() {
                   <select
                     value={newMemoryCategory}
                     onChange={e => setNewMemoryCategory(e.target.value as any)}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-900 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-800 focus:outline-none focus:border-indigo-500"
                   >
-                    {Object.entries(CATEGORIES).map(([key, info]) => (
-                      <option key={key} value={key}>{info.label}</option>
+                    {Object.entries(CATEGORIES).map(([key, cat]) => (
+                      <option key={key} value={key}>{cat.label}</option>
                     ))}
                   </select>
                 </div>
@@ -676,27 +589,27 @@ export default function ProjectMemoryPage() {
                   <textarea
                     value={newMemoryContent}
                     onChange={e => setNewMemoryContent(e.target.value)}
-                    placeholder="Enter the specific fact, preference, rule, or guideline the AI agent should always remember..."
+                    placeholder="e.g. Target audience is B2B SaaS marketing managers looking for organic growth solutions..."
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-xs text-neutral-800 focus:outline-none focus:border-indigo-500"
                     rows={4}
-                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-neutral-900 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">
                   <input
                     type="checkbox"
-                    id="important_check"
+                    id="modalImportant"
                     checked={newMemoryImportant}
                     onChange={e => setNewMemoryImportant(e.target.checked)}
                     className="rounded text-indigo-600 focus:ring-indigo-500"
                   />
-                  <label htmlFor="important_check" className="font-medium text-neutral-700 cursor-pointer">
-                    Mark as High-Priority / Important (Always inject first)
+                  <label htmlFor="modalImportant" className="text-xs font-semibold text-neutral-700">
+                    Mark as Important (High priority context)
                   </label>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
                 <button
                   onClick={() => setShowAddModal(false)}
                   className="px-4 py-2 rounded-xl text-xs font-semibold text-neutral-600 hover:bg-neutral-100"
@@ -706,9 +619,9 @@ export default function ProjectMemoryPage() {
                 <button
                   onClick={handleCreateMemory}
                   disabled={!newMemoryContent.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2 rounded-xl transition-colors shadow-sm"
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2 rounded-xl shadow-xs"
                 >
-                  Add Memory
+                  Save Fact
                 </button>
               </div>
             </div>

@@ -292,6 +292,23 @@ export async function POST(request: Request) {
               }
             }
           }
+
+          // Autonomous Self-Learning: Record article context fact in project_memory
+          try {
+            const memoryFact = `Published Content: "${output.working_title || output.seo_title}" covering target keyword "${output.primary_keyword}" (${output.search_intent} intent). Tailored for ${output.target_audience || 'target audience'}.`;
+            await supabase.from('project_memory').insert({
+              website_id,
+              category: 'content',
+              content: memoryFact,
+              source: 'autonomous_article_learning',
+              source_detail: `Generated from article: "${output.primary_keyword}"`,
+              confidence: 'high',
+              is_important: false,
+              tags: ['article_coverage', output.primary_keyword],
+            });
+          } catch (autoLearnErr) {
+            console.warn('[Draft Save] Autonomous memory learning insert skipped:', autoLearnErr);
+          }
         }
       } catch (saveError) {
         console.warn('[Draft Save] Draft DB insert error:', saveError);
