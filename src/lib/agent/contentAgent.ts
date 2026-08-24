@@ -322,35 +322,9 @@ Write the full article now. Include the H1 at the top. Follow the heading struct
       });
 
       return text;
-    } catch {
-      // Fallback draft
-      return `# ${brief.h1}
-
-${brief.questions_to_answer[0] ? `If you're asking "${brief.questions_to_answer[0]}" — you're not alone.` : ''}
-
-For ${brief.target_audience}, understanding ${brief.primary_keyword} is increasingly important. This guide covers what you need to know without the fluff.
-
-[IMAGE: featured — "${brief.image_requirements[0]?.alt_text || brief.primary_keyword}" — place: After introduction]
-
-## What It Is and Why It Matters
-
-${brief.primary_keyword.charAt(0).toUpperCase() + brief.primary_keyword.slice(1)} refers to the process of...
-
-*[Content generation requires an active OpenAI API key. This is a placeholder draft.]*
-
-## How It Works
-
-The core workflow involves three stages...
-
-[IMAGE: diagram — "workflow diagram" — place: After How It Works section]
-
-## Common Mistakes to Avoid
-
-Most teams get this wrong by...
-
-## Next Steps
-
-${brief.cta}`;
+    } catch (err: any) {
+      console.error('[ContentAgent] writeDraft error:', err);
+      throw new Error(`Content generation failed: ${err.message || 'Please check AI provider status.'}`);
     }
   }
 

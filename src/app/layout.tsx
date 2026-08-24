@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Autonomous AI SEO Agent",
-  description: "Your autonomous SEO employee that understands, researches, and executes.",
+  title: "SEO Autopilot — Autonomous AI SEO Growth Platform",
+  description: "Enterprise autonomous SEO platform that continuously tracks rankings, plans high-intent content, creates visual illustrations, and optimizes your site.",
 };
 
 import { Providers } from "@/components/Providers";
