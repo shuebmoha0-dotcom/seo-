@@ -1,5 +1,5 @@
 import { LLMProvider } from '../tools/llm';
-
+import { ImageRouter } from '../ai/imageRouter';
 import { z } from 'zod';
 
 export interface ContentRules {
@@ -60,6 +60,9 @@ export interface ImageRequirement {
   purpose: string;
   alt_text: string;
   suggested_filename: string;
+  image_url?: string;
+  generation_status?: 'generated' | 'failed' | 'pending';
+  prompt_used?: string;
 }
 
 export interface QAResult {
@@ -95,6 +98,8 @@ export interface ContentOutput {
   url_slug: string;
   internal_links: string[];
   images: ImageRequirement[];
+  featured_image_url?: string;
+  featured_image_alt?: string;
   cta: string;
   qa: QAResult;
   status: 'ready_for_approval' | 'needs_revision';
@@ -450,10 +455,58 @@ ${brief.cta}`;
     }
 
     const brief = await this.generateBrief(input);
-    const content = await this.writeDraft(brief, input.rules, revisionNotes);
+    let content = await this.writeDraft(brief, input.rules, revisionNotes);
     const { word_count, reading_time_minutes } = this.countWords(content);
     const seoMeta = this.generateSEOMetadata(brief, content);
     const qa = this.runQA({ content, brief, rules: input.rules, images: brief.image_requirements });
+
+    // ── Automatic Image Generation via ImageRouter (Gemini via Google AI Studio) ──
+    let featuredImageUrl = '';
+    const featuredImageAlt = brief.image_requirements[0]?.alt_text || `${brief.working_title} — illustrated overview`;
+    const enrichedImages: ImageRequirement[] = [];
+
+    try {
+      console.log(`[ContentAgent] Automatically generating featured image for "${brief.working_title}" via ImageRouter...`);
+      const generatedImage = await ImageRouter.generate({
+        topic: brief.working_title,
+        target_keyword: input.primary_keyword,
+        purpose: brief.image_requirements[0]?.purpose || 'Featured blog post illustration',
+        style: 'Modern high-tech clean editorial illustration',
+        dimensions: '1024x1024',
+        image_placement: 'Header featured image',
+        brand_instructions: input.rules.brand_rules,
+      });
+
+      featuredImageUrl = generatedImage.url;
+
+      if (featuredImageUrl) {
+        const imageMarkdown = `\n\n![${featuredImageAlt}](${featuredImageUrl})\n*${featuredImageAlt}*\n\n`;
+
+        if (content.includes('[IMAGE: featured')) {
+          content = content.replace(/\[IMAGE: featured[^\]]*\]/, imageMarkdown);
+        } else {
+          // Place right after the H1 title
+          content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
+        }
+      }
+
+      for (let i = 0; i < brief.image_requirements.length; i++) {
+        const req = brief.image_requirements[i];
+        if (i === 0 && featuredImageUrl) {
+          enrichedImages.push({
+            ...req,
+            image_url: featuredImageUrl,
+            generation_status: 'generated',
+            prompt_used: generatedImage.metadata.prompt_used,
+          });
+        } else {
+          enrichedImages.push(req);
+        }
+      }
+    } catch (imgErr: any) {
+      console.warn('[ContentAgent] Automatic image generation failed gracefully:', imgErr.message || imgErr);
+      enrichedImages.push(...brief.image_requirements);
+    }
 
     return {
       working_title: brief.working_title,
@@ -468,7 +521,9 @@ ${brief.cta}`;
       meta_description: seoMeta.meta_description,
       url_slug: seoMeta.url_slug,
       internal_links: brief.internal_links,
-      images: brief.image_requirements,
+      images: enrichedImages.length > 0 ? enrichedImages : brief.image_requirements,
+      featured_image_url: featuredImageUrl || undefined,
+      featured_image_alt: featuredImageAlt,
       cta: brief.cta,
       qa,
       status: qa.overall_status === 'pass' ? 'ready_for_approval' : 'needs_revision',

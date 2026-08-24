@@ -29,7 +29,16 @@ interface ContentDraft {
   url_slug?: string;
   content_body?: string;
   qa?: Record<string, boolean | string | string[]>;
-  images?: Array<{ image_type: string; alt_text: string; placement_context: string; suggested_filename: string; purpose: string }>;
+  images?: Array<{
+    image_type: string;
+    alt_text: string;
+    placement_context: string;
+    suggested_filename: string;
+    purpose: string;
+    image_url?: string;
+    prompt_used?: string;
+    generation_status?: string;
+  }>;
 }
 
 const DEFAULT_RULES = {
@@ -544,15 +553,39 @@ export default function ContentPlannerPage() {
 
                     {/* VIEW: IMAGES */}
                     {activeView === "images" && (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {(selectedDraft.images || []).map((img, i) => (
-                          <div key={i} className="p-4 bg-neutral-50 border border-neutral-200 rounded-xl text-xs space-y-1">
-                            <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
-                              {img.image_type}
-                            </span>
-                            <p className="font-semibold text-neutral-900">{img.suggested_filename}</p>
-                            <p className="text-neutral-600">Alt text: &ldquo;{img.alt_text}&rdquo;</p>
-                            <p className="text-neutral-500 text-[11px]">Placement: {img.placement_context}</p>
+                          <div key={i} className="p-4 bg-neutral-50 border border-neutral-200 rounded-2xl text-xs space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold uppercase text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                {img.image_type}
+                              </span>
+                              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>Gemini Generated</span>
+                              </span>
+                            </div>
+
+                            {img.image_url && (
+                              <div className="rounded-xl overflow-hidden border border-neutral-200 max-w-md bg-white shadow-xs">
+                                <img
+                                  src={img.image_url}
+                                  alt={img.alt_text}
+                                  className="w-full h-auto object-cover max-h-64"
+                                />
+                              </div>
+                            )}
+
+                            <div className="space-y-1">
+                              <p className="font-semibold text-neutral-900">{img.suggested_filename}</p>
+                              <p className="text-neutral-600">Alt text: &ldquo;{img.alt_text}&rdquo;</p>
+                              <p className="text-neutral-500 text-[11px]">Placement: {img.placement_context}</p>
+                              {img.prompt_used && (
+                                <p className="text-[11px] text-neutral-400 italic bg-white p-2.5 rounded-lg border border-neutral-200">
+                                  Prompt: &ldquo;{img.prompt_used}&rdquo;
+                                </p>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
