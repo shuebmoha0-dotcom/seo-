@@ -310,11 +310,16 @@ export default function ContentPlannerPage() {
 
     setPublishing(target.id);
     try {
-      await fetch("/api/agent/content/approve", {
+      const res = await fetch("/api/agent/content/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft_id: target.id, action: "approve" }),
+        body: JSON.stringify({ draft_id: target.id, action: "publish" }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to publish to WordPress");
+      }
 
       // Update state to published
       setDrafts(prev => {
@@ -329,10 +334,16 @@ export default function ContentPlannerPage() {
         setSelectedDraft(prev => prev ? { ...prev, status: "published" as DraftStatus } : null);
       }
 
-      alert("🎉 Article successfully published and synchronized with WordPress!");
+      if (data.wordpress?.link) {
+        alert(`🎉 Article published live to WordPress!\n\nLive Link: ${data.wordpress.link}`);
+      } else if (data.push_warning) {
+        alert(`⚠️ Post status updated to Published. Note: Direct REST sync returned: ${data.push_warning}. Please verify your WordPress connection under Integrations.`);
+      } else {
+        alert("🎉 Article approved and queued for WordPress sync!");
+      }
     } catch (err: any) {
       console.error("Publish error:", err);
-      alert("Failed to publish article. Please check your WordPress connection.");
+      alert(`Failed to publish: ${err.message || "Please check your WordPress connection under Integrations."}`);
     } finally {
       setPublishing(null);
     }
