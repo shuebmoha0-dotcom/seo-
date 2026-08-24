@@ -51,11 +51,18 @@ export async function POST(request: Request) {
 
     // 2. Concurrency-safe job claim
     // Select the oldest pending job for this site and atomically mark it 'claimed'
-    const { data: pendingJobs, error: jobErr } = await supabase
+    let jobsQuery = supabase
       .from('wordpress_jobs')
       .select('*')
-      .eq('site_id', site.id)
-      .eq('status', 'pending')
+      .eq('status', 'pending');
+
+    if (site.website_id) {
+      jobsQuery = jobsQuery.or(`site_id.eq.${site.id},website_id.eq.${site.website_id}`);
+    } else {
+      jobsQuery = jobsQuery.eq('site_id', site.id);
+    }
+
+    const { data: pendingJobs, error: jobErr } = await jobsQuery
       .order('created_at', { ascending: true })
       .limit(1);
 

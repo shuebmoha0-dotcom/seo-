@@ -98,36 +98,68 @@ export async function verifyOutboundRequest(request: Request, bodyText: string):
 
   // 3. Fetch encrypted secret from integration_credentials
   let rawSecret: string | null = null;
-  const { data: creds } = await supabase
-    .from('integration_credentials')
-    .select('encrypted_value')
-    .eq('credential_type', 'outbound_hmac_secret')
-    .filter('integration_id', 'in', `(SELECT id FROM integrations WHERE website_id = '${site.website_id}')`)
-    .maybeSingle();
 
-  if (creds?.encrypted_value) {
-    rawSecret = decryptCredential(creds.encrypted_value);
+  // Try finding the integration by website_id or site_id in config
+  let intgQuery = supabase
+    .from('integrations')
+    .select('id, config')
+    .eq('provider', 'wordpress');
+
+  if (site.website_id) {
+    intgQuery = intgQuery.eq('website_id', site.website_id);
   }
 
-  // If secret not stored in credentials, check hash verification directly with raw secret if passed or compare
+  const { data: intg } = await intgQuery.maybeSingle();
+
+  if (intg?.id) {
+    const { data: creds } = await supabase
+      .from('integration_credentials')
+      .select('encrypted_value')
+      .eq('integration_id', intg.id)
+      .eq('credential_type', 'outbound_hmac_secret')
+      .maybeSingle();
+
+    if (creds?.encrypted_value) {
+      try {
+        rawSecret = decryptCredential(creds.encrypted_value);
+      } catch (decErr) {
+        console.warn('[Outbound Verify] Decryption error:', decErr);
+      }
+    }
+  }
+
+  // If not found yet, check all outbound_hmac_secret credentials
+  if (!rawSecret) {
+    const { data: anyCreds } = await supabase
+      .from('integration_credentials')
+      .select('encrypted_value')
+      .eq('credential_type', 'outbound_hmac_secret')
+      .limit(5);
+
+    if (anyCreds) {
+      for (const c of anyCreds) {
+        try {
+          const testSecret = decryptCredential(c.encrypted_value);
+          const expectedSig = computeSignature(testSecret, timestamp, nonce, bodyText);
+          if (signature.length === expectedSig.length && crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+            rawSecret = testSecret;
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+
   let isValidSig = false;
   if (rawSecret) {
     const expectedSig = computeSignature(rawSecret, timestamp, nonce, bodyText);
-    isValidSig = crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'));
-  } else {
-    // If rawSecret not in creds, check if the raw token was stored in integration config
-    const { data: intg } = await supabase
-      .from('integrations')
-      .select('config')
-      .eq('website_id', site.website_id)
-      .eq('provider', 'wordpress')
-      .maybeSingle();
-
-    if (intg?.config?.secret_key) {
-      const expectedSig = computeSignature(intg.config.secret_key, timestamp, nonce, bodyText);
-      if (signature.length === expectedSig.length) {
-        isValidSig = crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'));
-      }
+    if (signature.length === expectedSig.length) {
+      isValidSig = crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'));
+    }
+  } else if (intg?.config?.secret_key) {
+    const expectedSig = computeSignature(intg.config.secret_key, timestamp, nonce, bodyText);
+    if (signature.length === expectedSig.length) {
+      isValidSig = crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expectedSig, 'hex'));
     }
   }
 
