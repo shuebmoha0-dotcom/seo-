@@ -220,6 +220,62 @@ export default function ProjectMemoryPage() {
     }
   };
 
+  const handleDeleteInstructions = async () => {
+    if (!confirm("Are you sure you want to delete all Custom Project Instructions?")) return;
+    setSavingInstructions(true);
+    setSaveError(null);
+    try {
+      setInstructions("");
+      setSavedInstructionsSnapshot("");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("seo_project_instructions");
+      }
+
+      await fetch(`/api/memory?type=instructions${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, {
+        method: "DELETE",
+      });
+    } catch (err: any) {
+      console.error("Delete instructions error:", err);
+      setSaveError(err.message || "Failed to delete instructions");
+    } finally {
+      setSavingInstructions(false);
+    }
+  };
+
+  const handleDeleteKnowledge = async () => {
+    if (!confirm("Are you sure you want to delete the Knowledge Bank context documents?")) return;
+    setSavingKnowledge(true);
+    setSaveError(null);
+    try {
+      setKnowledgeBank("");
+      setSavedKnowledgeSnapshot("");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("seo_project_knowledge_bank");
+      }
+
+      await fetch(`/api/memory?type=knowledge_bank${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, {
+        method: "DELETE",
+      });
+    } catch (err: any) {
+      console.error("Delete knowledge error:", err);
+      setSaveError(err.message || "Failed to delete knowledge bank");
+    } finally {
+      setSavingKnowledge(false);
+    }
+  };
+
+  const handleDeleteMemory = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this memory fact?")) return;
+    try {
+      setMemories(prev => prev.filter(m => m.id !== id));
+      await fetch(`/api/memory/${id}`, {
+        method: "DELETE",
+      });
+    } catch (err: any) {
+      console.error("Delete memory item error:", err);
+    }
+  };
+
   const filteredMemories = memories.filter(m => {
     const matchesCategory = selectedCategoryFilter === "all" || m.category === selectedCategoryFilter;
     const matchesSearch = !searchQuery || m.content.toLowerCase().includes(searchQuery.toLowerCase());
@@ -350,14 +406,25 @@ export default function ProjectMemoryPage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={handleSaveInstructions}
-                  disabled={savingInstructions}
-                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm shrink-0"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{savingInstructions ? "Saving to Database..." : "Save Project Instructions"}</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleDeleteInstructions}
+                    disabled={savingInstructions || !instructions}
+                    className="bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-600 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 border border-red-200"
+                    title="Delete Custom Instructions"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                  <button
+                    onClick={handleSaveInstructions}
+                    disabled={savingInstructions}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingInstructions ? "Saving to Database..." : "Save Project Instructions"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Quick Template Buttons */}
@@ -432,14 +499,25 @@ export default function ProjectMemoryPage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={handleSaveKnowledge}
-                  disabled={savingKnowledge}
-                  className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm shrink-0"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{savingKnowledge ? "Saving to Database..." : "Save Knowledge Bank"}</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={handleDeleteKnowledge}
+                    disabled={savingKnowledge || !knowledgeBank}
+                    className="bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-600 font-bold text-xs px-3.5 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 border border-red-200"
+                    title="Delete Knowledge Bank"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                  <button
+                    onClick={handleSaveKnowledge}
+                    disabled={savingKnowledge}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{savingKnowledge ? "Saving to Database..." : "Save Knowledge Bank"}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Large Textarea Knowledge Workspace */}
@@ -520,12 +598,21 @@ export default function ProjectMemoryPage() {
                         <span>{CatInfo.label}</span>
                       </span>
 
-                      {m.is_important && (
-                        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>Important</span>
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {m.is_important && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                            <span>Important</span>
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleDeleteMemory(m.id)}
+                          className="p-1 text-neutral-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete memory"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <p className="text-xs text-neutral-800 leading-relaxed font-sans font-medium">

@@ -253,3 +253,44 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+// DELETE clear instructions, knowledge bank, or memories
+export async function DELETE(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type');
+    const website_id = searchParams.get('website_id');
+
+    const supabase = await createClient();
+
+    if (type === 'instructions') {
+      await supabase
+        .from('project_memory')
+        .delete()
+        .eq('source', 'project_custom_instructions');
+
+      if (website_id) {
+        await supabase
+          .from('content_rules')
+          .update({ custom_rules: '', updated_at: new Date().toISOString() })
+          .eq('website_id', website_id);
+      }
+
+      return NextResponse.json({ success: true, message: 'Custom instructions deleted' });
+    }
+
+    if (type === 'knowledge_bank') {
+      await supabase
+        .from('project_memory')
+        .delete()
+        .eq('source', 'project_knowledge_bank');
+
+      return NextResponse.json({ success: true, message: 'Knowledge bank deleted' });
+    }
+
+    return NextResponse.json({ error: 'Valid type parameter required (instructions or knowledge_bank)' }, { status: 400 });
+  } catch (error: any) {
+    console.error('[Memory DELETE] Error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
