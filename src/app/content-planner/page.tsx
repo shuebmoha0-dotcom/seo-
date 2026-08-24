@@ -280,7 +280,7 @@ export default function ContentPlannerPage() {
                 <div>
                   <h3 className="text-sm font-bold text-neutral-900">1-Click Autonomous Article Generator</h3>
                   <p className="text-xs text-neutral-500">
-                    Enter any keyword. AI writes 1,500+ words, generates Gemini visual illustrations, and creates SEO metadata automatically.
+                    Enter any keyword. AI writes 1,500+ words, creates high-resolution visual illustrations, and prepares SEO metadata automatically.
                   </p>
                 </div>
               </div>
@@ -291,7 +291,7 @@ export default function ContentPlannerPage() {
               <div className="flex items-center gap-2 text-neutral-700">
                 <Brain className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                 <span className="text-[11px]">
-                  <strong className="text-neutral-900">Project Custom Instructions Active:</strong> Brand persona &amp; guidelines are automatically applied to every draft.
+                  <strong className="text-neutral-900">Brand Persona &amp; Custom Instructions Active:</strong> Applied automatically to all draft outlines and copy.
                 </span>
               </div>
               <a
@@ -325,7 +325,7 @@ export default function ContentPlannerPage() {
               className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-6 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>{generating ? "Writing Article & Generating Image..." : "Generate Article"}</span>
+              <span>{generating ? "Writing Article & Generating Visuals..." : "Generate Article"}</span>
             </button>
           </div>
 
@@ -334,8 +334,8 @@ export default function ContentPlannerPage() {
             <div className="p-4 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex items-center gap-3 text-xs text-indigo-900 animate-pulse">
               <Loader2 className="w-4 h-4 animate-spin text-indigo-600 shrink-0" />
               <div>
-                <span className="font-bold">Autonomous Pipeline Running: </span>
-                <span>Claude Sonnet 5 / Luna is writing the content brief and full draft, while Gemini generates the featured illustration...</span>
+                <span className="font-bold">Autonomous Engine Running: </span>
+                <span>Analyzing search intent, writing comprehensive article sections, and generating featured editorial visual...</span>
               </div>
             </div>
           )}
@@ -400,7 +400,7 @@ export default function ContentPlannerPage() {
             <FileText className="w-8 h-8 text-neutral-400 mx-auto" />
             <h3 className="text-base font-bold text-neutral-900">No Content Drafts Generated Yet</h3>
             <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-              Type any keyword into the generator above to create your first article with an integrated Gemini AI illustration.
+              Type any keyword into the generator above to create your first article with an integrated high-resolution AI illustration.
             </p>
           </div>
         ) : (
@@ -593,7 +593,7 @@ export default function ContentPlannerPage() {
                           </span>
                           <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" />
-                            <span>Gemini Generated</span>
+                            <span>AI Generated Visual</span>
                           </span>
                         </div>
 

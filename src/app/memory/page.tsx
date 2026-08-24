@@ -303,7 +303,7 @@ export default function ProjectMemoryPage() {
               <span>Project Memory &amp; Custom Instructions</span>
             </h1>
             <p className="text-neutral-500 text-xs mt-0.5">
-              Claude-Projects style memory space, persona guidelines, and reference knowledge automatically injected into all AI agent workflows for {currentWebsite?.domain || "your website"}.
+              Brand persona guidelines, editorial rules, and reference knowledge repository automatically applied across all SEO workflows for {currentWebsite?.domain || "your website"}.
             </p>
           </div>
 
@@ -337,7 +337,7 @@ export default function ProjectMemoryPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               </div>
               <p className="text-[11px] text-emerald-700 mt-0.5">
-                Automatically injected into Claude Sonnet 5, GPT-5.6 Luna, and Gemini Image Agent for all article writing and strategy tasks.
+                Automatically synchronized and applied across all article generation, keyword planning, and optimization workflows.
               </p>
             </div>
           </div>
@@ -364,8 +364,8 @@ export default function ProjectMemoryPage() {
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 mb-6 text-xs font-bold">
           {[
-            { id: "instructions", label: "📝 Custom Project Instructions", desc: "Claude Project Style Prompt" },
-            { id: "knowledge", label: "📚 Knowledge Bank & Reference Context", desc: "Large Document Memory" },
+            { id: "instructions", label: "📝 Custom Brand Instructions", desc: "Writing Persona & Rules" },
+            { id: "knowledge", label: "📚 Knowledge Base & Context Documents", desc: "Reference Repository" },
             { id: "vault", label: `🧠 Structured Memory Vault (${memories.length})`, desc: "Categorized Knowledge" },
           ].map(tab => (
             <button
@@ -382,7 +382,7 @@ export default function ProjectMemoryPage() {
           ))}
         </div>
 
-        {/* ── TAB 1: CLAUDE-PROJECT STYLE CUSTOM INSTRUCTIONS ── */}
+        {/* ── TAB 1: CUSTOM BRAND INSTRUCTIONS ── */}
         {activeTab === "instructions" && (
           <div className="space-y-6">
             <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-xs space-y-4">
@@ -391,7 +391,7 @@ export default function ProjectMemoryPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-indigo-600" />
-                      Custom Project Instructions (Claude Project Prompt)
+                      Custom Brand Instructions &amp; Editorial Persona
                     </h3>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                       hasUnsavedInstructions
@@ -402,7 +402,7 @@ export default function ProjectMemoryPage() {
                     </span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Define the writing persona, brand rules, forbidden competitors, and tone. Injected directly into Claude Sonnet &amp; Luna every time an article is written.
+                    Define your brand persona, tone of voice, editorial standards, and forbidden topics. Automatically applied whenever new articles and content are produced.
                   </p>
                 </div>
 
@@ -435,7 +435,7 @@ export default function ProjectMemoryPage() {
                     className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>{savingInstructions ? "Saving to Database..." : "Save Project Instructions"}</span>
+                    <span>{savingInstructions ? "Saving..." : "Save Project Instructions"}</span>
                   </button>
                 </div>
               </div>
@@ -474,13 +474,13 @@ export default function ProjectMemoryPage() {
                 <textarea
                   value={instructions}
                   onChange={e => setInstructions(e.target.value)}
-                  placeholder="Enter your comprehensive project instructions here (e.g. detailed writing guidelines, target persona, brand voice, forbidden topics, formatting standards)..."
+                  placeholder="Enter your comprehensive brand instructions here (e.g. detailed writing guidelines, target persona, brand voice, forbidden topics, formatting standards)..."
                   className="w-full bg-neutral-50/70 border border-neutral-200 rounded-2xl p-5 text-xs text-neutral-900 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
                   rows={16}
                 />
 
                 <div className="flex items-center justify-between text-[11px] text-neutral-400 px-1">
-                  <span>Capacity: Up to 50,000+ characters (Claude Project workspace)</span>
+                  <span>Capacity: Up to 50,000+ characters</span>
                   <span>{instructions.length} characters • ~{Math.ceil(instructions.split(/\s+/).filter(Boolean).length)} words</span>
                 </div>
               </div>
