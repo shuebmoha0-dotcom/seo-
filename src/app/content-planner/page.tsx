@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type DraftStatus = "brief_pending" | "writing" | "qa_pending" | "needs_revision" | "ready_for_approval" | "approved" | "rejected";
+type DraftStatus = "brief_pending" | "writing" | "qa_pending" | "needs_revision" | "ready_for_approval" | "approved" | "rejected" | "published" | "draft";
 
 interface ContentDraft {
   id: string;
@@ -60,12 +60,14 @@ const DEFAULT_RULES = {
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; dot: string }> = {
-  brief_pending: { label: "Brief Pending", color: "bg-neutral-100 text-neutral-600 border-neutral-200", dot: "bg-neutral-400" },
+  brief_pending: { label: "Draft (Brief)", color: "bg-neutral-100 text-neutral-600 border-neutral-200", dot: "bg-neutral-400" },
   writing: { label: "Writing…", color: "bg-blue-50 text-blue-600 border-blue-200", dot: "bg-blue-500 animate-pulse" },
   qa_pending: { label: "QA Pending", color: "bg-amber-50 text-amber-600 border-amber-200", dot: "bg-amber-500" },
   needs_revision: { label: "Needs Revision", color: "bg-red-50 text-red-600 border-red-200", dot: "bg-red-500" },
-  ready_for_approval: { label: "Awaiting Approval", color: "bg-indigo-50 text-indigo-600 border-indigo-200", dot: "bg-indigo-500 animate-pulse" },
-  approved: { label: "Approved & Queued", color: "bg-emerald-50 text-emerald-600 border-emerald-200", dot: "bg-emerald-500" },
+  ready_for_approval: { label: "🟡 Draft (Ready for Review)", color: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500 animate-pulse" },
+  draft: { label: "🟡 Draft (Ready)", color: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
+  approved: { label: "🔵 Approved & Queued", color: "bg-indigo-50 text-indigo-700 border-indigo-200", dot: "bg-indigo-500" },
+  published: { label: "🟢 Published (Live)", color: "bg-emerald-600 text-white border-emerald-600", dot: "bg-white" },
   rejected: { label: "Rejected", color: "bg-neutral-100 text-neutral-500 border-neutral-200", dot: "bg-neutral-300" },
 };
 
@@ -195,9 +197,26 @@ export default function ContentPlannerPage() {
     );
   };
 
+  const [filterStatus, setFilterStatus] = useState<"all" | "draft" | "published" | "needs_revision">("all");
+  const [publishing, setPublishing] = useState<string | null>(null);
+
   const fetchDrafts = async () => {
     try {
       setLoadingDrafts(true);
+      // 1. Initial hydration from localStorage cache so drafts never flash or disappear
+      if (typeof window !== "undefined") {
+        const cached = localStorage.getItem("seo_cached_drafts");
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setDrafts(parsed);
+              if (!selectedDraft) setSelectedDraft(parsed[0]);
+            }
+          } catch (e) {}
+        }
+      }
+
       const url = currentWebsite
         ? `/api/agent/content/draft?website_id=${currentWebsite.id}`
         : `/api/agent/content/draft`;
@@ -206,9 +225,14 @@ export default function ContentPlannerPage() {
       if (res.ok) {
         const data = await res.json();
         const loadedDrafts = data.drafts || [];
-        setDrafts(loadedDrafts);
-        if (loadedDrafts.length > 0 && !selectedDraft) {
-          setSelectedDraft(loadedDrafts[0]);
+        if (loadedDrafts.length > 0) {
+          setDrafts(loadedDrafts);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("seo_cached_drafts", JSON.stringify(loadedDrafts));
+          }
+          if (!selectedDraft) {
+            setSelectedDraft(loadedDrafts[0]);
+          }
         }
       }
     } catch (err) {
@@ -254,7 +278,13 @@ export default function ContentPlannerPage() {
       }
 
       if (data.draft) {
-        setDrafts(prev => [data.draft, ...prev.filter(d => d.id !== data.draft.id)]);
+        setDrafts(prev => {
+          const updated = [data.draft, ...prev.filter(d => d.id !== data.draft.id)];
+          if (typeof window !== "undefined") {
+            localStorage.setItem("seo_cached_drafts", JSON.stringify(updated));
+          }
+          return updated;
+        });
         setSelectedDraft(data.draft);
         setQuickKeyword("");
         setNewDraftForm({
@@ -274,6 +304,40 @@ export default function ContentPlannerPage() {
     }
   };
 
+  const handlePublishWordPress = async (draftToPublish?: ContentDraft) => {
+    const target = draftToPublish || selectedDraft;
+    if (!target) return;
+
+    setPublishing(target.id);
+    try {
+      await fetch("/api/agent/content/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft_id: target.id, action: "approve" }),
+      });
+
+      // Update state to published
+      setDrafts(prev => {
+        const updated = prev.map(d => d.id === target.id ? { ...d, status: "published" as DraftStatus } : d);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("seo_cached_drafts", JSON.stringify(updated));
+        }
+        return updated;
+      });
+
+      if (selectedDraft?.id === target.id) {
+        setSelectedDraft(prev => prev ? { ...prev, status: "published" as DraftStatus } : null);
+      }
+
+      alert("🎉 Article successfully published and synchronized with WordPress!");
+    } catch (err: any) {
+      console.error("Publish error:", err);
+      alert("Failed to publish article. Please check your WordPress connection.");
+    } finally {
+      setPublishing(null);
+    }
+  };
+
   const handleApproval = async (action: "approve" | "reject" | "revise") => {
     if (!selectedDraft) return;
     setApproving(action);
@@ -286,7 +350,13 @@ export default function ContentPlannerPage() {
 
       const statusMap: Record<string, DraftStatus> = { approve: "approved", reject: "rejected", revise: "needs_revision" };
       const newStatus = statusMap[action];
-      setDrafts(prev => prev.map(d => d.id === selectedDraft.id ? { ...d, status: newStatus } : d));
+      setDrafts(prev => {
+        const updated = prev.map(d => d.id === selectedDraft.id ? { ...d, status: newStatus } : d);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("seo_cached_drafts", JSON.stringify(updated));
+        }
+        return updated;
+      });
       setSelectedDraft(prev => prev ? { ...prev, status: newStatus } : null);
       setShowRevisionInput(false);
       setRevisionNote("");
@@ -490,36 +560,73 @@ export default function ContentPlannerPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                  Draft Queue ({drafts.length})
+                  Articles &amp; Drafts ({drafts.length})
                 </h3>
                 <button
                   onClick={fetchDrafts}
                   className="text-neutral-400 hover:text-neutral-700 transition-colors p-1"
+                  title="Refresh articles"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {drafts.map(d => (
-                <div
-                  key={d.id}
-                  onClick={() => setSelectedDraft(d)}
-                  className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-2 ${
-                    selectedDraft?.id === d.id
-                      ? "bg-indigo-50/70 border-indigo-300 shadow-sm"
-                      : "bg-white border-neutral-200 hover:bg-neutral-50"
+              {/* Status Filter Tabs */}
+              <div className="flex items-center gap-1.5 p-1 bg-neutral-100/80 rounded-xl text-[11px] font-semibold text-neutral-600">
+                <button
+                  onClick={() => setFilterStatus("all")}
+                  className={`flex-1 py-1 px-2 rounded-lg transition-colors ${
+                    filterStatus === "all" ? "bg-white text-indigo-600 font-bold shadow-xs" : "hover:text-neutral-900"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_CONFIG[d.status]?.color || "bg-neutral-100"}`}>
-                      {STATUS_CONFIG[d.status]?.label || d.status}
-                    </span>
-                    <span className="text-[10px] text-neutral-400">v{d.version}</span>
+                  All ({drafts.length})
+                </button>
+                <button
+                  onClick={() => setFilterStatus("draft")}
+                  className={`flex-1 py-1 px-2 rounded-lg transition-colors ${
+                    filterStatus === "draft" ? "bg-white text-indigo-600 font-bold shadow-xs" : "hover:text-neutral-900"
+                  }`}
+                >
+                  Drafts ({drafts.filter(d => d.status !== "published").length})
+                </button>
+                <button
+                  onClick={() => setFilterStatus("published")}
+                  className={`flex-1 py-1 px-2 rounded-lg transition-colors ${
+                    filterStatus === "published" ? "bg-white text-indigo-600 font-bold shadow-xs" : "hover:text-neutral-900"
+                  }`}
+                >
+                  Published ({drafts.filter(d => d.status === "published").length})
+                </button>
+              </div>
+
+              {drafts
+                .filter(d => {
+                  if (filterStatus === "all") return true;
+                  if (filterStatus === "published") return d.status === "published";
+                  if (filterStatus === "draft") return d.status !== "published";
+                  return true;
+                })
+                .map(d => (
+                  <div
+                    key={d.id}
+                    onClick={() => setSelectedDraft(d)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-2 ${
+                      selectedDraft?.id === d.id
+                        ? "bg-indigo-50/70 border-indigo-300 shadow-sm"
+                        : "bg-white border-neutral-200 hover:bg-neutral-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${STATUS_CONFIG[d.status]?.color || "bg-neutral-100"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[d.status]?.dot || "bg-neutral-400"}`}></span>
+                        <span>{STATUS_CONFIG[d.status]?.label || d.status}</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-mono">v{d.version}</span>
+                    </div>
+                    <h4 className="text-xs font-bold text-neutral-900 line-clamp-2">{d.working_title}</h4>
+                    <p className="text-[11px] text-neutral-500 font-mono">{d.primary_keyword}</p>
                   </div>
-                  <h4 className="text-xs font-bold text-neutral-900 line-clamp-2">{d.working_title}</h4>
-                  <p className="text-[11px] text-neutral-500 font-mono">{d.primary_keyword}</p>
-                </div>
-              ))}
+                ))}
             </div>
 
             {/* Right 2 Cols: Selected Draft Preview */}
@@ -527,26 +634,37 @@ export default function ContentPlannerPage() {
               <div className="lg:col-span-2 bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-100 pb-4">
                   <div>
-                    <h2 className="text-base font-bold text-neutral-900">{selectedDraft.working_title}</h2>
-                    <div className="flex items-center gap-3 text-xs text-neutral-500 mt-1">
-                      <span>{selectedDraft.word_count} words</span>
-                      <span>•</span>
-                      <span>{selectedDraft.reading_time} min read</span>
-                      <span>•</span>
-                      <span className="font-mono text-indigo-600">{selectedDraft.url_slug}</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${STATUS_CONFIG[selectedDraft.status]?.color || "bg-neutral-100"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedDraft.status]?.dot || "bg-neutral-400"}`}></span>
+                        <span>{STATUS_CONFIG[selectedDraft.status]?.label || selectedDraft.status}</span>
+                      </span>
+                      <span className="text-xs text-neutral-400">•</span>
+                      <span className="text-xs font-mono text-neutral-500">{selectedDraft.word_count} words</span>
+                      <span className="text-xs text-neutral-400">•</span>
+                      <span className="text-xs font-mono text-neutral-500">{selectedDraft.reading_time} min read</span>
                     </div>
+                    <h2 className="text-base font-bold text-neutral-900">{selectedDraft.working_title}</h2>
                   </div>
 
-                  {/* Approval Actions */}
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleApproval("approve")}
-                      disabled={approving !== null}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{approving === "approve" ? "Queuing to WordPress..." : "Approve & Send to WordPress"}</span>
-                    </button>
+                  {/* Approval and Publish Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {selectedDraft.status === "published" ? (
+                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Published to WordPress ✓</span>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handlePublishWordPress(selectedDraft)}
+                        disabled={publishing === selectedDraft.id}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>{publishing === selectedDraft.id ? "Publishing..." : "Publish to WordPress"}</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setShowRevisionInput(!showRevisionInput)}
                       className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-xs px-3 py-2 rounded-xl"

@@ -22,11 +22,7 @@ export async function GET(request: Request) {
       }
     }
 
-    if (!websiteId) {
-      return NextResponse.json({ drafts: [] });
-    }
-
-    const { data: drafts, error } = await supabase
+    let query = supabase
       .from('content_drafts')
       .select(`
         *,
@@ -34,8 +30,13 @@ export async function GET(request: Request) {
         content_qa_results (*),
         content_images (*)
       `)
-      .eq('website_id', websiteId)
       .order('created_at', { ascending: false });
+
+    if (websiteId) {
+      query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
+    }
+
+    const { data: drafts, error } = await query;
 
     if (error) throw error;
 
