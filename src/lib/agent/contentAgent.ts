@@ -148,7 +148,14 @@ export class ContentAgent {
           })),
         }),
         system: `You are an expert SEO content strategist. Create a precise, audience-first content brief.
-Rules to follow:
+
+${input.project_instructions ? `==================================================
+PROJECT CUSTOM INSTRUCTIONS (CLAUDE PROJECT GUIDELINES):
+${input.project_instructions}
+==================================================\n` : ''}${input.project_memory ? `==================================================
+PROJECT KNOWLEDGE BANK & MEMORY:
+${input.project_memory}
+==================================================\n` : ''}Rules to follow:
 - Audience: ${input.rules.audience}
 - Tone: ${input.rules.tone}
 - Word count: ${input.rules.word_count_min}–${input.rules.word_count_max} words
@@ -236,7 +243,13 @@ Generate a tight, practical brief. Headings should serve the reader, not just in
   }
 
   // 3. Write Draft — follows content rules strictly
-  async writeDraft(brief: ContentBrief, rules: ContentRules, revisionNotes?: string): Promise<string> {
+  async writeDraft(
+    brief: ContentBrief,
+    rules: ContentRules,
+    revisionNotes?: string,
+    projectInstructions?: string,
+    projectMemory?: string
+  ): Promise<string> {
     const headingOutline = brief.h2_h3_structure
       .map(h => `${h.level.toUpperCase()}: ${h.heading} (${h.notes})`)
       .join('\n');
@@ -247,12 +260,18 @@ Generate a tight, practical brief. Headings should serve the reader, not just in
 
     try {
       const { text } = await LLMProvider.generateText({
-      agent: 'ContentAgent',
-      
-        
-        system: `You are an expert SEO content writer. Follow these rules exactly:
+        agent: 'ContentAgent',
+        taskType: 'long_form_article',
+        complexity: 'complex',
+        system: `You are an expert SEO content writer and strategist. Follow these instructions and guidelines strictly:
 
-CONTENT RULES:
+${projectInstructions ? `==================================================
+PROJECT CUSTOM INSTRUCTIONS & PERSONA (CLAUDE PROJECT GUIDELINES):
+${projectInstructions}
+==================================================\n` : ''}${projectMemory ? `==================================================
+PROJECT KNOWLEDGE BANK & REFERENCE CONTEXT:
+${projectMemory}
+==================================================\n` : ''}CONTENT RULES:
 - Language: ${rules.language}
 - Tone: ${rules.tone}
 - Audience: ${rules.audience}
@@ -268,6 +287,7 @@ ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES:
 - Write for the reader first, search engines second
+- Embody the project custom instructions, brand voice, and reference context throughout
 - Use the primary keyword naturally — do NOT force it into every paragraph
 - Short paragraphs. Clear sentences. No filler.
 - Do NOT invent statistics, features, or customer claims
@@ -455,7 +475,7 @@ ${brief.cta}`;
     }
 
     const brief = await this.generateBrief(input);
-    let content = await this.writeDraft(brief, input.rules, revisionNotes);
+    let content = await this.writeDraft(brief, input.rules, revisionNotes, input.project_instructions, input.project_memory);
     const { word_count, reading_time_minutes } = this.countWords(content);
     const seoMeta = this.generateSEOMetadata(brief, content);
     const qa = this.runQA({ content, brief, rules: input.rules, images: brief.image_requirements });

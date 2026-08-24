@@ -132,6 +132,40 @@ export async function POST(request: Request) {
       custom_rules: rules?.custom_rules || '',
     };
 
+    // Auto-load Project Memory & Custom Instructions from Supabase
+    let projectInstructions = body.project_instructions || '';
+    let projectMemory = body.project_memory || '';
+
+    if (website_id) {
+      try {
+        const { data: memoryData } = await supabase
+          .from('project_memory')
+          .select('*')
+          .eq('website_id', website_id)
+          .eq('is_outdated', false)
+          .order('is_important', { ascending: false });
+
+        if (memoryData && memoryData.length > 0) {
+          const memoryBlocks = memoryData.map((m: any) => `[${m.category.toUpperCase()}] ${m.content}`).join('\n\n');
+          projectMemory = projectMemory ? `${projectMemory}\n\n${memoryBlocks}` : memoryBlocks;
+        }
+
+        const { data: websiteRules } = await supabase
+          .from('content_rules')
+          .select('*')
+          .eq('website_id', website_id)
+          .maybeSingle();
+
+        if (websiteRules?.custom_rules) {
+          projectInstructions = projectInstructions
+            ? `${projectInstructions}\n\n${websiteRules.custom_rules}`
+            : websiteRules.custom_rules;
+        }
+      } catch (memErr) {
+        console.warn('[Content Draft] Memory load error:', memErr);
+      }
+    }
+
     const output = await agent.runFullPipeline(
       {
         primary_keyword,
@@ -143,6 +177,8 @@ export async function POST(request: Request) {
         competitor_gaps,
         internal_linking_opportunities: internal_linking_opportunities || [],
         entities: entities || [],
+        project_instructions: projectInstructions || undefined,
+        project_memory: projectMemory || undefined,
         rules: defaultRules,
       },
       revision_notes
