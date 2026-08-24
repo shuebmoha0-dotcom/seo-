@@ -313,7 +313,16 @@ export default function ContentPlannerPage() {
       const res = await fetch("/api/agent/content/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft_id: target.id, action: "publish" }),
+        body: JSON.stringify({
+          draft_id: target.id,
+          action: "publish",
+          title: target.working_title,
+          content: target.content_body,
+          slug: target.url_slug,
+          seo_title: target.seo_title,
+          meta_description: target.meta_description,
+          website_id: currentWebsite?.id,
+        }),
       });
 
       const data = await res.json();

@@ -337,7 +337,7 @@ export async function POST(request: Request) {
             images: output.images,
           }
         : {
-            id: 'temp-' + Date.now(),
+            id: crypto.randomUUID(),
             working_title: output.working_title,
             primary_keyword,
             search_intent,

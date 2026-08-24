@@ -5,9 +5,10 @@ import { decryptCredential } from '@/lib/utils/encryption';
 
 export async function POST(request: Request) {
   try {
-    const { draft_id, action, notes } = await request.json();
-    if (!draft_id || !action) {
-      return NextResponse.json({ error: 'draft_id and action are required' }, { status: 400 });
+    const body = await request.json();
+    const { draft_id, action, notes, title, content, slug, seo_title, meta_description, website_id } = body;
+    if (!action) {
+      return NextResponse.json({ error: 'action is required' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -24,14 +25,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid action. Must be: approve | publish | reject | revise' }, { status: 400 });
     }
 
-    const { data: updatedDraft, error } = await supabase
-      .from('content_drafts')
-      .update({ status: newStatus, revision_notes: notes || null, updated_at: new Date().toISOString() })
-      .eq('id', draft_id)
-      .select()
-      .single();
+    const isUUID = draft_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(draft_id);
 
-    if (error) throw error;
+    let updatedDraft: any = null;
+
+    if (isUUID) {
+      const { data, error } = await supabase
+        .from('content_drafts')
+        .update({ status: newStatus, revision_notes: notes || null, updated_at: new Date().toISOString() })
+        .eq('id', draft_id)
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        updatedDraft = data;
+      }
+    }
+
+    // Fallback if draft was stored client-side or ID was temporary
+    if (!updatedDraft) {
+      updatedDraft = {
+        id: isUUID ? draft_id : crypto.randomUUID(),
+        website_id: website_id || null,
+        working_title: title || 'New SEO Article',
+        content_body: content || '',
+        url_slug: slug || 'article',
+        seo_title: seo_title || title || 'New SEO Article',
+        meta_description: meta_description || '',
+        status: newStatus,
+      };
+
+      // Try inserting into content_drafts safely
+      try {
+        await supabase.from('content_drafts').upsert({
+          id: updatedDraft.id,
+          website_id: updatedDraft.website_id,
+          primary_keyword: title || 'article',
+          working_title: updatedDraft.working_title,
+          content_body: updatedDraft.content_body,
+          url_slug: updatedDraft.url_slug,
+          seo_title: updatedDraft.seo_title,
+          meta_description: updatedDraft.meta_description,
+          status: newStatus,
+        });
+      } catch (upsertErr) {
+        console.warn('[Content Approval] Draft upsert error:', upsertErr);
+      }
+    }
 
     let wpPostResult: { id?: number; link?: string; status?: string } | null = null;
     let pushError: string | null = null;
