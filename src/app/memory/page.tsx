@@ -80,9 +80,20 @@ export default function ProjectMemoryPage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const fetchData = async () => {
     setLoading(true);
+    setSaveError(null);
     try {
+      // 1. Check localStorage first for instant display
+      if (typeof window !== "undefined") {
+        const localInstr = localStorage.getItem("seo_project_instructions");
+        const localKnowledge = localStorage.getItem("seo_project_knowledge_bank");
+        if (localInstr && !instructions) setInstructions(localInstr);
+        if (localKnowledge && !knowledgeBank) setKnowledgeBank(localKnowledge);
+      }
+
       const url = currentWebsite
         ? `/api/memory?website_id=${currentWebsite.id}`
         : `/api/memory`;
@@ -90,11 +101,17 @@ export default function ProjectMemoryPage() {
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
-        setInstructions(data.instructions || "");
-        setKnowledgeBank(data.knowledge_bank || "");
+        if (data.instructions) {
+          setInstructions(data.instructions);
+          if (typeof window !== "undefined") localStorage.setItem("seo_project_instructions", data.instructions);
+        }
+        if (data.knowledge_bank) {
+          setKnowledgeBank(data.knowledge_bank);
+          if (typeof window !== "undefined") localStorage.setItem("seo_project_knowledge_bank", data.knowledge_bank);
+        }
         setMemories(data.memories || []);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching project memory data:", err);
     } finally {
       setLoading(false);
@@ -107,8 +124,15 @@ export default function ProjectMemoryPage() {
 
   const handleSaveInstructions = async () => {
     setSavingInstructions(true);
+    setSaveError(null);
+    setSavedSuccess(null);
     try {
-      await fetch("/api/memory", {
+      // Immediate localStorage backup
+      if (typeof window !== "undefined") {
+        localStorage.setItem("seo_project_instructions", instructions);
+      }
+
+      const res = await fetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -117,10 +141,17 @@ export default function ProjectMemoryPage() {
           instructions,
         }),
       });
-      setSavedSuccess("Instructions saved successfully!");
-      setTimeout(() => setSavedSuccess(null), 3000);
-    } catch (err) {
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save instructions to database");
+      }
+
+      setSavedSuccess("Project Custom Instructions saved and active across all AI agents!");
+      setTimeout(() => setSavedSuccess(null), 4000);
+    } catch (err: any) {
       console.error("Save instructions error:", err);
+      setSaveError(err.message || "Failed to save instructions");
     } finally {
       setSavingInstructions(false);
     }
@@ -128,8 +159,14 @@ export default function ProjectMemoryPage() {
 
   const handleSaveKnowledge = async () => {
     setSavingKnowledge(true);
+    setSaveError(null);
+    setSavedSuccess(null);
     try {
-      await fetch("/api/memory", {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("seo_project_knowledge_bank", knowledgeBank);
+      }
+
+      const res = await fetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -138,10 +175,17 @@ export default function ProjectMemoryPage() {
           knowledge_bank: knowledgeBank,
         }),
       });
-      setSavedSuccess("Knowledge Bank saved successfully!");
-      setTimeout(() => setSavedSuccess(null), 3000);
-    } catch (err) {
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save knowledge bank to database");
+      }
+
+      setSavedSuccess("Knowledge Bank saved and active across all AI agents!");
+      setTimeout(() => setSavedSuccess(null), 4000);
+    } catch (err: any) {
       console.error("Save knowledge error:", err);
+      setSaveError(err.message || "Failed to save knowledge bank");
     } finally {
       setSavingKnowledge(false);
     }
@@ -231,6 +275,18 @@ export default function ProjectMemoryPage() {
           <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="font-semibold">{savedSuccess}</span>
+          </div>
+        )}
+
+        {saveError && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 text-xs rounded-2xl flex items-center justify-between animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-600" />
+              <span className="font-semibold">{saveError}</span>
+            </div>
+            <button onClick={() => setSaveError(null)} className="text-red-500 hover:text-red-700">
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 

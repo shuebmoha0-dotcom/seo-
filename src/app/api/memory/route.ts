@@ -24,48 +24,62 @@ export async function GET(request: Request) {
       .order('is_important', { ascending: false })
       .order('created_at', { ascending: false });
 
-    if (website_id) query = query.eq('website_id', website_id);
+    if (website_id) query = query.or(`website_id.eq.${website_id},website_id.is.null`);
     if (category) query = query.eq('category', category);
     if (!include_outdated) query = query.eq('is_outdated', false);
 
     const { data, error } = await query;
     if (error) throw error;
 
-    // Fetch custom instructions from content_rules
-    let instructions = '';
-    if (website_id) {
-      const { data: rulesData } = await supabase
-        .from('content_rules')
-        .select('custom_rules')
-        .eq('website_id', website_id)
-        .maybeSingle();
+    // 1. Fetch instructions from project_memory first
+    const instrMem = (data || []).find((m: any) => m.source === 'project_custom_instructions');
+    let instructions = instrMem?.content || '';
 
-      if (rulesData?.custom_rules) {
-        instructions = rulesData.custom_rules;
+    // If not in project_memory, fallback to content_rules
+    if (!instructions && website_id) {
+      try {
+        const { data: rulesData } = await supabase
+          .from('content_rules')
+          .select('custom_rules')
+          .eq('website_id', website_id)
+          .maybeSingle();
+
+        if (rulesData?.custom_rules) {
+          instructions = rulesData.custom_rules;
+        }
+      } catch (rErr) {
+        console.warn('[Memory GET] content_rules read error:', rErr);
       }
     }
 
-    // Fetch large knowledge bank document from project_memory
-    const knowledgeMemory = (data || []).find((m: any) => m.category === 'content_strategy' && m.source === 'project_knowledge_bank');
+    // 2. Fetch knowledge bank from project_memory
+    const knowledgeMemory = (data || []).find((m: any) => m.source === 'project_knowledge_bank');
+    const knowledge_bank = knowledgeMemory?.content || '';
 
-    if (task_type && data) {
+    // Filter out internal system memory rows from the public list of individual memory items
+    const displayMemories = (data || []).filter(
+      (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+    );
+
+    if (task_type && displayMemories) {
       const agent = new MemoryAgent();
-      const relevant = agent.filterForTask(data as any, task_type);
+      const relevant = agent.filterForTask(displayMemories as any, task_type);
       return NextResponse.json({
         instructions,
-        knowledge_bank: knowledgeMemory?.content || '',
+        knowledge_bank,
         memories: relevant,
-        total: data.length,
+        total: displayMemories.length,
         filtered: relevant.length,
       });
     }
 
     return NextResponse.json({
       instructions,
-      knowledge_bank: knowledgeMemory?.content || '',
-      memories: data || [],
+      knowledge_bank,
+      memories: displayMemories,
     });
   } catch (error: any) {
+    console.error('[Memory GET] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
@@ -98,64 +112,103 @@ export async function POST(request: Request) {
 
     // 1. Save Claude-Projects Style Custom Instructions
     if (type === 'instructions') {
-      if (website_id) {
-        // Upsert in content_rules
-        const { data: existing } = await supabase
-          .from('content_rules')
-          .select('id')
-          .eq('website_id', website_id)
-          .maybeSingle();
+      const safeInstructions = instructions ?? '';
 
-        if (existing) {
-          await supabase
+      // Save in project_memory (Guaranteed persistent storage)
+      const { data: existingInstr } = await supabase
+        .from('project_memory')
+        .select('id')
+        .eq('source', 'project_custom_instructions')
+        .maybeSingle();
+
+      if (existingInstr) {
+        await supabase
+          .from('project_memory')
+          .update({
+            content: safeInstructions,
+            website_id: website_id || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingInstr.id);
+      } else {
+        await supabase.from('project_memory').insert({
+          website_id: website_id || null,
+          category: 'brand',
+          content: safeInstructions,
+          source: 'project_custom_instructions',
+          source_detail: 'Custom Project Instructions (Claude Project Style)',
+          confidence: 'high',
+          is_important: true,
+          tags: ['custom_instructions', 'claude_project_prompt'],
+        });
+      }
+
+      // Also sync to content_rules if website exists
+      if (website_id) {
+        try {
+          const { data: existingRule } = await supabase
             .from('content_rules')
-            .update({ custom_rules: instructions, updated_at: new Date().toISOString() })
-            .eq('website_id', website_id);
-        } else {
-          await supabase.from('content_rules').insert({
-            website_id,
-            custom_rules: instructions,
-            word_count_min: 900,
-            word_count_max: 1500,
-            language: 'U.S. English',
-            tone: 'Professional, natural, helpful',
-            audience: 'SaaS founders and search audience',
-          });
+            .select('id')
+            .eq('website_id', website_id)
+            .maybeSingle();
+
+          if (existingRule) {
+            await supabase
+              .from('content_rules')
+              .update({ custom_rules: safeInstructions, updated_at: new Date().toISOString() })
+              .eq('id', existingRule.id);
+          } else {
+            await supabase.from('content_rules').insert({
+              website_id,
+              custom_rules: safeInstructions,
+              word_count_min: 900,
+              word_count_max: 1500,
+              language: 'U.S. English',
+              tone: 'Professional, natural, helpful',
+              audience: 'SaaS founders and search audience',
+            });
+          }
+        } catch (ruleErr) {
+          console.warn('[Memory POST] content_rules sync error:', ruleErr);
         }
       }
-      return NextResponse.json({ success: true, instructions });
+
+      return NextResponse.json({ success: true, instructions: safeInstructions });
     }
 
     // 2. Save Claude-Projects Style Knowledge Bank / Large Context
     if (type === 'knowledge_bank') {
-      if (website_id) {
-        const { data: existing } = await supabase
-          .from('project_memory')
-          .select('id')
-          .eq('website_id', website_id)
-          .eq('category', 'content_strategy')
-          .eq('source', 'project_knowledge_bank')
-          .maybeSingle();
+      const safeKnowledge = knowledge_bank ?? '';
 
-        if (existing) {
-          await supabase
-            .from('project_memory')
-            .update({ content: knowledge_bank, updated_at: new Date().toISOString() })
-            .eq('id', existing.id);
-        } else {
-          await supabase.from('project_memory').insert({
-            website_id,
-            category: 'content_strategy',
-            content: knowledge_bank,
-            source: 'project_knowledge_bank',
-            source_detail: 'User Knowledge Bank & Context Documents',
-            confidence: 'high',
-            is_important: true,
-            tags: ['knowledge_bank', 'context_docs'],
-          });
-        }
+      const { data: existingKnowledge } = await supabase
+        .from('project_memory')
+        .select('id')
+        .eq('source', 'project_knowledge_bank')
+        .maybeSingle();
+
+      if (existingKnowledge) {
+        await supabase
+          .from('project_memory')
+          .update({
+            content: safeKnowledge,
+            website_id: website_id || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingKnowledge.id);
+      } else {
+        await supabase.from('project_memory').insert({
+          website_id: website_id || null,
+          category: 'content_strategy',
+          content: safeKnowledge,
+          source: 'project_knowledge_bank',
+          source_detail: 'Project Knowledge Bank & Context Documents',
+          confidence: 'high',
+          is_important: true,
+          tags: ['knowledge_bank', 'context_docs'],
+        });
       }
-      return NextResponse.json({ success: true, knowledge_bank });
+
+      return NextResponse.json({ success: true, knowledge_bank: safeKnowledge });
     }
 
     // 3. Save standard structured memory item
@@ -166,7 +219,7 @@ export async function POST(request: Request) {
     const { data: memory, error } = await supabase
       .from('project_memory')
       .insert({
-        website_id,
+        website_id: website_id || null,
         category,
         content,
         source: source || 'user_added',
@@ -182,16 +235,21 @@ export async function POST(request: Request) {
 
     const agent = new MemoryAgent();
     const action = triggered_by === 'user' ? 'user_added' : 'learned';
-    await supabase.from('memory_activity').insert({
-      website_id,
-      memory_id: memory.id,
-      action,
-      summary: agent.generateActivitySummary(action, { category, content }),
-      triggered_by: triggered_by || 'agent',
-    });
+    try {
+      await supabase.from('memory_activity').insert({
+        website_id: website_id || null,
+        memory_id: memory.id,
+        action,
+        summary: agent.generateActivitySummary(action, { category, content }),
+        triggered_by: triggered_by || 'agent',
+      });
+    } catch (actErr) {
+      console.warn('[Memory POST] Activity log error:', actErr);
+    }
 
     return NextResponse.json({ success: true, memory });
   } catch (error: any) {
+    console.error('[Memory POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
