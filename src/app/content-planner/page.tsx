@@ -662,21 +662,14 @@ export default function ContentPlannerPage() {
 
                   {/* Approval and Publish Actions */}
                   <div className="flex items-center gap-2 shrink-0">
-                    {selectedDraft.status === "published" ? (
-                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Published to WordPress ✓</span>
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handlePublishWordPress(selectedDraft)}
-                        disabled={publishing === selectedDraft.id}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-                      >
-                        <Globe className="w-3.5 h-3.5" />
-                        <span>{publishing === selectedDraft.id ? "Publishing..." : "Publish to WordPress"}</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handlePublishWordPress(selectedDraft)}
+                      disabled={publishing === selectedDraft.id}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span>{publishing === selectedDraft.id ? "Publishing to WordPress..." : "🚀 Publish / Sync to WordPress"}</span>
+                    </button>
 
                     <button
                       onClick={() => setShowRevisionInput(!showRevisionInput)}
