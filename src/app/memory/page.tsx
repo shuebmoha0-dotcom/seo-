@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronRight, Search, Filter, Clock, Cpu, User,
   Building2, Package, Users, Megaphone, FileText, Target, Trophy,
   Link2, Lightbulb, FlaskConical, Wrench, Workflow, Info, Save,
-  X, RefreshCw, BookOpen, FileCode, Sparkles, HelpCircle, Layers
+  X, RefreshCw, BookOpen, Sparkles, Check, ShieldCheck
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -33,14 +33,6 @@ interface MemoryItem {
   updated_at: string;
 }
 
-interface ActivityItem {
-  id: string;
-  action: 'learned' | 'updated' | 'deleted' | 'marked_important' | 'user_added' | 'user_edited' | 'outdated';
-  summary: string;
-  triggered_by: 'agent' | 'user';
-  created_at: string;
-}
-
 // ─── Category config ──────────────────────────────────────────────────────────
 const CATEGORIES: Record<MemoryCategory, { label: string; icon: any; color: string }> = {
   company:          { label: "Company",           icon: Building2,   color: "text-neutral-600 bg-neutral-100 border-neutral-200" },
@@ -62,15 +54,16 @@ const CATEGORIES: Record<MemoryCategory, { label: string; icon: any; color: stri
 export default function ProjectMemoryPage() {
   const { currentWebsite } = useWebsite();
 
-  const [activeTab, setActiveTab] = useState<"instructions" | "knowledge" | "vault" | "activity">("instructions");
+  const [activeTab, setActiveTab] = useState<"instructions" | "knowledge" | "vault">("instructions");
   const [instructions, setInstructions] = useState("");
+  const [savedInstructionsSnapshot, setSavedInstructionsSnapshot] = useState("");
   const [knowledgeBank, setKnowledgeBank] = useState("");
+  const [savedKnowledgeSnapshot, setSavedKnowledgeSnapshot] = useState("");
   const [memories, setMemories] = useState<MemoryItem[]>([]);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingInstructions, setSavingInstructions] = useState(false);
   const [savingKnowledge, setSavingKnowledge] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState<string | null>(null);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
   // New Memory Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -79,19 +72,23 @@ export default function ProjectMemoryPage() {
   const [newMemoryImportant, setNewMemoryImportant] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
     setSaveError(null);
     try {
-      // 1. Check localStorage first for instant display
       if (typeof window !== "undefined") {
         const localInstr = localStorage.getItem("seo_project_instructions");
         const localKnowledge = localStorage.getItem("seo_project_knowledge_bank");
-        if (localInstr && !instructions) setInstructions(localInstr);
-        if (localKnowledge && !knowledgeBank) setKnowledgeBank(localKnowledge);
+        if (localInstr) {
+          setInstructions(localInstr);
+          setSavedInstructionsSnapshot(localInstr);
+        }
+        if (localKnowledge) {
+          setKnowledgeBank(localKnowledge);
+          setSavedKnowledgeSnapshot(localKnowledge);
+        }
       }
 
       const url = currentWebsite
@@ -103,13 +100,16 @@ export default function ProjectMemoryPage() {
         const data = await res.json();
         if (data.instructions) {
           setInstructions(data.instructions);
+          setSavedInstructionsSnapshot(data.instructions);
           if (typeof window !== "undefined") localStorage.setItem("seo_project_instructions", data.instructions);
         }
         if (data.knowledge_bank) {
           setKnowledgeBank(data.knowledge_bank);
+          setSavedKnowledgeSnapshot(data.knowledge_bank);
           if (typeof window !== "undefined") localStorage.setItem("seo_project_knowledge_bank", data.knowledge_bank);
         }
         setMemories(data.memories || []);
+        setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
     } catch (err: any) {
       console.error("Error fetching project memory data:", err);
@@ -122,12 +122,13 @@ export default function ProjectMemoryPage() {
     fetchData();
   }, [currentWebsite?.id]);
 
+  const hasUnsavedInstructions = instructions !== savedInstructionsSnapshot;
+  const hasUnsavedKnowledge = knowledgeBank !== savedKnowledgeSnapshot;
+
   const handleSaveInstructions = async () => {
     setSavingInstructions(true);
     setSaveError(null);
-    setSavedSuccess(null);
     try {
-      // Immediate localStorage backup
       if (typeof window !== "undefined") {
         localStorage.setItem("seo_project_instructions", instructions);
       }
@@ -147,8 +148,8 @@ export default function ProjectMemoryPage() {
         throw new Error(data.error || "Failed to save instructions to database");
       }
 
-      setSavedSuccess("Project Custom Instructions saved and active across all AI agents!");
-      setTimeout(() => setSavedSuccess(null), 4000);
+      setSavedInstructionsSnapshot(instructions);
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err: any) {
       console.error("Save instructions error:", err);
       setSaveError(err.message || "Failed to save instructions");
@@ -160,7 +161,6 @@ export default function ProjectMemoryPage() {
   const handleSaveKnowledge = async () => {
     setSavingKnowledge(true);
     setSaveError(null);
-    setSavedSuccess(null);
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem("seo_project_knowledge_bank", knowledgeBank);
@@ -181,8 +181,8 @@ export default function ProjectMemoryPage() {
         throw new Error(data.error || "Failed to save knowledge bank to database");
       }
 
-      setSavedSuccess("Knowledge Bank saved and active across all AI agents!");
-      setTimeout(() => setSavedSuccess(null), 4000);
+      setSavedKnowledgeSnapshot(knowledgeBank);
+      setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err: any) {
       console.error("Save knowledge error:", err);
       setSaveError(err.message || "Failed to save knowledge bank");
@@ -226,7 +226,6 @@ export default function ProjectMemoryPage() {
     return matchesCategory && matchesSearch;
   });
 
-  // Instruction Template Appenders
   const appendInstructionTemplate = (template: string) => {
     setInstructions(prev => prev ? `${prev}\n\n${template}` : template);
   };
@@ -270,18 +269,34 @@ export default function ProjectMemoryPage() {
           </div>
         </div>
 
-        {/* Status Notification */}
-        {savedSuccess && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl flex items-center gap-2 animate-fadeIn">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="font-semibold">{savedSuccess}</span>
+        {/* ── ALWAYS VISIBLE PERSISTENT ACTIVE STATUS BANNER ── */}
+        <div className="mb-6 p-4 bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold">Project Memory &amp; Instructions Active</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              </div>
+              <p className="text-[11px] text-emerald-700 mt-0.5">
+                Automatically injected into Claude Sonnet 5, GPT-5.6 Luna, and Gemini Image Agent for all article writing and strategy tasks.
+              </p>
+            </div>
           </div>
-        )}
 
+          <div className="flex items-center gap-3 text-xs shrink-0 font-medium text-emerald-800 bg-white/80 px-3.5 py-1.5 rounded-xl border border-emerald-200">
+            <span>💾 Status: <strong className="text-emerald-900">Synchronized</strong></span>
+            {lastSavedTime && <span>• Last saved: {lastSavedTime}</span>}
+          </div>
+        </div>
+
+        {/* Error Notification */}
         {saveError && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 text-xs rounded-2xl flex items-center justify-between animate-fadeIn">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-600" />
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
               <span className="font-semibold">{saveError}</span>
             </div>
             <button onClick={() => setSaveError(null)} className="text-red-500 hover:text-red-700">
@@ -317,12 +332,21 @@ export default function ProjectMemoryPage() {
             <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4">
                 <div>
-                  <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
-                    Custom Project Instructions (Claude Project Prompt)
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      Custom Project Instructions (Claude Project Prompt)
+                    </h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      hasUnsavedInstructions
+                        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    }`}>
+                      {hasUnsavedInstructions ? "● Unsaved Changes" : "✓ Saved in Project Memory"}
+                    </span>
+                  </div>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Define the writing persona, brand rules, forbidden competitors, and tone. These instructions are injected directly into Claude Sonnet &amp; Luna every time an article is written.
+                    Define the writing persona, brand rules, forbidden competitors, and tone. Injected directly into Claude Sonnet &amp; Luna every time an article is written.
                   </p>
                 </div>
 
@@ -332,7 +356,7 @@ export default function ProjectMemoryPage() {
                   className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm shrink-0"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>{savingInstructions ? "Saving..." : "Save Project Instructions"}</span>
+                  <span>{savingInstructions ? "Saving to Database..." : "Save Project Instructions"}</span>
                 </button>
               </div>
 
@@ -390,10 +414,19 @@ export default function ProjectMemoryPage() {
             <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4">
                 <div>
-                  <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-indigo-600" />
-                    Project Knowledge Bank &amp; Context Documents
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-indigo-600" />
+                      Project Knowledge Bank &amp; Context Documents
+                    </h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      hasUnsavedKnowledge
+                        ? "bg-amber-50 text-amber-700 border-amber-200 animate-pulse"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    }`}>
+                      {hasUnsavedKnowledge ? "● Unsaved Changes" : "✓ Saved in Knowledge Bank"}
+                    </span>
+                  </div>
                   <p className="text-xs text-neutral-500 mt-0.5">
                     Paste company whitepapers, product specs, pricing tables, competitor comparison matrices, and case study data. The AI agent references these facts when writing long-form content.
                   </p>
@@ -405,7 +438,7 @@ export default function ProjectMemoryPage() {
                   className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 shadow-sm shrink-0"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>{savingKnowledge ? "Saving..." : "Save Knowledge Bank"}</span>
+                  <span>{savingKnowledge ? "Saving to Database..." : "Save Knowledge Bank"}</span>
                 </button>
               </div>
 
