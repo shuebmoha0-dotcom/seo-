@@ -163,8 +163,8 @@ export class ImageAgent {
             generation_prompt: z.string(),
             filename: z.string(),
             alt_text: z.string(),
-            caption: z.string().optional(),
-            screenshot_required_note: z.string().optional(),
+            caption: z.string().nullable(),
+            screenshot_required_note: z.string().nullable(),
           })),
         }),
         system: `You are a visual content strategist for an AI SEO content system.

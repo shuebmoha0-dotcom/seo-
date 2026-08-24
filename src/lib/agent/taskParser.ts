@@ -18,8 +18,8 @@ export class TaskParser {
         goal: z.string().describe("The cleaned, direct objective of the task (e.g. 'Create one SEO article')"),
         frequency: z.enum(['daily', 'weekly', 'monthly', 'custom']),
         time: z.string().describe("HH:mm 24-hour format. Use 09:00 if unspecified."),
-        day_of_week: z.string().optional().describe("e.g. 'Monday'. Only if weekly."),
-        day_of_month: z.number().optional().describe("1-31. Only if monthly.")
+        day_of_week: z.string().nullable().describe("e.g. 'Monday'. Only if weekly."),
+        day_of_month: z.number().nullable().describe("1-31. Only if monthly.")
       }),
       system: `You are an AI Task Parser for an SEO automation system.
 The user will give you a natural language instruction to schedule a recurring SEO workflow.
@@ -42,8 +42,8 @@ Default to 09:00 if no time is provided.`,
       frequency: object.frequency,
       time: object.time,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      day_of_week: object.day_of_week,
-      day_of_month: object.day_of_month
+      day_of_week: object.day_of_week || undefined,
+      day_of_month: object.day_of_month || undefined
     };
 
     return {

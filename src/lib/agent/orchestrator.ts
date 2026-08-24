@@ -57,7 +57,7 @@ export class Orchestrator {
           objective: z.string(),
           input_data: z.any(),
           priority: z.enum(['high', 'medium', 'low']),
-          dependencies: z.array(z.string()).optional()
+          dependencies: z.array(z.string()).nullable()
         }))
       }),
       system: `You are the Autonomous SEO Orchestrator. 

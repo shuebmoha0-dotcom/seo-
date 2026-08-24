@@ -114,7 +114,7 @@ async function analyzeWithAI(params: {
           issue_type: z.string(),
           title: z.string(),
           description: z.string(),
-          evidence: z.string().optional(),
+          evidence: z.string().nullable(),
           seo_impact: z.string(),
           business_impact: z.string(),
           recommended_fix: z.string(),
