@@ -10,7 +10,7 @@ export interface ModelPricing {
 export const AI_CONFIG = {
   // ── Text Models ─────────────────────────────────────────────────────────────
   // GPT-5.6 Luna: Default for fast, routine, cost-sensitive tasks
-  LUNA_MODEL: process.env.LUNA_MODEL || 'gpt-4o-mini',
+  LUNA_MODEL: process.env.LUNA_MODEL || 'gpt-5.6-luna',
   
   // Claude Sonnet 5: For deep reasoning, complex analysis, and long-form writing
   SONNET_MODEL: process.env.SONNET_MODEL || 'claude-5-sonnet',
@@ -30,6 +30,7 @@ export const AI_CONFIG = {
 
 export const PRICING_RATES: Record<string, ModelPricing> = {
   [AI_CONFIG.LUNA_MODEL]: { in: 0.00015, out: 0.0006 },
+  'gpt-5.6-luna': { in: 0.00015, out: 0.0006 },
   'gpt-4o-mini': { in: 0.00015, out: 0.0006 },
   'gpt-4o': { in: 0.005, out: 0.015 },
   [AI_CONFIG.SONNET_MODEL]: { in: 0.003, out: 0.015 },
