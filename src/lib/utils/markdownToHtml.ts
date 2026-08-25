@@ -13,7 +13,7 @@ export function markdownToWordPressHtml(markdown: string): string {
   // 2. Convert Markdown Images: ![alt](url_or_base64)
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
     const cleanAlt = alt || 'Illustration';
-    return `\n\n<!-- wp:image {"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="${src}" alt="${cleanAlt}" class="wp-image" style="border-radius:12px;margin:24px 0;max-width:100%;height:auto;"/><figcaption class="wp-element-caption">${cleanAlt}</figcaption></figure>\n<!-- /wp:image -->\n\n`;
+    return `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${src}" alt="${cleanAlt}"/></figure>\n<!-- /wp:image -->\n\n`;
   });
 
   // 3. Convert Headings: ### H3, ## H2, # H1
