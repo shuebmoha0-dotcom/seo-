@@ -5,7 +5,7 @@ export async function GET() {
   return NextResponse.json({
     name: 'SEO Autopilot Agent Connector',
     slug: 'seo-autopilot-connector',
-    version: '1.1.3',
+    version: '1.1.4',
     download_url: siteUrl + '/api/integrations/wordpress/plugin',
     requires: '5.8',
     tested: '6.4',
@@ -15,7 +15,7 @@ export async function GET() {
     last_updated: new Date().toISOString(),
     sections: {
       description: 'Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization and publishing.',
-      changelog: '<h4>1.1.3</h4><ul><li>Added native OTA (Over-The-Air) automatic updates.</li></ul><h4>1.1.2</h4><ul><li>Fixed base64 image parsing for Gutenberg.</li></ul>'
+      changelog: '<h4>1.1.4</h4><ul><li>Fix base64 memory limit exception for very large AI images.</li></ul><h4>1.1.3</h4><ul><li>Added native OTA (Over-The-Air) automatic updates.</li></ul><h4>1.1.2</h4><ul><li>Fixed base64 image parsing for Gutenberg.</li></ul>'
     }
   });
 }

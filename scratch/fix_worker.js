@@ -1,4 +1,5 @@
-<?php
+const fs = require('fs');
+const content = `<?php
 if (!defined('ABSPATH')) { exit; }
 
 class SEO_Autopilot_Worker {
@@ -127,13 +128,7 @@ class SEO_Autopilot_Worker {
                 
                 $url = self::upload_base64_safely($base64, $ext);
                 if ($url) {
-                    $replacement = "
-
-<!-- wp:image {"sizeSlug":"large"} -->
-<figure class="wp-block-image size-large"><img src="$url" alt="$alt" class="wp-image" style="border-radius:12px;margin:24px 0;max-width:100%;height:auto;"/><figcaption class="wp-element-caption">$alt</figcaption></figure>
-<!-- /wp:image -->
-
-";
+                    $replacement = "\n\n<!-- wp:image {\"sizeSlug\":\"large\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"$url\" alt=\"$alt\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">$alt</figcaption></figure>\n<!-- /wp:image -->\n\n";
                     $content = str_replace($full_match, $replacement, $content);
                     $offset = $start_markdown + strlen($replacement);
                     continue;
@@ -143,49 +138,23 @@ class SEO_Autopilot_Worker {
         }
 
         // Convert standard Markdown Images to Gutenberg
-        $content = preg_replace_callback('/![([^]]*)](([^)]+))/', function($matches) {
+        $content = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function($matches) {
             $alt = $matches[1];
             $src = $matches[2];
-            return "
-
-<!-- wp:image {"sizeSlug":"large"} -->
-<figure class="wp-block-image size-large"><img src="$src" alt="$alt" class="wp-image" style="border-radius:12px;margin:24px 0;max-width:100%;height:auto;"/><figcaption class="wp-element-caption">$alt</figcaption></figure>
-<!-- /wp:image -->
-
-";
+            return "\n\n<!-- wp:image {\"sizeSlug\":\"large\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"$src\" alt=\"$alt\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">$alt</figcaption></figure>\n<!-- /wp:image -->\n\n";
         }, $content);
 
         // Convert Headings
-        $content = preg_replace('/^###s+(.+)$/m', "
-
-<!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">$1</h3>
-<!-- /wp:heading -->
-
-", $content);
-        $content = preg_replace('/^##s+(.+)$/m', "
-
-<!-- wp:heading {"level":2} -->
-<h2 class="wp-block-heading">$1</h2>
-<!-- /wp:heading -->
-
-", $content);
-        $content = preg_replace('/^#s+(.+)$/m', "
-
-<!-- wp:heading {"level":1} -->
-<h1 class="wp-block-heading">$1</h1>
-<!-- /wp:heading -->
-
-", $content);
+        $content = preg_replace('/^###\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">$1</h3>\n<!-- /wp:heading -->\n\n", $content);
+        $content = preg_replace('/^##\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":2} -->\n<h2 class=\"wp-block-heading\">$1</h2>\n<!-- /wp:heading -->\n\n", $content);
+        $content = preg_replace('/^#\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":1} -->\n<h1 class=\"wp-block-heading\">$1</h1>\n<!-- /wp:heading -->\n\n", $content);
 
         // Convert Bold & Italic
-        $content = preg_replace('/**([^*]+)**/', '<strong>$1</strong>', $content);
-        $content = preg_replace('/*([^*]+)*/', '<em>$1</em>', $content);
+        $content = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $content);
+        $content = preg_replace('/\*([^*]+)\*/', '<em>$1</em>', $content);
 
         // Convert Paragraphs
-        $paragraphs = preg_split('/
-s*
-/', $content);
+        $paragraphs = preg_split('/\n\s*\n/', $content);
         $formatted = array();
         foreach ($paragraphs as $p) {
             $p = trim($p);
@@ -193,15 +162,11 @@ s*
             if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0) {
                 $formatted[] = $p;
             } else {
-                $formatted[] = "<!-- wp:paragraph -->
-<p>" . nl2br($p) . "</p>
-<!-- /wp:paragraph -->";
+                $formatted[] = "<!-- wp:paragraph -->\n<p>" . nl2br($p) . "</p>\n<!-- /wp:paragraph -->";
             }
         }
 
-        return implode("
-
-", $formatted);
+        return implode("\n\n", $formatted);
     }
 
     private static function op_create_post($payload) {
@@ -333,7 +298,7 @@ s*
 
         $attachment = array(
             'post_mime_type' => $wp_filetype['type'],
-            'post_title'     => preg_replace('/.[^.]+$/', '', $file_name),
+            'post_title'     => preg_replace('/\.[^.]+$/', '', $file_name),
             'post_content'   => '',
             'post_status'    => 'inherit'
         );
@@ -392,7 +357,7 @@ s*
         }
 
         $content = $post->post_content;
-        $pattern = '/' . preg_quote($anchor_text, '/') . '(?![^<]*>|[^<>]*</a>)/i';
+        $pattern = '/' . preg_quote($anchor_text, '/') . '(?![^<]*>|[^<>]*<\/a>)/i';
         
         $link = sprintf('<a href="%s" title="%s">%s</a>', $target_url, esc_attr($anchor_text), $anchor_text);
         
@@ -418,3 +383,5 @@ s*
         );
     }
 }
+`;
+fs.writeFileSync('wordpress-plugin/seo-autopilot-connector/includes/class-seo-autopilot-worker.php', content);
