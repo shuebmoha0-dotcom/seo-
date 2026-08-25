@@ -2,82 +2,82 @@
 if (!defined('ABSPATH')) { exit; }
 
 class SEO_Autopilot_Updater {
-    private \;
+    private $version_url;
     
     public function __construct() {
         // We fetch the update check URL from the paired SaaS, fallback to default Vercel deployment
-        \ = get_option('seo_autopilot_saas_url', 'https://seo-hazel-eight.vercel.app');
-        \->version_url = rtrim(\, '/') . '/api/integrations/wordpress/plugin/version';
+        $saas_url = get_option('seo_autopilot_saas_url', 'https://seo-hazel-eight.vercel.app');
+        $this->version_url = rtrim($saas_url, '/') . '/api/integrations/wordpress/plugin/version';
         
-        add_filter('pre_set_site_transient_update_plugins', array(\, 'check_for_updates'));
-        add_filter('plugins_api', array(\, 'plugin_api_call'), 10, 3);
+        add_filter('pre_set_site_transient_update_plugins', array($this, 'check_for_updates'));
+        add_filter('plugins_api', array($this, 'plugin_api_call'), 10, 3);
     }
     
-    public function check_for_updates(\) {
-        if (empty(\->checked)) {
-            return \;
+    public function check_for_updates($transient) {
+        if (empty($transient->checked)) {
+            return $transient;
         }
         
-        \ = wp_remote_get(\->version_url, array('timeout' => 5));
-        if (is_wp_error(\)) {
-            return \;
+        $response = wp_remote_get($this->version_url, array('timeout' => 5));
+        if (is_wp_error($response)) {
+            return $transient;
         }
         
-        \ = json_decode(wp_remote_retrieve_body(\), true);
-        if (empty(\) || empty(\['version'])) {
-            return \;
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($body) || empty($body['version'])) {
+            return $transient;
         }
         
-        \ = \['version'];
-        if (version_compare(SEO_AUTOPILOT_VERSION, \, '<')) {
-            \ = new stdClass();
-            \->slug = 'seo-autopilot-connector';
-            \->plugin = 'seo-autopilot-connector/seo-autopilot-connector.php';
-            \->new_version = \;
-            \->url = \['author_profile'];
-            \->package = \['download_url'];
-            \->icons = array(
+        $remote_version = $body['version'];
+        if (version_compare(SEO_AUTOPILOT_VERSION, $remote_version, '<')) {
+            $obj = new stdClass();
+            $obj->slug = 'seo-autopilot-connector';
+            $obj->plugin = 'seo-autopilot-connector/seo-autopilot-connector.php';
+            $obj->new_version = $remote_version;
+            $obj->url = $body['author_profile'];
+            $obj->package = $body['download_url'];
+            $obj->icons = array(
                 '1x' => 'https://ps.w.org/seo-autopilot/assets/icon-128x128.png', // Fallback or blank
             );
             
-            \->response['seo-autopilot-connector/seo-autopilot-connector.php'] = \;
+            $transient->response['seo-autopilot-connector/seo-autopilot-connector.php'] = $obj;
         }
         
-        return \;
+        return $transient;
     }
     
-    public function plugin_api_call(\, \, \) {
-        if ('plugin_information' !== \ || 'seo-autopilot-connector' !== \->slug) {
-            return \;
+    public function plugin_api_call($res, $action, $args) {
+        if ('plugin_information' !== $action || 'seo-autopilot-connector' !== $args->slug) {
+            return $res;
         }
         
-        \ = wp_remote_get(\->version_url, array('timeout' => 5));
-        if (is_wp_error(\)) {
-            return \;
+        $response = wp_remote_get($this->version_url, array('timeout' => 5));
+        if (is_wp_error($response)) {
+            return $res;
         }
         
-        \ = json_decode(wp_remote_retrieve_body(\), true);
-        if (empty(\)) {
-            return \;
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        if (empty($body)) {
+            return $res;
         }
         
-        \ = new stdClass();
-        \->name = \['name'];
-        \->slug = \['slug'];
-        \->version = \['version'];
-        \->tested = \['tested'];
-        \->requires = \['requires'];
-        \->author = \['author'];
-        \->author_profile = \['author_profile'];
-        \->download_link = \['download_url'];
-        \->trunk = \['download_url'];
-        \->requires_php = \['requires_php'];
-        \->last_updated = \['last_updated'];
-        \->sections = array(
-            'description' => \['sections']['description'],
-            'changelog' => \['sections']['changelog']
+        $res = new stdClass();
+        $res->name = $body['name'];
+        $res->slug = $body['slug'];
+        $res->version = $body['version'];
+        $res->tested = $body['tested'];
+        $res->requires = $body['requires'];
+        $res->author = $body['author'];
+        $res->author_profile = $body['author_profile'];
+        $res->download_link = $body['download_url'];
+        $res->trunk = $body['download_url'];
+        $res->requires_php = $body['requires_php'];
+        $res->last_updated = $body['last_updated'];
+        $res->sections = array(
+            'description' => $body['sections']['description'],
+            'changelog' => $body['sections']['changelog']
         );
         
-        return \;
+        return $res;
     }
 }
