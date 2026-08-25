@@ -117,11 +117,7 @@ function resolveModel(provider: 'openai' | 'anthropic', modelName: string): Lang
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not configured.');
     }
-    let actualModel = modelName;
-    if (actualModel === 'claude-sonnet-5' || actualModel.includes('sonnet-5')) {
-      actualModel = 'claude-3-5-sonnet-20241022';
-    }
-    return anthropic(actualModel) as LanguageModel;
+    return anthropic(modelName) as LanguageModel;
   }
 
   if (!process.env.OPENAI_API_KEY) {
