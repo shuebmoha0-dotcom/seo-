@@ -139,9 +139,46 @@ class SEO_Autopilot_Worker {
         );
     }
 
+    private static function format_content_for_wp($content) {
+        if (empty($content)) return '';
+
+        // If content already contains Gutenberg blocks, return as is
+        if (strpos($content, '<!-- wp:') !== false) {
+            return $content;
+        }
+
+        // Convert Markdown Images: ![alt](url_or_base64)
+        $content = preg_replace('/!\[([^\]]*)\]\(([^)]+)\)/', "\n\n<!-- wp:image {\"sizeSlug\":\"large\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"$2\" alt=\"$1\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">$1</figcaption></figure>\n<!-- /wp:image -->\n\n", $content);
+
+        // Convert Headings
+        $content = preg_replace('/^###\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">$1</h3>\n<!-- /wp:heading -->\n\n", $content);
+        $content = preg_replace('/^##\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":2} -->\n<h2 class=\"wp-block-heading\">$1</h2>\n<!-- /wp:heading -->\n\n", $content);
+        $content = preg_replace('/^#\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":1} -->\n<h1 class=\"wp-block-heading\">$1</h1>\n<!-- /wp:heading -->\n\n", $content);
+
+        // Convert Bold & Italic
+        $content = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $content);
+        $content = preg_replace('/\*([^*]+)\*/', '<em>$1</em>', $content);
+
+        // Convert Paragraphs
+        $paragraphs = preg_split('/\n\s*\n/', $content);
+        $formatted = array();
+        foreach ($paragraphs as $p) {
+            $p = trim($p);
+            if (empty($p)) continue;
+            if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0) {
+                $formatted[] = $p;
+            } else {
+                $formatted[] = "<!-- wp:paragraph -->\n<p>" . nl2br($p) . "</p>\n<!-- /wp:paragraph -->";
+            }
+        }
+
+        return implode("\n\n", $formatted);
+    }
+
     private static function op_create_post($payload) {
         $title   = sanitize_text_field($payload['title'] ?? '');
-        $content = wp_kses_post($payload['content'] ?? '');
+        $raw_content = $payload['content'] ?? '';
+        $content = self::format_content_for_wp($raw_content);
         $excerpt = sanitize_textarea_field($payload['excerpt'] ?? '');
         $slug    = sanitize_title($payload['slug'] ?? '');
         $status  = sanitize_text_field($payload['status'] ?? 'draft');

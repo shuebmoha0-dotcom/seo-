@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { decryptCredential } from '@/lib/utils/encryption';
+import { markdownToWordPressHtml } from '@/lib/utils/markdownToHtml';
 
 export async function POST(request: Request) {
   try {
@@ -111,9 +112,11 @@ export async function POST(request: Request) {
               seoPlugin: integration.config?.seo_plugin || 'none',
             });
 
+            const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
+
             const post = await client.createPost({
               title: updatedDraft.working_title,
-              content: updatedDraft.content_body,
+              content: formattedHtmlContent,
               slug: updatedDraft.url_slug,
               status: 'publish',
               seo_title: updatedDraft.seo_title || updatedDraft.working_title,
@@ -144,13 +147,15 @@ export async function POST(request: Request) {
           .maybeSingle();
 
         if (wpSite) {
+          const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
+
           await supabase.from('wordpress_jobs').insert({
             site_id: wpSite.id,
             website_id: updatedDraft.website_id,
             job_type: 'create_post',
             payload: {
               title: updatedDraft.working_title,
-              content: updatedDraft.content_body,
+              content: formattedHtmlContent,
               slug: updatedDraft.url_slug,
               status: 'publish',
               seo_title: updatedDraft.seo_title || updatedDraft.working_title,
