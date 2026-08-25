@@ -78,6 +78,7 @@ class SEO_Autopilot_Admin {
         }
 
         if ($action === 'revoke') {
+            SEO_Autopilot_Outbound::notify_disconnect();
             SEO_Autopilot_Auth::revoke_api_key();
             delete_option(SEO_Autopilot_Outbound::OPTION_SITE_ID);
             delete_option(SEO_Autopilot_Outbound::OPTION_SECRET_KEY);
