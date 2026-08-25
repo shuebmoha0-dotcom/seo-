@@ -30,14 +30,39 @@ export async function GET(request: Request) {
     if (outboundSite) {
       const wpItem = (data || []).find((i: any) => i.provider === 'wordpress');
       if (!wpItem) {
+        // Run a quick live health check on the site to see if the plugin is actually still installed
+        let liveStatus = 'connected';
+        let liveMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`;
+        
+        try {
+          const siteUrl = outboundSite.site_url.replace(/\/+$/, '');
+          const ping = await fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status`, { 
+            method: 'GET', 
+            signal: AbortSignal.timeout(1500) 
+          });
+          
+          if (!ping.ok) {
+            liveStatus = 'action_required';
+            liveMessage = 'Plugin unreachable. Have you deactivated or deleted it?';
+            // Optionally update the DB in the background
+            supabase.from('wordpress_outbound_sites')
+              .update({ status: 'action_required', updated_at: new Date().toISOString() })
+              .eq('id', outboundSite.id)
+              .then(() => {});
+          }
+        } catch (e) {
+          liveStatus = 'action_required';
+          liveMessage = 'Could not reach your website. The plugin may be deleted or your site is down.';
+        }
+
         data = [
           ...(data || []),
           {
             id: outboundSite.id,
             provider: 'wordpress',
             display_name: 'WordPress',
-            status: 'connected',
-            status_message: `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`,
+            status: liveStatus,
+            status_message: liveMessage,
             config: {
               site_url: outboundSite.site_url,
               site_id: outboundSite.id,
