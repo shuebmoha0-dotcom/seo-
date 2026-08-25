@@ -13,7 +13,7 @@ export const AI_CONFIG = {
   LUNA_MODEL: process.env.LUNA_MODEL || 'gpt-4o-mini',
   
   // Claude Sonnet 5: For deep reasoning, complex analysis, and long-form writing
-  SONNET_MODEL: process.env.SONNET_MODEL || 'claude-3-5-sonnet-20240620',
+  SONNET_MODEL: process.env.SONNET_MODEL || 'claude-3-5-sonnet-20241022',
 
   // ── Image Models ────────────────────────────────────────────────────────────
   // Gemini Image Generation via Google AI Studio (Primary Image Provider)
@@ -33,6 +33,7 @@ export const PRICING_RATES: Record<string, ModelPricing> = {
   'gpt-4o-mini': { in: 0.00015, out: 0.0006 },
   'gpt-4o': { in: 0.005, out: 0.015 },
   [AI_CONFIG.SONNET_MODEL]: { in: 0.003, out: 0.015 },
+  'claude-3-5-sonnet-20241022': { in: 0.003, out: 0.015 },
   'claude-3-5-sonnet-20240620': { in: 0.003, out: 0.015 },
   'claude-3-haiku-20240307': { in: 0.00025, out: 0.00125 },
 };

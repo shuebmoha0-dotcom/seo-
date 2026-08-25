@@ -161,7 +161,7 @@ ${input.project_memory}
 - Word count: ${input.rules.word_count_min}–${input.rules.word_count_max} words
 - Avoid: ${input.rules.avoid_rules}
 - ${input.rules.custom_rules || ''}`,
-        prompt: `Create a detailed content brief for:
+        prompt: `Create a detailed, thorough content brief for:
 Primary keyword: "${input.primary_keyword}"
 Secondary keywords: ${input.secondary_keywords.join(', ')}
 Search intent: ${input.search_intent}
@@ -171,7 +171,7 @@ Competitor gaps: ${input.competitor_gaps || 'Not provided'}
 Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
 Important entities: ${(input.entities || []).join(', ')}
 
-Generate a tight, practical brief. Headings should serve the reader, not just insert keywords.`,
+Generate an exhaustive, highly structured brief with 6 to 9 comprehensive H2 and H3 sections so the writer can produce an in-depth ${input.rules.word_count_min}–${input.rules.word_count_max} word article. Headings should serve the reader with actionable depth, not just insert keywords.`,
       });
 
       return {
@@ -263,7 +263,7 @@ Generate a tight, practical brief. Headings should serve the reader, not just in
         agent: 'ContentAgent',
         taskType: 'long_form_article',
         complexity: 'complex',
-        system: `You are an expert SEO content writer and strategist. Follow these instructions and guidelines strictly:
+        system: `You are an elite SEO content writer powered by Claude 3.5 Sonnet. Follow these instructions and guidelines strictly:
 
 ${projectInstructions ? `==================================================
 CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
@@ -278,7 +278,7 @@ ${projectMemory}
 - Style: ${rules.author_style}
 - Structure: ${rules.structure_rules}
 - Paragraphs: ${rules.paragraph_style}
-- Word count target: ${rules.word_count_min}–${rules.word_count_max} words
+- STRICT LENGTH REQUIREMENT: You MUST write a comprehensive, exhaustive long-form article of at least ${rules.word_count_min} words (target range: ${rules.word_count_min}–${rules.word_count_max} words). Do not write brief summaries or rush through sections.
 - CTA rule: ${rules.cta_rules}
 - Avoid: ${rules.avoid_rules}
 - Brand rule: ${rules.brand_rules}
@@ -287,14 +287,13 @@ ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES:
 - CRITICAL: Embody the PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints throughout every section.
-- Write for the reader first, search engines second
+- Write deeply analytical, highly informative, and practical content for the reader.
+- For EVERY H2 and H3 section, write 2 to 4 detailed paragraphs with actionable examples, strategic breakdowns, and practical insights to thoroughly cover the topic.
 - Use the primary keyword naturally — do NOT force it into every paragraph
-- Short paragraphs. Clear sentences. No filler.
-- Do NOT invent statistics, features, or customer claims
-- If a fact cannot be verified, omit it or qualify it
-- Place image markers exactly where specified
+- Short paragraphs. Clear sentences. No fluff.
+- Place image markers exactly where specified: [IMAGE: ...]
 ${revisionNotes ? `\nREVISION NOTES FROM HUMAN/QA: ${revisionNotes}` : ''}`,
-        prompt: `Write a complete ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below.
+        prompt: `Write a complete, in-depth ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below. Make sure the total word count is at least ${rules.word_count_min} words.
 
 TITLE: ${brief.working_title}
 H1: ${brief.h1}
@@ -318,7 +317,7 @@ ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
 
-Write the full article now. Include the H1 at the top. Follow the heading structure. Place image markers where indicated.`,
+Write the full article now. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, exhaustive analysis under each heading to satisfy the ${rules.word_count_min}+ word requirement.`,
       });
 
       return text;
