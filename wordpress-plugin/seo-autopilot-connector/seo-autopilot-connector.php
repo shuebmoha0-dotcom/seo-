@@ -3,7 +3,7 @@
  * Plugin Name:       SEO Autopilot Agent Connector
  * Plugin URI:        https://seautopilot.io
  * Description:       Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via outbound reverse-connection architecture without sharing passwords or requiring inbound access.
- * Version:           1.1.2
+ * Version:           1.1.3
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            SEO Autopilot Team
@@ -18,11 +18,15 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-define('SEO_AUTOPILOT_VERSION', '1.1.2');
+define('SEO_AUTOPILOT_VERSION', '1.1.3');
 define('SEO_AUTOPILOT_API_VERSION', 'v1');
 define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+// Load Subsystems
+require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-updater.php';
+new SEO_Autopilot_Updater();
 
 // Require Core Subsystems
 require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-auth.php';

@@ -151,6 +151,16 @@ class SEO_Autopilot_REST {
         $is_connected = SEO_Autopilot_Auth::is_connected();
         $conn_info = SEO_Autopilot_Auth::get_connection_info();
 
+        // If the ping is from the cloud, immediately run the outbound worker
+        // so the user doesn't have to wait for cron to trigger naturally.
+        if ($is_connected && isset($_GET['wake'])) {
+            // Ignore abort so PHP finishes the job even if the cloud drops the connection
+            ignore_user_abort(true);
+            if (class_exists('SEO_Autopilot_Outbound')) {
+                SEO_Autopilot_Outbound::poll_and_execute_jobs();
+            }
+        }
+
         return rest_ensure_response(array(
             'status'         => 'ok',
             'plugin'         => 'SEO Autopilot Agent Connector',

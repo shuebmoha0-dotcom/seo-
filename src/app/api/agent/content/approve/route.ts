@@ -171,8 +171,8 @@ export async function POST(request: Request) {
           try {
             const siteUrl = wpSite.site_url.replace(/\/+$/, '');
             Promise.allSettled([
-              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
-              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
+              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }),
+              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }),
             ]).catch(() => {});
           } catch (pingErr) {
             console.warn('[Content Approval] Wakeup ping notice:', pingErr);

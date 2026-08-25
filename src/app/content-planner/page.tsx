@@ -259,6 +259,15 @@ export default function ContentPlannerPage() {
           }
           if (!selectedDraft) {
             setSelectedDraft(loadedDrafts[0]);
+          } else {
+            // Ensure the currently viewed draft gets live status updates
+            const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
+            if (updatedSelected) {
+              setSelectedDraft(updatedSelected);
+              if (updatedSelected.status === "published" && publishing === updatedSelected.id) {
+                setPublishing(null);
+              }
+            }
           }
         }
       }
