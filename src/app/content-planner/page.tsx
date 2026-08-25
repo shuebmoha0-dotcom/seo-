@@ -6,7 +6,7 @@ import {
   Loader2, Clock, BookOpen, Image as ImageIcon, Link as LinkIcon, ChevronDown, ChevronRight,
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
-  PenLine, Cpu, Globe, Zap, Brain
+  PenLine, Cpu, Globe, Zap, Brain, ExternalLink
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -39,6 +39,33 @@ interface ContentDraft {
     prompt_used?: string;
     generation_status?: string;
   }>;
+  published_at?: string;
+  wordpress_post_url?: string;
+  wordpress_post_id?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function formatPublishDate(dateStr?: string): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 2) return "Published just now";
+    if (diffMins < 60) return `Published ${diffMins}m ago`;
+    if (diffHours < 24) return `Published ${diffHours}h ago`;
+    if (diffDays === 1) return "Published yesterday";
+    if (diffDays < 7) return `Published ${diffDays} days ago`;
+    return `Published on ${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  } catch {
+    return "";
+  }
 }
 
 const DEFAULT_RULES = {
@@ -245,6 +272,18 @@ export default function ContentPlannerPage() {
   useEffect(() => {
     fetchDrafts();
   }, [currentWebsite?.id]);
+
+  // Real-time polling when any draft is queued or publishing so status flips to Live automatically
+  useEffect(() => {
+    const hasPending = drafts.some(d => d.status === "approved" || d.status === "ready_for_approval") || publishing !== null;
+    if (!hasPending) return;
+
+    const interval = setInterval(() => {
+      fetchDrafts();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [drafts, publishing]);
 
   const handleGenerateDraft = async (keywordOverride?: string) => {
     const keyword = (keywordOverride || quickKeyword || newDraftForm.primary_keyword).trim();
@@ -643,7 +682,11 @@ export default function ContentPlannerPage() {
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[d.status]?.dot || "bg-neutral-400"}`}></span>
                         <span>{STATUS_CONFIG[d.status]?.label || d.status}</span>
                       </span>
-                      <span className="text-[10px] text-neutral-400 font-mono">v{d.version}</span>
+                      {d.status === "published" && d.published_at ? (
+                        <span className="text-[10px] text-emerald-700 font-medium">{formatPublishDate(d.published_at)}</span>
+                      ) : (
+                        <span className="text-[10px] text-neutral-400 font-mono">v{d.version}</span>
+                      )}
                     </div>
                     <h4 className="text-xs font-bold text-neutral-900 line-clamp-2">{d.working_title}</h4>
                     <p className="text-[11px] text-neutral-500 font-mono">{d.primary_keyword}</p>
@@ -656,11 +699,33 @@ export default function ContentPlannerPage() {
               <div className="lg:col-span-2 bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-neutral-100 pb-4">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 ${STATUS_CONFIG[selectedDraft.status]?.color || "bg-neutral-100"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedDraft.status]?.dot || "bg-neutral-400"}`}></span>
                         <span>{STATUS_CONFIG[selectedDraft.status]?.label || selectedDraft.status}</span>
                       </span>
+                      {selectedDraft.status === "published" && selectedDraft.published_at && (
+                        <>
+                          <span className="text-xs text-neutral-400">•</span>
+                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            {formatPublishDate(selectedDraft.published_at)}
+                          </span>
+                        </>
+                      )}
+                      {selectedDraft.wordpress_post_url && (
+                        <>
+                          <span className="text-xs text-neutral-400">•</span>
+                          <a
+                            href={selectedDraft.wordpress_post_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 underline inline-flex items-center gap-1"
+                          >
+                            <span>View on WordPress</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </>
+                      )}
                       <span className="text-xs text-neutral-400">•</span>
                       <span className="text-xs font-mono text-neutral-500">{selectedDraft.word_count} words</span>
                       <span className="text-xs text-neutral-400">•</span>

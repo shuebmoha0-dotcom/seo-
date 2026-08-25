@@ -73,6 +73,37 @@ export async function POST(request: Request) {
       throw updateErr;
     }
 
+    // Update content_drafts status to published with live URL
+    if (isSuccess && job.job_type === 'create_post') {
+      try {
+        let draftId: string | null = null;
+        if (job.idempotency_key?.startsWith('create_post_draft_')) {
+          const parts = job.idempotency_key.split('_');
+          if (parts[3] && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[3])) {
+            draftId = parts[3];
+          }
+        }
+
+        const draftUpdatePayload: Record<string, any> = {
+          status: 'published',
+          published_at: new Date().toISOString(),
+          wordpress_post_id: result?.post_id || null,
+          wordpress_post_url: result?.permalink || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (draftId) {
+          await supabase.from('content_drafts').update(draftUpdatePayload).eq('id', draftId);
+          console.log(`[Outbound Report] Marked draft ${draftId} as published live: ${result?.permalink}`);
+        } else if (job.payload?.title) {
+          await supabase.from('content_drafts').update(draftUpdatePayload).eq('working_title', job.payload.title);
+          console.log(`[Outbound Report] Marked draft title "${job.payload.title}" as published live: ${result?.permalink}`);
+        }
+      } catch (draftUpdErr) {
+        console.warn('[Outbound Report] Draft status update error:', draftUpdErr);
+      }
+    }
+
     // Update site last_sync_at & integration status
     await supabase
       .from('wordpress_outbound_sites')

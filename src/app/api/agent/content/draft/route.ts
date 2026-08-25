@@ -56,6 +56,11 @@ export async function GET(request: Request) {
       content_body: d.content_body,
       qa: d.content_qa_results?.[0] || null,
       images: d.content_images || [],
+      published_at: d.published_at || (d.status === 'published' ? d.updated_at : undefined),
+      wordpress_post_id: d.wordpress_post_id,
+      wordpress_post_url: d.wordpress_post_url,
+      created_at: d.created_at,
+      updated_at: d.updated_at,
     }));
 
     return NextResponse.json({ drafts: formattedDrafts });
