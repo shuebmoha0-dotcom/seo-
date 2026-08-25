@@ -147,8 +147,77 @@ class SEO_Autopilot_Worker {
             return $content;
         }
 
+        // Find all base64 data URIs in img src and upload them to media library
+        $content = preg_replace_callback('/src=["\'](data:image\/([^;]+);base64,([^"\']+)?)["\']/i', function($matches) {
+            $ext = $matches[2];
+            $base64 = $matches[3];
+            $decoded = base64_decode($base64);
+            if (!$decoded) return $matches[0];
+            
+            $filename = 'ai-image-' . substr(md5(uniqid()), 0, 8) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+            $upload = wp_upload_bits($filename, null, $decoded);
+            
+            if (empty($upload['error']) && !empty($upload['url'])) {
+                $file_path = $upload['file'];
+                $wp_filetype = wp_check_filetype($filename, null);
+                $attachment = array(
+                    'post_mime_type' => $wp_filetype['type'],
+                    'post_title'     => sanitize_file_name($filename),
+                    'post_content'   => '',
+                    'post_status'    => 'inherit'
+                );
+                $attach_id = wp_insert_attachment($attachment, $file_path);
+                if (!function_exists('wp_generate_attachment_metadata')) {
+                    require_once(ABSPATH . 'wp-admin/includes/image.php');
+                }
+                if ($attach_id && !is_wp_error($attach_id)) {
+                    $attach_data = wp_generate_attachment_metadata($attach_id, $file_path);
+                    wp_update_attachment_metadata($attach_id, $attach_data);
+                }
+                return 'src="' . esc_url($upload['url']) . '"';
+            }
+            return $matches[0];
+        }, $content);
+
         // Convert Markdown Images: ![alt](url_or_base64)
-        $content = preg_replace('/!\[([^\]]*)\]\(([^)]+)\)/', "\n\n<!-- wp:image {\"sizeSlug\":\"large\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"$2\" alt=\"$1\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">$1</figcaption></figure>\n<!-- /wp:image -->\n\n", $content);
+        $content = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function($matches) {
+            $alt = $matches[1];
+            $src = $matches[2];
+            
+            // If it's a base64 markdown image that wasn't already an HTML tag
+            if (strpos($src, 'data:image') === 0) {
+                if (preg_match('/data:image\/([^;]+);base64,(.+)/i', $src, $m)) {
+                    $ext = $m[1];
+                    $decoded = base64_decode($m[2]);
+                    if ($decoded) {
+                        $filename = 'ai-img-' . substr(md5(uniqid()), 0, 8) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+                        $upload = wp_upload_bits($filename, null, $decoded);
+                        if (empty($upload['error']) && !empty($upload['url'])) {
+                            $src = $upload['url'];
+                            
+                            $file_path = $upload['file'];
+                            $wp_filetype = wp_check_filetype($filename, null);
+                            $attachment = array(
+                                'post_mime_type' => $wp_filetype['type'],
+                                'post_title'     => sanitize_file_name($filename),
+                                'post_content'   => '',
+                                'post_status'    => 'inherit'
+                            );
+                            $attach_id = wp_insert_attachment($attachment, $file_path);
+                            if (!function_exists('wp_generate_attachment_metadata')) {
+                                require_once(ABSPATH . 'wp-admin/includes/image.php');
+                            }
+                            if ($attach_id && !is_wp_error($attach_id)) {
+                                $attach_data = wp_generate_attachment_metadata($attach_id, $file_path);
+                                wp_update_attachment_metadata($attach_id, $attach_data);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return "\n\n<!-- wp:image {\"sizeSlug\":\"large\"} -->\n<figure class=\"wp-block-image size-large\"><img src=\"$src\" alt=\"$alt\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">$alt</figcaption></figure>\n<!-- /wp:image -->\n\n";
+        }, $content);
 
         // Convert Headings
         $content = preg_replace('/^###\s+(.+)$/m', "\n\n<!-- wp:heading {\"level\":3} -->\n<h3 class=\"wp-block-heading\">$1</h3>\n<!-- /wp:heading -->\n\n", $content);
