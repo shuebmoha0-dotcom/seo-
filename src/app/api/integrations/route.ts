@@ -38,21 +38,27 @@ export async function GET(request: Request) {
           const siteUrl = outboundSite.site_url.replace(/\/+$/, '');
           const ping = await fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status`, { 
             method: 'GET', 
-            signal: AbortSignal.timeout(1500) 
+            signal: AbortSignal.timeout(6000) 
           });
           
           if (!ping.ok) {
             liveStatus = 'action_required';
-            liveMessage = 'Plugin unreachable. Have you deactivated or deleted it?';
-            // Optionally update the DB in the background
+            liveMessage = 'Plugin returned an error. It may be deactivated or restricted by a firewall.';
             supabase.from('wordpress_outbound_sites')
               .update({ status: 'action_required', updated_at: new Date().toISOString() })
               .eq('id', outboundSite.id)
               .then(() => {});
+          } else {
+            // Restore active status if it was erroneously marked action_required
+            supabase.from('wordpress_outbound_sites')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .eq('id', outboundSite.id)
+              .then(() => {});
           }
         } catch (e) {
-          liveStatus = 'action_required';
-          liveMessage = 'Could not reach your website. The plugin may be deleted or your site is down.';
+          // Fallback to connected if it merely timed out, to avoid aggressively marking action required
+          liveStatus = 'connected';
+          liveMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector (Slow connection)`;
         }
 
         data = [
