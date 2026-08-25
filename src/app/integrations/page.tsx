@@ -737,15 +737,24 @@ export default function IntegrationsPage() {
                         )}
 
                         {item.status === "action_required" && (
-                          <button
-                            onClick={() => {
-                              if (item.provider === "google_search_console") initiateOAuth("google_search_console");
-                              else if (item.provider === "google_analytics") initiateOAuth("google_analytics");
-                              else if (item.provider === "github") setShowGithubModal(true);
-                            }}
-                            className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
-                            <RefreshCw className="w-3 h-3" /> Reconnect Now
-                          </button>
+                          <>
+                            <button
+                              onClick={() => {
+                                if (item.provider === "google_search_console") initiateOAuth("google_search_console");
+                                else if (item.provider === "google_analytics") initiateOAuth("google_analytics");
+                                else if (item.provider === "github") setShowGithubModal(true);
+                                else if (item.provider === "wordpress") { setShowWpModal(true); setWpFeedback(null); }
+                                else if (item.provider === "custom_api") { setShowCustomApiModal(true); setCustomFeedback(null); }
+                              }}
+                              className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
+                              <RefreshCw className="w-3 h-3" /> Reconnect Now
+                            </button>
+                            <button
+                              onClick={() => handleDisconnect(item.id)}
+                              className="text-neutral-400 hover:text-red-600 text-[11px] font-medium px-2 py-1 transition-colors">
+                              Disconnect
+                            </button>
+                          </>
                         )}
 
                         {item.status === "disconnected" && (
