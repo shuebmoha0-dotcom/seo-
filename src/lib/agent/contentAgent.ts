@@ -263,7 +263,7 @@ Generate an exhaustive, highly structured brief with 6 to 9 comprehensive H2 and
         agent: 'ContentAgent',
         taskType: 'long_form_article',
         complexity: 'complex',
-        system: `You are an elite SEO content writer powered by Claude 3.5 Sonnet. Follow these instructions and guidelines strictly:
+        system: `You are an elite SEO content writer powered by Claude Sonnet 5. Follow these instructions and guidelines strictly:
 
 ${projectInstructions ? `==================================================
 CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
