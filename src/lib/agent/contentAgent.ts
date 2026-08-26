@@ -471,7 +471,7 @@ After closing the </reflection> block, write the full article. Include the H1 at
             topic: brief.working_title,
             target_keyword: input.primary_keyword,
             purpose: req.purpose,
-            style: 'Modern high-tech clean editorial illustration',
+            style: 'Ultra-realistic cinematic photography, premium editorial 8k resolution, highly detailed, soft natural lighting, professional business context, NO text overlays',
             dimensions: '1024x1024',
             image_placement: req.placement_context,
             brand_instructions: input.rules.brand_rules,
@@ -555,3 +555,4 @@ After closing the </reflection> block, write the full article. Include the H1 at
     };
   }
 }
+
