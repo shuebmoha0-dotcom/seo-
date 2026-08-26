@@ -365,7 +365,7 @@ export default function ContentPlannerPage() {
           draft_id: target.id,
           action: "publish",
           title: target.working_title,
-          content: target.content_body,
+          // // content: target.content_body, // Omitted to avoid 413 Payload Too Large; server fetches from DB // Omitted to avoid 413 Payload Too Large; server fetches from DB
           slug: target.url_slug,
           seo_title: target.seo_title,
           meta_description: target.meta_description,
@@ -962,3 +962,5 @@ export default function ContentPlannerPage() {
     </div>
   );
 }
+
+
