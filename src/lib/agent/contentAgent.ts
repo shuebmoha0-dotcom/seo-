@@ -262,7 +262,7 @@ Generate an exhaustive, highly structured brief with 6 to 9 comprehensive H2 and
       const { text } = await LLMProvider.generateText({
         agent: 'ContentAgent',
         taskType: 'long_form_article',
-        complexity: 'simple',
+        complexity: 'complex',
         system: `You are an elite SEO content writer powered by Claude Sonnet 5. Follow these instructions and guidelines strictly:
 
 ${projectInstructions ? `==================================================
@@ -555,5 +555,6 @@ After closing the </reflection> block, write the full article. Include the H1 at
     };
   }
 }
+
 
 
