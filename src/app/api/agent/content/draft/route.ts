@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
 import { createClient } from '@/lib/supabase/server';
 
@@ -248,38 +249,100 @@ export async function POST(request: Request) {
       }
     }
 
-    const output = await agent.runFullPipeline(
-      {
-        primary_keyword,
-        secondary_keywords: secondary_keywords || [],
-        search_intent,
-        content_type: content_type || 'blog_article',
-        target_audience: target_audience || defaultRules.audience,
-        working_title: working_title || undefined,
-        competitor_gaps,
-        internal_linking_opportunities: internal_linking_opportunities || [],
-        entities: entities || [],
-        project_instructions: projectInstructions || undefined,
-        project_memory: projectMemory || undefined,
-        rules: defaultRules,
-      },
-      revision_notes
-    );
+    
+    // Determine execution mode (sync for guest/demo, async for registered users)
+    if (!website_id) {
+      // SYNCHRONOUS EXECUTION
+      const output = await agent.runFullPipeline(
+        {
+          primary_keyword,
+          secondary_keywords: secondary_keywords || [],
+          search_intent,
+          content_type: content_type || 'blog_article',
+          target_audience: target_audience || defaultRules.audience,
+          working_title: working_title || undefined,
+          competitor_gaps,
+          internal_linking_opportunities: internal_linking_opportunities || [],
+          entities: entities || [],
+          project_instructions: projectInstructions || undefined,
+          project_memory: projectMemory || undefined,
+          rules: defaultRules,
+        },
+        revision_notes
+      );
 
-    // Persist draft to Supabase
-    let savedDraft = null;
+      return NextResponse.json({
+        success: true,
+        draft: {
+          id: crypto.randomUUID(),
+          working_title: output.working_title,
+          primary_keyword,
+          search_intent,
+          content_type: content_type || 'blog_article',
+          word_count: output.word_count,
+          reading_time: output.reading_time_minutes,
+          status: output.status,
+          version: 1,
+          seo_title: output.seo_title,
+          meta_description: output.meta_description,
+          url_slug: output.url_slug,
+          content_body: output.content_body,
+          qa: output.qa,
+          images: output.images,
+        }
+      });
+    }
 
-    if (website_id) {
+    // ASYNCHRONOUS EXECUTION
+    const placeholderDraft = {
+      website_id,
+      primary_keyword,
+      secondary_keywords: secondary_keywords || [],
+      search_intent,
+      content_type: content_type || 'blog_article',
+      target_audience: target_audience || defaultRules.audience,
+      working_title: working_title || `Generating draft for "${primary_keyword}"...`,
+      status: 'generating',
+      current_version: 0,
+    };
+
+    const { data: savedDraft, error: draftErr } = await supabase
+      .from('content_drafts')
+      .insert(placeholderDraft)
+      .select()
+      .single();
+
+    if (draftErr || !savedDraft) {
+      throw new Error(draftErr?.message || 'Failed to create placeholder draft');
+    }
+
+    after(async () => {
       try {
-        const { data: draft, error: draftErr } = await supabase
-          .from('content_drafts')
-          .insert({
-            website_id,
+        console.log(`[Content Draft Async] Starting generation for ${savedDraft.id}`);
+        
+        const output = await agent.runFullPipeline(
+          {
             primary_keyword,
             secondary_keywords: secondary_keywords || [],
             search_intent,
             content_type: content_type || 'blog_article',
             target_audience: target_audience || defaultRules.audience,
+            working_title: working_title || undefined,
+            competitor_gaps,
+            internal_linking_opportunities: internal_linking_opportunities || [],
+            entities: entities || [],
+            project_instructions: projectInstructions || undefined,
+            project_memory: projectMemory || undefined,
+            rules: defaultRules,
+          },
+          revision_notes
+        );
+
+        console.log(`[Content Draft Async] Finished generation for ${savedDraft.id}, updating DB.`);
+
+        await supabase
+          .from('content_drafts')
+          .update({
             working_title: output.working_title,
             h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
             content_body: output.content_body,
@@ -290,119 +353,79 @@ export async function POST(request: Request) {
             url_slug: output.url_slug,
             status: output.status,
             current_version: 1,
+            updated_at: new Date().toISOString()
           })
-          .select()
-          .single();
+          .eq('id', savedDraft.id);
 
-        if (!draftErr && draft) {
-          savedDraft = draft;
+        try {
+          await supabase.from('content_versions').insert({
+            draft_id: savedDraft.id,
+            version_number: 1,
+            content_body: output.content_body,
+            word_count: output.word_count,
+            status: output.status,
+            qa_results: output.qa,
+          });
+        } catch (vErr) { }
 
-          // Save version
-          try {
-            await supabase.from('content_versions').insert({
-              draft_id: draft.id,
-              version_number: 1,
-              content_body: output.content_body,
-              word_count: output.word_count,
-              status: output.status,
-              qa_results: output.qa,
-            });
-          } catch (vErr) {
-            console.warn('[Draft Save] Version insert error:', vErr);
-          }
+        try {
+          await supabase.from('content_qa_results').insert({
+            draft_id: savedDraft.id,
+            version_number: 1,
+            ...output.qa,
+            facts_flagged: output.qa.facts_flagged,
+          });
+        } catch (qaErr) { }
 
-          // Save QA results
-          try {
-            await supabase.from('content_qa_results').insert({
-              draft_id: draft.id,
-              version_number: 1,
-              ...output.qa,
-              facts_flagged: output.qa.facts_flagged,
-            });
-          } catch (qaErr) {
-            console.warn('[Draft Save] QA insert error:', qaErr);
-          }
-
-          // Save image requirements safely
-          if (Array.isArray(output.images)) {
-            for (const img of output.images) {
-              try {
-                await supabase.from('content_images').insert({
-                  draft_id: draft.id,
-                  placement_context: img.placement_context || 'Article body',
-                  image_type: img.image_type || 'featured',
-                  purpose: img.purpose || 'Visual enhancement',
-                  alt_text: img.alt_text || '',
-                  suggested_filename: img.suggested_filename || 'image.webp',
-                  status: img.generation_status || 'created',
-                });
-              } catch (imgInsertErr) {
-                console.warn('[Draft Save] content_images insert skipped:', imgInsertErr);
-              }
-            }
-          }
-
-          // Autonomous Self-Learning: Record article context fact in project_memory
-          try {
-            const memoryFact = `Published Content: "${output.working_title || output.seo_title}" covering target keyword "${output.primary_keyword}" (${output.search_intent} intent). Tailored for ${output.target_audience || 'target audience'}.`;
-            await supabase.from('project_memory').insert({
-              website_id,
-              category: 'content',
-              content: memoryFact,
-              source: 'autonomous_article_learning',
-              source_detail: `Generated from article: "${output.primary_keyword}"`,
-              confidence: 'high',
-              is_important: false,
-              tags: ['article_coverage', output.primary_keyword],
-            });
-          } catch (autoLearnErr) {
-            console.warn('[Draft Save] Autonomous memory learning insert skipped:', autoLearnErr);
+        if (Array.isArray(output.images)) {
+          for (const img of output.images) {
+            try {
+              await supabase.from('content_images').insert({
+                draft_id: savedDraft.id,
+                placement_context: img.placement_context || 'Article body',
+                image_type: img.image_type || 'featured',
+                purpose: img.purpose || 'Visual enhancement',
+                alt_text: img.alt_text || '',
+                suggested_filename: img.suggested_filename || 'image.webp',
+                status: img.generation_status || 'created',
+              });
+            } catch (imgInsertErr) { }
           }
         }
-      } catch (saveError) {
-        console.warn('[Draft Save] Draft DB insert error:', saveError);
+
+        try {
+          const memoryFact = `Published Content: "${output.working_title || output.seo_title}" covering target keyword "${output.primary_keyword}" (${output.search_intent} intent). Tailored for ${output.target_audience || 'target audience'}.`;
+          await supabase.from('project_memory').insert({
+            website_id,
+            category: 'content',
+            content: memoryFact,
+            source: 'autonomous_article_learning',
+            source_detail: `Generated from article: "${output.primary_keyword}"`,
+            confidence: 'high',
+            is_important: false,
+            tags: ['article_coverage', output.primary_keyword],
+          });
+        } catch (autoLearnErr) { }
+
+      } catch (saveError: any) {
+        console.warn('[Draft Save Async] Error:', saveError);
+        await supabase.from('content_drafts').update({ status: 'rejected', revision_notes: 'Generation failed: ' + saveError.message }).eq('id', savedDraft.id);
       }
-    }
+    });
 
     return NextResponse.json({
       success: true,
-      draft: savedDraft
-        ? {
-            id: savedDraft.id,
-            working_title: savedDraft.working_title,
-            primary_keyword: savedDraft.primary_keyword,
-            search_intent: savedDraft.search_intent,
-            content_type: savedDraft.content_type,
-            word_count: savedDraft.word_count,
-            reading_time: savedDraft.reading_time_minutes,
-            status: savedDraft.status,
-            version: savedDraft.current_version,
-            seo_title: savedDraft.seo_title,
-            meta_description: savedDraft.meta_description,
-            url_slug: savedDraft.url_slug,
-            content_body: savedDraft.content_body,
-            qa: output.qa,
-            images: output.images,
-          }
-        : {
-            id: crypto.randomUUID(),
-            working_title: output.working_title,
-            primary_keyword,
-            search_intent,
-            content_type: content_type || 'blog_article',
-            word_count: output.word_count,
-            reading_time: output.reading_time_minutes,
-            status: output.status,
-            version: 1,
-            seo_title: output.seo_title,
-            meta_description: output.meta_description,
-            url_slug: output.url_slug,
-            content_body: output.content_body,
-            qa: output.qa,
-            images: output.images,
-          },
+      draft: {
+        id: savedDraft.id,
+        working_title: savedDraft.working_title,
+        primary_keyword: savedDraft.primary_keyword,
+        search_intent: savedDraft.search_intent,
+        content_type: savedDraft.content_type,
+        status: savedDraft.status,
+        version: savedDraft.current_version,
+      }
     });
-  } catch (error: any) {
+} catch (error: any) {
     console.error('[Content Draft POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

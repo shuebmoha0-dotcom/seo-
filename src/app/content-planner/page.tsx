@@ -284,7 +284,7 @@ export default function ContentPlannerPage() {
 
   // Real-time polling when any draft is queued or publishing so status flips to Live automatically
   useEffect(() => {
-    const hasPending = drafts.some(d => d.status === "approved" || d.status === "ready_for_approval") || publishing !== null;
+    const hasPending = drafts.some(d => d.status === "approved" || d.status === "ready_for_approval" || d.status === "generating" || d.status === "writing") || publishing !== null;
     if (!hasPending) return;
 
     const interval = setInterval(() => {
