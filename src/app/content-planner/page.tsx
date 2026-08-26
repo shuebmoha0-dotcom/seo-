@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type DraftStatus = "brief_pending" | "writing" | "qa_pending" | "needs_revision" | "ready_for_approval" | "approved" | "rejected" | "published" | "draft";
+type DraftStatus = "brief_pending" | "writing" | "generating" | "qa_pending" | "needs_revision" | "ready_for_approval" | "approved" | "rejected" | "published" | "draft";
 
 interface ContentDraft {
   id: string;
