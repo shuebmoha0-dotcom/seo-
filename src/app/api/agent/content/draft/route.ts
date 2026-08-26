@@ -303,7 +303,7 @@ export async function POST(request: Request) {
       content_type: content_type || 'blog_article',
       target_audience: target_audience || defaultRules.audience,
       working_title: working_title || `Generating draft for "${primary_keyword}"...`,
-      status: 'generating',
+      status: 'writing',
       current_version: 0,
     };
 
