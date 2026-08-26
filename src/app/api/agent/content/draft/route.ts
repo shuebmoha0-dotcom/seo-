@@ -296,7 +296,9 @@ export async function POST(request: Request) {
 
     // ASYNCHRONOUS EXECUTION
     if (!website_id) throw new Error('website_id is missing and could not be resolved.');
+    const draftId = crypto.randomUUID();
     const placeholderDraft = {
+      id: draftId,
       website_id,
       primary_keyword,
       secondary_keywords: secondary_keywords || [],
@@ -305,18 +307,15 @@ export async function POST(request: Request) {
       target_audience: target_audience || defaultRules.audience,
       working_title: working_title || `Generating draft for "${primary_keyword}"...`,
       status: 'writing',
-      current_version: 1, seo_title: working_title || `Draft for ${primary_keyword}`, meta_description: 'Generating...', url_slug: 'draft-' + Date.now(),
+      current_version: 1, seo_title: working_title || `Draft for ${primary_keyword}`, meta_description: 'Generating...', url_slug: 'draft-' + Date.now(), content_body: 'Autonomous generation in progress...', h1: working_title, word_count: 1500, reading_time_minutes: 5,
     };
 
-    const { data: savedDraft, error: draftErr } = await supabase
-      .from('content_drafts')
-      .insert(placeholderDraft)
-      .select()
-      .single();
+    const { error: draftErr } = await supabase.from('content_drafts').insert(placeholderDraft);
 
-    if (draftErr || !savedDraft) {
-      throw new Error(draftErr?.message || 'Failed to create placeholder draft');
+    if (draftErr) {
+      throw new Error(draftErr.message || 'Failed to create placeholder draft');
     }
+    const savedDraft = { id: draftId, ...placeholderDraft };
 
     after(async () => {
       try {
@@ -432,4 +431,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+
 
