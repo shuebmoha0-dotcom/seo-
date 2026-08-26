@@ -295,6 +295,7 @@ export async function POST(request: Request) {
     }
 
     // ASYNCHRONOUS EXECUTION
+    if (!website_id) throw new Error('website_id is missing and could not be resolved.');
     const placeholderDraft = {
       website_id,
       primary_keyword,
@@ -304,7 +305,7 @@ export async function POST(request: Request) {
       target_audience: target_audience || defaultRules.audience,
       working_title: working_title || `Generating draft for "${primary_keyword}"...`,
       status: 'writing',
-      current_version: 0,
+      current_version: 1, seo_title: working_title || `Draft for ${primary_keyword}`, meta_description: 'Generating...', url_slug: 'draft-' + Date.now(),
     };
 
     const { data: savedDraft, error: draftErr } = await supabase
@@ -431,3 +432,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
