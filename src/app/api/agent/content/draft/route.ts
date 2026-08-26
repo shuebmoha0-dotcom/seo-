@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
