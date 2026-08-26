@@ -123,9 +123,8 @@ export class ContentAgent {
   async generateBrief(input: ContentInput): Promise<ContentBrief> {
     try {
       const { object } = await LLMProvider.generateObject({
-      agent: 'ContentAgent',
-      
-        
+        agent: 'ContentAgent',
+        complexity: 'simple',
         schema: z.object({
           working_title: z.string(),
           h1: z.string(),
@@ -452,85 +451,100 @@ After closing the </reflection> block, write the full article. Include the H1 at
     }
 
     const brief = await this.generateBrief(input);
-    let content = await this.writeDraft(brief, input.rules, revisionNotes, input.project_instructions, input.project_memory);
+
+    // ── Run Article Writing (Claude Sonnet 5) & Image Generation IN PARALLEL ──
+    const writeDraftPromise = this.writeDraft(
+      brief,
+      input.rules,
+      revisionNotes,
+      input.project_instructions,
+      input.project_memory
+    );
+
+    const generateImagesPromise = (async () => {
+      let featuredImageUrl = '';
+      const featuredImageAlt = brief.image_requirements[0]?.alt_text || `${brief.working_title} — illustrated overview`;
+      const enrichedImages: ImageRequirement[] = [];
+
+      try {
+        console.log(`[ContentAgent] Generating images in parallel with drafting for "${brief.working_title}"...`);
+        const imagePromises = brief.image_requirements.map(async (req, i) => {
+          try {
+            const generatedImage = await ImageRouter.generate({
+              topic: brief.working_title,
+              target_keyword: input.primary_keyword,
+              purpose: req.purpose,
+              style: 'Ultra-realistic cinematic photography, premium editorial 8k resolution, highly detailed, soft natural lighting, professional business context, NO text overlays',
+              dimensions: '1024x1024',
+              image_placement: req.placement_context,
+              brand_instructions: input.rules.brand_rules,
+            });
+
+            if (generatedImage && generatedImage.url) {
+              return { index: i, req, generatedImage, success: true };
+            }
+            return { index: i, req, success: false };
+          } catch (imgErr) {
+            console.warn(`[ContentAgent] Image generation failed for ${req.alt_text}`, imgErr);
+            return { index: i, req, success: false };
+          }
+        });
+
+        const results = await Promise.all(imagePromises);
+        results.sort((a, b) => a.index - b.index);
+
+        for (const res of results) {
+          if (res.success && res.generatedImage) {
+            if (res.index === 0) featuredImageUrl = res.generatedImage.url;
+            enrichedImages.push({
+              ...res.req,
+              image_url: res.generatedImage.url,
+              generation_status: 'generated',
+              prompt_used: res.generatedImage.metadata.prompt_used,
+            });
+          } else {
+            enrichedImages.push(res.req);
+          }
+        }
+      } catch (err: any) {
+        console.warn('[ContentAgent] Global image generation error:', err.message || err);
+        if (enrichedImages.length === 0) {
+          enrichedImages.push(...brief.image_requirements);
+        }
+      }
+
+      return { featuredImageUrl, featuredImageAlt, enrichedImages };
+    })();
+
+    // Await both text and visual pipelines simultaneously
+    const [rawContent, { featuredImageUrl, featuredImageAlt, enrichedImages }] = await Promise.all([
+      writeDraftPromise,
+      generateImagesPromise,
+    ]);
+
+    let content = rawContent;
+
+    // Embed generated images into the markdown body
+    for (const img of enrichedImages) {
+      if (img.image_url) {
+        const imageMarkdown = `\n\n![${img.alt_text}](${img.image_url})\n*${img.alt_text}*\n\n`;
+        if (content.match(/\[IMAGE:[^\]]+\]/)) {
+          content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
+        } else if (img === enrichedImages[0]) {
+          content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
+        }
+      }
+    }
+
+    // Purge any remaining raw image markers from the text so no bracket prompt tags are ever visible
+    content = content.replace(/\n*\[IMAGE:[^\]]+\]\n*/g, '\n\n');
+    content = content.replace(/!\[.*?prompt.*?\]\([^)]*\)/gi, '');
+    content = content.replace(/\*\*Image prompt:?\*\*.*/gi, '');
+    content = content.replace(/Image prompt:.*/gi, '');
+
     const { word_count, reading_time_minutes } = this.countWords(content);
     const seoMeta = this.generateSEOMetadata(brief, content);
     const qa = this.runQA({ content, brief, rules: input.rules, images: brief.image_requirements });
-
-    // ── Automatic Image Generation via ImageRouter (Gemini via Google AI Studio) ──
-    let featuredImageUrl = '';
-    const featuredImageAlt = brief.image_requirements[0]?.alt_text || `${brief.working_title} — illustrated overview`;
-    const enrichedImages: ImageRequirement[] = [];
-
-    try {
-      console.log(`[ContentAgent] Automatically generating images for "${brief.working_title}" via ImageRouter in PARALLEL...`);
-      
-      const imagePromises = brief.image_requirements.map(async (req, i) => {
-        try {
-          const generatedImage = await ImageRouter.generate({
-            topic: brief.working_title,
-            target_keyword: input.primary_keyword,
-            purpose: req.purpose,
-            style: 'Ultra-realistic cinematic photography, premium editorial 8k resolution, highly detailed, soft natural lighting, professional business context, NO text overlays',
-            dimensions: '1024x1024',
-            image_placement: req.placement_context,
-            brand_instructions: input.rules.brand_rules,
-          });
-
-          if (generatedImage && generatedImage.url) {
-            return { index: i, req, generatedImage, success: true };
-          }
-          return { index: i, req, success: false };
-        } catch (imgErr) {
-          console.warn(`[ContentAgent] Image generation failed for ${req.alt_text}`, imgErr);
-          return { index: i, req, success: false };
-        }
-      });
-
-      const results = await Promise.all(imagePromises);
-      results.sort((a, b) => a.index - b.index);
-
-      for (const res of results) {
-        if (res.success && res.generatedImage) {
-          if (res.index === 0) featuredImageUrl = res.generatedImage.url;
-          
-          const imageMarkdown = `\n\n![${res.req.alt_text}](${res.generatedImage.url})\n*${res.req.alt_text}*\n\n`;
-          
-          if (content.match(/\[IMAGE:[^\]]+\]/)) {
-              content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
-          } else if (res.index === 0) {
-              content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
-          }
-
-          enrichedImages.push({
-            ...res.req,
-            image_url: res.generatedImage.url,
-            generation_status: 'generated',
-            prompt_used: res.generatedImage.metadata.prompt_used,
-          });
-        } else {
-          enrichedImages.push(res.req);
-        }
-      }
-
-      // Purge any remaining raw image markers from the text so no bracket prompt tags are ever visible
-      content = content.replace(/\n*\[IMAGE:[^\]]+\]\n*/g, '\n\n');
-      
-      // Purge any fake AI-generated markdown prompts
-      content = content.replace(/!\[.*?prompt.*?\]\([^)]*\)/gi, '');
-      content = content.replace(/\*\*Image prompt:?\*\*.*/gi, '');
-      content = content.replace(/Image prompt:.*/gi, '');
-
-    } catch (err: any) {
-      console.warn('[ContentAgent] Global image generation failed:', err.message || err);
-      content = content.replace(/\n*\[IMAGE:[^\]]+\]\n*/g, '\n\n');
-      content = content.replace(/!\[.*?prompt.*?\]\([^)]*\)/gi, '');
-      content = content.replace(/\*\*Image prompt:?\*\*.*/gi, '');
-      content = content.replace(/Image prompt:.*/gi, '');
-      if (enrichedImages.length === 0) {
-        enrichedImages.push(...brief.image_requirements);
-      }
-    }
 
     return {
       working_title: brief.working_title,

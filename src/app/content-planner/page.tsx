@@ -227,11 +227,13 @@ export default function ContentPlannerPage() {
   const [filterStatus, setFilterStatus] = useState<"all" | "draft" | "published" | "needs_revision">("all");
   const [publishing, setPublishing] = useState<string | null>(null);
 
-  const fetchDrafts = async () => {
+  const fetchDrafts = async (isBackground = false) => {
     try {
-      setLoadingDrafts(true);
+      if (!isBackground) {
+        setLoadingDrafts(true);
+      }
       // 1. Initial hydration from localStorage cache so drafts never flash or disappear
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && !isBackground) {
         const cached = localStorage.getItem("seo_cached_drafts");
         if (cached) {
           try {
@@ -274,12 +276,14 @@ export default function ContentPlannerPage() {
     } catch (err) {
       console.error("Error fetching content drafts:", err);
     } finally {
-      setLoadingDrafts(false);
+      if (!isBackground) {
+        setLoadingDrafts(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchDrafts();
+    fetchDrafts(false);
   }, [currentWebsite?.id]);
 
   // Real-time polling when any draft is queued or publishing so status flips to Live automatically
@@ -288,8 +292,8 @@ export default function ContentPlannerPage() {
     if (!hasPending) return;
 
     const interval = setInterval(() => {
-      fetchDrafts();
-    }, 5000);
+      fetchDrafts(true);
+    }, 4000);
 
     return () => clearInterval(interval);
   }, [drafts, publishing]);

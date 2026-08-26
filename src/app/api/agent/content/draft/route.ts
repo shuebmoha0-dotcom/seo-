@@ -1,4 +1,4 @@
-export const maxDuration = 60;
+﻿export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 /* eslint-disable prefer-const, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextResponse } from 'next/server';
@@ -44,28 +44,41 @@ export async function GET(request: Request) {
 
     if (error) throw error;
 
-    const formattedDrafts = (drafts || []).map((d: any) => ({
-      id: d.id,
-      working_title: d.working_title,
-      primary_keyword: d.primary_keyword,
-      search_intent: d.search_intent,
-      content_type: d.content_type,
-      word_count: d.word_count || 0,
-      reading_time: d.reading_time_minutes || 0,
-      status: d.status || 'ready_for_approval',
-      version: d.current_version || 1,
-      seo_title: d.seo_title,
-      meta_description: d.meta_description,
-      url_slug: d.url_slug,
-      content_body: d.content_body,
-      qa: d.content_qa_results?.[0] || null,
-      images: d.content_images || [],
-      published_at: d.published_at || (d.status === 'published' ? d.updated_at : undefined),
-      wordpress_post_id: d.wordpress_post_id,
-      wordpress_post_url: d.wordpress_post_url,
-      created_at: d.created_at,
-      updated_at: d.updated_at,
-    }));
+    const now = Date.now();
+    const formattedDrafts = (drafts || []).map((d: any) => {
+      let currentStatus = d.status || 'ready_for_approval';
+
+      // Auto-recover stale drafts that timed out (older than 75s in writing state)
+      if ((currentStatus === 'writing' || currentStatus === 'generating') && d.created_at) {
+        const ageMs = now - new Date(d.created_at).getTime();
+        if (ageMs > 75000) {
+          currentStatus = 'needs_revision';
+        }
+      }
+
+      return {
+        id: d.id,
+        working_title: d.working_title,
+        primary_keyword: d.primary_keyword,
+        search_intent: d.search_intent,
+        content_type: d.content_type,
+        word_count: d.word_count || 0,
+        reading_time: d.reading_time_minutes || 0,
+        status: currentStatus,
+        version: d.current_version || 1,
+        seo_title: d.seo_title,
+        meta_description: d.meta_description,
+        url_slug: d.url_slug,
+        content_body: d.content_body,
+        qa: d.content_qa_results?.[0] || null,
+        images: d.content_images || [],
+        published_at: d.published_at || (d.status === 'published' ? d.updated_at : undefined),
+        wordpress_post_id: d.wordpress_post_id,
+        wordpress_post_url: d.wordpress_post_url,
+        created_at: d.created_at,
+        updated_at: d.updated_at,
+      };
+    });
 
     return NextResponse.json({ drafts: formattedDrafts });
   } catch (error: any) {
@@ -238,13 +251,13 @@ export async function POST(request: Request) {
           .eq('website_id', website_id)
           .neq('url_slug', null)
           .limit(15);
-          
+
         if (existingDrafts && existingDrafts.length > 0) {
           internal_linking_opportunities = existingDrafts
             // Don't link to itself if by chance we have the same keyword
             .filter((d: any) => d.primary_keyword !== primary_keyword)
             .map((d: any) => `/${d.url_slug} (Topic: ${d.seo_title || d.primary_keyword})`);
-          
+
           console.log(`[Content Draft] Auto-discovered ${internal_linking_opportunities.length} internal links for context.`);
         }
       } catch (e) {
@@ -252,7 +265,6 @@ export async function POST(request: Request) {
       }
     }
 
-    
     // Determine execution mode (sync for guest/demo, async for registered users)
     if (!website_id) {
       // SYNCHRONOUS EXECUTION
@@ -297,7 +309,6 @@ export async function POST(request: Request) {
     }
 
     // ASYNCHRONOUS EXECUTION
-    if (!website_id) throw new Error('website_id is missing and could not be resolved.');
     const draftId = crypto.randomUUID();
     const placeholderDraft = {
       id: draftId,
@@ -309,7 +320,14 @@ export async function POST(request: Request) {
       target_audience: target_audience || defaultRules.audience,
       working_title: working_title || `Generating draft for "${primary_keyword}"...`,
       status: 'writing',
-      current_version: 1, seo_title: working_title || `Draft for ${primary_keyword}`, meta_description: 'Generating...', url_slug: 'draft-' + Date.now(), content_body: 'Autonomous generation in progress...', h1: working_title, word_count: 1500, reading_time_minutes: 5,
+      current_version: 1,
+      seo_title: working_title || `Draft for ${primary_keyword}`,
+      meta_description: 'Generating...',
+      url_slug: 'draft-' + Date.now(),
+      content_body: 'Autonomous generation in progress...',
+      h1: working_title,
+      word_count: 1500,
+      reading_time_minutes: 5,
     };
 
     const { error: draftErr } = await supabase.from('content_drafts').insert(placeholderDraft);
@@ -322,7 +340,7 @@ export async function POST(request: Request) {
     after(async () => {
       try {
         console.log(`[Content Draft Async] Starting generation for ${savedDraft.id}`);
-        
+
         const output = await agent.runFullPipeline(
           {
             primary_keyword,
@@ -428,13 +446,8 @@ export async function POST(request: Request) {
         version: savedDraft.current_version,
       }
     });
-} catch (error: any) {
+  } catch (error: any) {
     console.error('[Content Draft POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-
-
-
-
