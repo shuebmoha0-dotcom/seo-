@@ -463,11 +463,9 @@ After closing the </reflection> block, write the full article. Include the H1 at
     const enrichedImages: ImageRequirement[] = [];
 
     try {
-      console.log(`[ContentAgent] Automatically generating images for "${brief.working_title}" via ImageRouter...`);
+      console.log(`[ContentAgent] Automatically generating images for "${brief.working_title}" via ImageRouter in PARALLEL...`);
       
-      for (let i = 0; i < brief.image_requirements.length; i++) {
-        const req = brief.image_requirements[i];
-        
+      const imagePromises = brief.image_requirements.map(async (req, i) => {
         try {
           const generatedImage = await ImageRouter.generate({
             topic: brief.working_title,
@@ -480,29 +478,38 @@ After closing the </reflection> block, write the full article. Include the H1 at
           });
 
           if (generatedImage && generatedImage.url) {
-            if (i === 0) featuredImageUrl = generatedImage.url;
-            
-            const imageMarkdown = `\n\n![${req.alt_text}](${generatedImage.url})\n*${req.alt_text}*\n\n`;
-            
-            if (content.match(/\[IMAGE:[^\]]+\]/)) {
-                content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
-            } else if (i === 0) {
-                // Place right after the H1 title
-                content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
-            }
-
-            enrichedImages.push({
-              ...req,
-              image_url: generatedImage.url,
-              generation_status: 'generated',
-              prompt_used: generatedImage.metadata.prompt_used,
-            });
-          } else {
-             enrichedImages.push(req);
+            return { index: i, req, generatedImage, success: true };
           }
+          return { index: i, req, success: false };
         } catch (imgErr) {
           console.warn(`[ContentAgent] Image generation failed for ${req.alt_text}`, imgErr);
-          enrichedImages.push(req);
+          return { index: i, req, success: false };
+        }
+      });
+
+      const results = await Promise.all(imagePromises);
+      results.sort((a, b) => a.index - b.index);
+
+      for (const res of results) {
+        if (res.success && res.generatedImage) {
+          if (res.index === 0) featuredImageUrl = res.generatedImage.url;
+          
+          const imageMarkdown = `\n\n![${res.req.alt_text}](${res.generatedImage.url})\n*${res.req.alt_text}*\n\n`;
+          
+          if (content.match(/\[IMAGE:[^\]]+\]/)) {
+              content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
+          } else if (res.index === 0) {
+              content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
+          }
+
+          enrichedImages.push({
+            ...res.req,
+            image_url: res.generatedImage.url,
+            generation_status: 'generated',
+            prompt_used: res.generatedImage.metadata.prompt_used,
+          });
+        } else {
+          enrichedImages.push(res.req);
         }
       }
 
