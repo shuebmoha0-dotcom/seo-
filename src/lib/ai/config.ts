@@ -20,7 +20,7 @@ export const AI_CONFIG = {
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
 
   // Leonardo AI (Fallback Image Provider)
-  LEONARDO_IMAGE_MODEL: process.env.LEONARDO_IMAGE_MODEL || 'lucid-origin',
+  LEONARDO_IMAGE_MODEL: process.env.LEONARDO_IMAGE_MODEL || 'leonardo-kino-xl',
 
   // ── Retry Policies ──────────────────────────────────────────────────────────
   MAX_RETRIES: 2,
@@ -77,3 +77,4 @@ export function recordProviderFailure(provider: keyof typeof PROVIDER_HEALTH, er
     PROVIDER_HEALTH[provider].status = 'degraded';
   }
 }
+
