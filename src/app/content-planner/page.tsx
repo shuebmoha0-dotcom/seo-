@@ -156,19 +156,31 @@ export default function ContentPlannerPage() {
           if (!trimmed) return null;
 
           // Check for Image Markdown ![alt](url)
-          const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+          const imgMatch = trimmed.match(/!\[([^\]]*)\]\(([^)]+)\)/);
           if (imgMatch) {
             const alt = imgMatch[1];
             const src = imgMatch[2];
+            const remainingText = trimmed
+              .replace(/!\[([^\]]*)\]\(([^)]+)\)/, '')
+              .replace(new RegExp(`\\*+${alt}\\*+`, 'gi'), '')
+              .trim();
+
             return (
-              <figure key={bIdx} className="my-6 rounded-2xl overflow-hidden border border-neutral-200 shadow-sm bg-neutral-50">
-                <img src={src} alt={alt} className="w-full h-auto object-cover max-h-96" />
-                {alt && (
-                  <figcaption className="p-2.5 text-center text-xs text-neutral-500 italic bg-white border-t border-neutral-100">
-                    {alt}
-                  </figcaption>
+              <div key={bIdx} className="my-6 space-y-2">
+                <figure className="rounded-2xl overflow-hidden border border-neutral-200 shadow-sm bg-neutral-50">
+                  <img src={src} alt={alt} className="w-full h-auto object-cover max-h-96" />
+                  {alt && (
+                    <figcaption className="p-2.5 text-center text-xs text-neutral-500 italic bg-white border-t border-neutral-100">
+                      {alt}
+                    </figcaption>
+                  )}
+                </figure>
+                {remainingText && (
+                  <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
+                    {remainingText}
+                  </p>
                 )}
-              </figure>
+              </div>
             );
           }
 
