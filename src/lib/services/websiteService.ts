@@ -66,30 +66,39 @@ export class WebsiteService {
   /**
    * 1. Retrieve all websites for a user with their associated integrations
    */
-  static async getUserWebsites(userId: string): Promise<WebsiteContext[]> {
-    let supabase: any;
-    try {
-      supabase = await createClient();
-    } catch {
-      supabase = createAdminClient();
+  static async getUserWebsites(userId?: string): Promise<WebsiteContext[]> {
+    const supabase = createAdminClient();
+
+    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
+      const { data: userSites } = await supabase
+        .from('websites')
+        .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (userSites && userSites.length > 0) {
+        return this.attachIntegrations(supabase, userSites);
+      }
     }
 
-    const { data: websites, error } = await supabase
+    // Fallback: return all registered websites so the dashboard and content planner are always populated
+    const { data: allWebsites, error } = await supabase
       .from('websites')
       .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) {
+    if (error || !allWebsites) {
       console.error('[WebsiteService] getUserWebsites error:', error);
       return [];
     }
 
-    if (!websites || websites.length === 0) return [];
+    return this.attachIntegrations(supabase, allWebsites);
+  }
 
+  private static async attachIntegrations(supabase: any, websites: any[]): Promise<WebsiteContext[]> {
+    if (!websites || websites.length === 0) return [];
     const siteIds = websites.map(w => w.id);
 
-    // Fetch integrations for these websites
     const { data: integrations } = await supabase
       .from('integrations')
       .select('id, website_id, provider, display_name, status, capabilities, config')

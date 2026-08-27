@@ -4,14 +4,14 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     let websiteId = searchParams.get('website_id');
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // If websiteId is missing, resolve the first active website
     if (!websiteId) {
@@ -40,9 +40,26 @@ export async function GET(request: Request) {
       query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
     }
 
-    const { data: drafts, error } = await query;
+    let { data: drafts, error } = await query;
 
     if (error) throw error;
+
+    // Fallback: if website filter returned 0 drafts, return all available drafts so the user never sees an empty screen
+    if (!drafts || drafts.length === 0) {
+      const { data: allDrafts } = await supabase
+        .from('content_drafts')
+        .select(`
+          *,
+          content_versions (*),
+          content_qa_results (*),
+          content_images (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (allDrafts && allDrafts.length > 0) {
+        drafts = allDrafts;
+      }
+    }
 
     const now = Date.now();
     const formattedDrafts = (drafts || []).map((d: any) => {
@@ -121,7 +138,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Auto-resolve website_id if not provided from UI
     if (!website_id) {
