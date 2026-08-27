@@ -229,21 +229,8 @@ export default function ContentPlannerPage() {
 
   const fetchDrafts = async (isBackground = false) => {
     try {
-      if (!isBackground) {
+      if (!isBackground && drafts.length === 0) {
         setLoadingDrafts(true);
-      }
-      // 1. Initial hydration from localStorage cache so drafts never flash or disappear
-      if (typeof window !== "undefined" && !isBackground) {
-        const cached = localStorage.getItem("seo_cached_drafts");
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setDrafts(parsed);
-              if (!selectedDraft) setSelectedDraft(parsed[0]);
-            }
-          } catch (e) {}
-        }
       }
 
       const url = currentWebsite
@@ -254,21 +241,17 @@ export default function ContentPlannerPage() {
       if (res.ok) {
         const data = await res.json();
         const loadedDrafts = data.drafts || [];
-        if (loadedDrafts.length > 0) {
-          setDrafts(loadedDrafts);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("seo_cached_drafts", JSON.stringify(loadedDrafts));
-          }
-          if (!selectedDraft) {
-            setSelectedDraft(loadedDrafts[0]);
-          } else {
-            // Ensure the currently viewed draft gets live status updates
-            const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
-            if (updatedSelected) {
-              setSelectedDraft(updatedSelected);
-              if (updatedSelected.status === "published" && publishing === updatedSelected.id) {
-                setPublishing(null);
-              }
+        setDrafts(loadedDrafts);
+
+        if (!selectedDraft) {
+          if (loadedDrafts.length > 0) setSelectedDraft(loadedDrafts[0]);
+        } else {
+          // Ensure the currently viewed draft gets live status updates
+          const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
+          if (updatedSelected) {
+            setSelectedDraft(updatedSelected);
+            if (updatedSelected.status === "published" && publishing === updatedSelected.id) {
+              setPublishing(null);
             }
           }
         }
@@ -869,7 +852,24 @@ export default function ContentPlannerPage() {
                       </div>
                     )}
 
-                    {previewMode === "formatted" ? (
+                    {selectedDraft.status === "writing" || selectedDraft.status === "generating" ? (
+                      <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-8 rounded-2xl border border-blue-200 text-center space-y-4 shadow-xs">
+                        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
+                          <PenLine className="w-7 h-7 animate-pulse" />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="text-base font-bold text-neutral-900">Agent is Writing Your Article...</h3>
+                          <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
+                            Researching search intent, drafting comprehensive sections with Claude Sonnet 5, and creating editorial illustrations in the background.
+                          </p>
+                        </div>
+
+                        <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700 bg-white/80 border border-blue-200 px-4 py-2 rounded-xl shadow-xs">
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                          <span>Writing in progress • Runs in background (safe to close tab)</span>
+                        </div>
+                      </div>
+                    ) : previewMode === "formatted" ? (
                       <div className="bg-white p-6 md:p-8 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
                         {renderFormattedArticle(selectedDraft.content_body || "")}
                       </div>
