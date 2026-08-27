@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 const PUBLIC_ROUTES = ['/', '/login', '/pricing', '/forgot-password', '/reset-password'];
 const PUBLIC_PREFIXES = [
   '/auth/',
+  '/api/',
   '/api/auth/',
   '/api/integrations/wordpress/outbound/',
   '/api/integrations/wordpress/plugin',
