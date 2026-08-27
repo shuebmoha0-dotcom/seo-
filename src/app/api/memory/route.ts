@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { MemoryAgent } from '@/lib/agent/memoryAgent';
 
 // GET all memories, project instructions, and knowledge bank
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const task_type = searchParams.get('task_type');
     const include_outdated = searchParams.get('include_outdated') === 'true';
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (!website_id) {
       const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       triggered_by,
     } = body;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (!website_id) {
       const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
@@ -242,7 +242,7 @@ export async function DELETE(request: Request) {
     const type = searchParams.get('type');
     const website_id = searchParams.get('website_id');
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (type === 'instructions') {
       await supabase

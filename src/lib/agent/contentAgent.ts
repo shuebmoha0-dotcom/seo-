@@ -166,10 +166,10 @@ export class ContentAgent {
         system: `You are an expert SEO content strategist. Create a precise, audience-first content brief.
 
 ${input.project_instructions ? `==================================================
-PROJECT CUSTOM INSTRUCTIONS (CLAUDE PROJECT GUIDELINES):
+CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
 ${input.project_instructions}
 ==================================================\n` : ''}${input.project_memory ? `==================================================
-PROJECT KNOWLEDGE BANK & MEMORY:
+PROJECT KNOWLEDGE BANK & COMPANY FACTS:
 ${input.project_memory}
 ==================================================\n` : ''}Rules to follow:
 - Audience: ${input.rules.audience}
@@ -183,6 +183,11 @@ Secondary keywords: ${input.secondary_keywords.join(', ')}
 Search intent: ${input.search_intent}
 Content type: ${input.content_type}
 Target audience: ${input.target_audience}
+
+MANDATORY INSTRUCTIONS:
+1. You MUST directly incorporate the company positioning, guidelines, and context from the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK into the headings and section notes.
+2. Create practical, concrete H2 and H3 headings with specific subtopics, real-world scenarios, and actionable guidance rather than generic high-level headings.
+3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable content.`e}
 Competitor gaps: ${input.competitor_gaps || 'Not provided'}
 Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
 Important entities: ${(input.entities || []).join(', ')}
@@ -334,7 +339,10 @@ ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
 
-Before writing the article, you MUST open a <reflection> block. Inside it, explicitly confirm how you will follow the provided CONTENT RULES and how you will use the PROJECT KNOWLEDGE BASE / MEMORY as a reference.
+${projectInstructions ? `\n==================================================\nMANDATORY PROJECT INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):\n${projectInstructions}\n==================================================\n` : ''}
+${projectMemory ? `\n==================================================\nMANDATORY COMPANY FACTS & KNOWLEDGE BANK (WEAVE DIRECTLY INTO THE COPY):\n${projectMemory}\n==================================================\n` : ''}
+
+Before writing the article, you MUST open a <reflection> block. Inside it, explicitly confirm how you will follow the provided CONTENT RULES and how you will weave the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BASE directly into each section.
 After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, exhaustive analysis under each heading to satisfy the ${rules.word_count_min}+ word requirement.`,
       });
 

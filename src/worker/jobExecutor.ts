@@ -171,6 +171,93 @@ export class JobExecutor {
       throw new Error('content_input and draft_id are required for content draft execution');
     }
 
+    let websiteId = payload.website_id;
+    if (!websiteId) {
+      const { data: firstSite } = await this.supabase
+        .from('websites')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+      if (firstSite) websiteId = firstSite.id;
+    }
+
+    // Authoritative Memory & Instructions Loader from Supabase
+    let projectInstructions = input.project_instructions || '';
+    let projectMemory = input.project_memory || '';
+
+    try {
+      let memoryQuery = this.supabase
+        .from('project_memory')
+        .select('*')
+        .eq('is_outdated', false)
+        .order('is_important', { ascending: false });
+
+      if (websiteId) {
+        memoryQuery = memoryQuery.or(`website_id.eq.${websiteId},website_id.is.null`);
+      }
+
+      const { data: memoryRows } = await memoryQuery;
+
+      if (memoryRows && memoryRows.length > 0) {
+        const customInstrRow = memoryRows.find((m: any) => m.source === 'project_custom_instructions');
+        const knowledgeBankRow = memoryRows.find((m: any) => m.source === 'project_knowledge_bank');
+        const standardFacts = memoryRows.filter(
+          (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+        );
+
+        if (!projectInstructions && customInstrRow?.content) {
+          projectInstructions = customInstrRow.content;
+        }
+
+        if (!projectMemory && knowledgeBankRow?.content) {
+          projectMemory = knowledgeBankRow.content;
+        }
+
+        if (standardFacts.length > 0) {
+          const uniqueFacts = new Set<string>();
+          const factBlocks: string[] = [];
+
+          for (const f of standardFacts) {
+            const text = f.content?.trim();
+            if (text && !uniqueFacts.has(text)) {
+              uniqueFacts.add(text);
+              factBlocks.push(`[${f.category?.toUpperCase() || 'FACT'}] ${text}`);
+            }
+          }
+
+          if (factBlocks.length > 0) {
+            projectMemory = projectMemory
+              ? `${projectMemory}\n\n${factBlocks.join('\n\n')}`
+              : factBlocks.join('\n\n');
+          }
+        }
+      }
+
+      // Check content_rules fallback
+      if (!projectInstructions && websiteId) {
+        const { data: websiteRules } = await this.supabase
+          .from('content_rules')
+          .select('custom_rules, word_count_min, word_count_max, tone, audience, author_style')
+          .eq('website_id', websiteId)
+          .maybeSingle();
+
+        if (websiteRules?.custom_rules) {
+          projectInstructions = websiteRules.custom_rules;
+        }
+        if (websiteRules?.word_count_min && !input.rules?.word_count_min) {
+          input.rules.word_count_min = websiteRules.word_count_min;
+        }
+        if (websiteRules?.word_count_max && !input.rules?.word_count_max) {
+          input.rules.word_count_max = websiteRules.word_count_max;
+        }
+      }
+    } catch (memLoadErr) {
+      WorkerLogger.warn('Failed to load project memory in worker', { error: (memLoadErr as any).message });
+    }
+
+    input.project_instructions = projectInstructions;
+    input.project_memory = projectMemory;
+
     if (!input.rules) {
       input.rules = {
         word_count_min: 1200,
@@ -186,11 +273,13 @@ export class JobExecutor {
         brand_rules: 'Do not make unsupported claims.',
         cta_rules: 'Include one relevant CTA.',
         avoid_rules: 'No keyword stuffing. No filler. No robotic language.',
-        custom_rules: '',
+        custom_rules: projectInstructions || '',
       };
+    } else if (projectInstructions && !input.rules.custom_rules) {
+      input.rules.custom_rules = projectInstructions;
     }
 
-    WorkerLogger.info(`Generating content draft [${draftId}] for keyword "${input.primary_keyword}"`);
+    WorkerLogger.info(`Generating content draft [${draftId}] for keyword "${input.primary_keyword}" with ${projectInstructions ? 'custom instructions' : 'default guidelines'} and ${projectMemory ? 'knowledge base memory' : 'no prior memory'}`);
 
     const agent = new ContentAgent();
     const output = await agent.runFullPipeline(input, payload.revision_notes);
