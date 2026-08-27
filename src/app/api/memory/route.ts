@@ -52,31 +52,24 @@ export async function GET(request: Request) {
       }
     }
 
-    // 2. Fetch knowledge bank from project_memory
+    // 2. Fetch autonomous memory / knowledge space from project_memory
     const knowledgeMemory = (data || []).find((m: any) => m.source === 'project_knowledge_bank');
-    const knowledge_bank = knowledgeMemory?.content || '';
+    const memory = knowledgeMemory?.content || '';
 
     // Filter out internal system memory rows from the public list of individual memory items
     const displayMemories = (data || []).filter(
       (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
     );
 
-    if (task_type && displayMemories) {
-      const agent = new MemoryAgent();
-      const relevant = agent.filterForTask(displayMemories as any, task_type);
-      return NextResponse.json({
-        instructions,
-        knowledge_bank,
-        memories: relevant,
-        total: displayMemories.length,
-        filtered: relevant.length,
-      });
-    }
-
     return NextResponse.json({
       instructions,
-      knowledge_bank,
+      memory,
+      knowledge_bank: memory,
       memories: displayMemories,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      }
     });
   } catch (error: any) {
     console.error('[Memory GET] Error:', error);
@@ -92,6 +85,7 @@ export async function POST(request: Request) {
       website_id,
       type,
       instructions,
+      memory,
       knowledge_bank,
       category,
       content,
@@ -110,11 +104,10 @@ export async function POST(request: Request) {
       if (firstSite) website_id = firstSite.id;
     }
 
-    // 1. Save Claude-Projects Style Custom Instructions
+    // 1. Save Human Custom Instructions
     if (type === 'instructions') {
       const safeInstructions = instructions ?? '';
 
-      // Overwrite/replace any previous custom instruction rows (guarantees zero duplication)
       await supabase
         .from('project_memory')
         .delete()
@@ -126,10 +119,10 @@ export async function POST(request: Request) {
           category: 'brand',
           content: safeInstructions,
           source: 'project_custom_instructions',
-          source_detail: 'Custom Project Instructions (Claude Project Style)',
+          source_detail: 'Custom Project Instructions (Set by User)',
           confidence: 'high',
           is_important: true,
-          tags: ['custom_instructions', 'claude_project_prompt'],
+          tags: ['custom_instructions', 'human_directive'],
         });
       }
 
@@ -166,30 +159,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, instructions: safeInstructions });
     }
 
-    // 2. Save Claude-Projects Style Knowledge Bank / Large Context
-    if (type === 'knowledge_bank') {
-      const safeKnowledge = knowledge_bank ?? '';
+    // 2. Save Autonomous Project Memory Space (Large Context)
+    if (type === 'memory' || type === 'knowledge_bank') {
+      const safeMemory = (memory !== undefined ? memory : knowledge_bank) ?? '';
 
-      // Overwrite/replace any previous knowledge bank rows (guarantees zero duplication)
       await supabase
         .from('project_memory')
         .delete()
         .eq('source', 'project_knowledge_bank');
 
-      if (safeKnowledge.trim()) {
+      if (safeMemory.trim()) {
         await supabase.from('project_memory').insert({
           website_id: website_id || null,
           category: 'content_strategy',
-          content: safeKnowledge,
+          content: safeMemory,
           source: 'project_knowledge_bank',
-          source_detail: 'Project Knowledge Bank & Context Documents',
+          source_detail: 'Autonomous Project Memory Space',
           confidence: 'high',
           is_important: true,
-          tags: ['knowledge_bank', 'context_docs'],
+          tags: ['project_memory', 'autonomous_learning'],
         });
       }
 
-      return NextResponse.json({ success: true, knowledge_bank: safeKnowledge });
+      return NextResponse.json({ success: true, memory: safeMemory });
     }
 
     // 3. Batch Import Memory & Custom Instructions
@@ -200,7 +192,7 @@ export async function POST(request: Request) {
       }
 
       let importedInstructionsCount = 0;
-      let importedMemoriesCount = 0;
+      let importedMemoryCount = 0;
 
       // Handle custom instructions
       const customInstr = import_data.custom_instructions || (typeof import_data === 'string' ? import_data : '');
@@ -223,55 +215,55 @@ export async function POST(request: Request) {
         importedInstructionsCount = 1;
       }
 
-      // Handle memories array
-      const rawMemories = Array.isArray(import_data.memories)
-        ? import_data.memories
-        : Array.isArray(import_data)
-        ? import_data
-        : [];
+      // Handle autonomous memory space
+      const incomingMemory = import_data.autonomous_memory || import_data.memory || import_data.knowledge_bank || '';
+      if (incomingMemory && typeof incomingMemory === 'string' && incomingMemory.trim()) {
+        let finalMemory = incomingMemory.trim();
 
-      if (rawMemories.length > 0) {
-        if (mode === 'replace') {
-          // Delete non-instruction memories
-          await supabase
+        if (mode === 'merge') {
+          const { data: currentMem } = await supabase
             .from('project_memory')
-            .delete()
-            .neq('source', 'project_custom_instructions')
-            .neq('source', 'project_knowledge_bank');
+            .select('content')
+            .eq('source', 'project_knowledge_bank')
+            .maybeSingle();
+
+          if (currentMem?.content) {
+            finalMemory = `${currentMem.content.trim()}\n\n${finalMemory}`;
+          }
         }
 
-        const validMemories = rawMemories.map((m: any) => ({
+        await supabase
+          .from('project_memory')
+          .delete()
+          .eq('source', 'project_knowledge_bank');
+
+        await supabase.from('project_memory').insert({
           website_id: website_id || null,
-          category: m.category || 'brand',
-          content: (m.content || m.text || (typeof m === 'string' ? m : '')).trim(),
-          source: m.source || 'imported_memory',
-          source_detail: m.source_detail || 'Imported Memory Item',
-          confidence: m.confidence || 'high',
-          is_important: !!m.is_important,
-          tags: Array.isArray(m.tags) ? m.tags : ['imported'],
-        })).filter((m: any) => m.content.length > 0);
-
-        if (validMemories.length > 0) {
-          const { error: insErr } = await supabase.from('project_memory').insert(validMemories);
-          if (insErr) throw insErr;
-          importedMemoriesCount = validMemories.length;
-        }
+          category: 'content_strategy',
+          content: finalMemory,
+          source: 'project_knowledge_bank',
+          source_detail: 'Imported Project Memory Space',
+          confidence: 'high',
+          is_important: true,
+          tags: ['project_memory', 'imported'],
+        });
+        importedMemoryCount = 1;
       }
 
       return NextResponse.json({
         success: true,
-        message: `Imported successfully: ${importedInstructionsCount} instruction set and ${importedMemoriesCount} memory items.`,
-        instructions_count: importedInstructionsCount,
-        memories_count: importedMemoriesCount,
+        message: 'Memory & instructions imported successfully!',
+        instructions_imported: importedInstructionsCount,
+        memory_imported: importedMemoryCount,
       });
     }
 
-    // 4. Save standard structured memory item
+    // 4. Save individual structured memory item (backward compatibility)
     if (!category || !content) {
       return NextResponse.json({ error: 'category and content are required' }, { status: 400 });
     }
 
-    const { data: memory, error } = await supabase
+    const { data: memoryItem, error } = await supabase
       .from('project_memory')
       .insert({
         website_id: website_id || null,
@@ -288,62 +280,37 @@ export async function POST(request: Request) {
 
     if (error) throw error;
 
-    const agent = new MemoryAgent();
-    const action = triggered_by === 'user' ? 'user_added' : 'learned';
-    try {
-      await supabase.from('memory_activity').insert({
-        website_id: website_id || null,
-        memory_id: memory.id,
-        action,
-        summary: agent.generateActivitySummary(action, { category, content }),
-        triggered_by: triggered_by || 'agent',
-      });
-    } catch (actErr) {
-      console.warn('[Memory POST] Activity log error:', actErr);
-    }
-
-    return NextResponse.json({ success: true, memory });
+    return NextResponse.json({ success: true, memory: memoryItem });
   } catch (error: any) {
     console.error('[Memory POST] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// DELETE clear instructions, knowledge bank, or memories
+// DELETE clear instructions or memory
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type');
-    const website_id = searchParams.get('website_id');
+    const type = searchParams.get('type') || 'instructions';
+    let website_id = searchParams.get('website_id');
 
     const supabase = createAdminClient();
 
+    if (!website_id) {
+      const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
+      if (firstSite) website_id = firstSite.id;
+    }
+
     if (type === 'instructions') {
-      await supabase
-        .from('project_memory')
-        .delete()
-        .eq('source', 'project_custom_instructions');
-
+      await supabase.from('project_memory').delete().eq('source', 'project_custom_instructions');
       if (website_id) {
-        await supabase
-          .from('content_rules')
-          .update({ custom_rules: '', updated_at: new Date().toISOString() })
-          .eq('website_id', website_id);
+        await supabase.from('content_rules').update({ custom_rules: '' }).eq('website_id', website_id);
       }
-
-      return NextResponse.json({ success: true, message: 'Custom instructions deleted' });
+    } else if (type === 'memory') {
+      await supabase.from('project_memory').delete().eq('source', 'project_knowledge_bank');
     }
 
-    if (type === 'knowledge_bank') {
-      await supabase
-        .from('project_memory')
-        .delete()
-        .eq('source', 'project_knowledge_bank');
-
-      return NextResponse.json({ success: true, message: 'Knowledge bank deleted' });
-    }
-
-    return NextResponse.json({ error: 'Valid type parameter required (instructions or knowledge_bank)' }, { status: 400 });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[Memory DELETE] Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
