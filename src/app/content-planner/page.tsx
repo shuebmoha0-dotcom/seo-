@@ -243,7 +243,7 @@ export default function ContentPlannerPage() {
         const loadedDrafts = data.drafts || [];
         setDrafts(loadedDrafts);
 
-        if (!selectedDraft) {
+        if (!selectedDraft || !loadedDrafts.some((d: any) => d.id === selectedDraft?.id)) {
           if (loadedDrafts.length > 0) setSelectedDraft(loadedDrafts[0]);
         } else {
           // Ensure the currently viewed draft gets live status updates
