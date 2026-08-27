@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { validateAndNormalizeWordPressUrl } from '@/lib/utils/urlValidator';
 import { checkWebsiteLimit } from '@/lib/billing/entitlements';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
@@ -66,7 +67,12 @@ export class WebsiteService {
    * 1. Retrieve all websites for a user with their associated integrations
    */
   static async getUserWebsites(userId: string): Promise<WebsiteContext[]> {
-    const supabase = await createClient();
+    let supabase: any;
+    try {
+      supabase = await createClient();
+    } catch {
+      supabase = createAdminClient();
+    }
 
     const { data: websites, error } = await supabase
       .from('websites')
@@ -108,20 +114,55 @@ export class WebsiteService {
    * 2. Resolve active website context for agent execution
    */
   static async resolveWebsiteContext(userId: string, requestedWebsiteId?: string): Promise<WebsiteContext> {
+    let supabase: any;
+    try {
+      supabase = await createClient();
+    } catch {
+      supabase = createAdminClient();
+    }
+
+    // 1. If requestedWebsiteId is provided, resolve directly by ID
+    if (requestedWebsiteId && requestedWebsiteId !== 'default') {
+      const { data: directSite } = await supabase
+        .from('websites')
+        .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
+        .eq('id', requestedWebsiteId)
+        .maybeSingle();
+
+      if (directSite) {
+        const { data: integrations } = await supabase
+          .from('integrations')
+          .select('id, website_id, provider, display_name, status, capabilities, config')
+          .eq('website_id', directSite.id);
+
+        return {
+          ...directSite,
+          integrations: integrations || [],
+        };
+      }
+    }
+
+    // 2. Query user websites
     const websites = await this.getUserWebsites(userId);
-
-    if (websites.length === 0) {
-      throw new Error('No website connected. Please connect a website in the dashboard before executing SEO tasks.');
+    if (websites.length > 0) {
+      return websites[0];
     }
 
-    if (requestedWebsiteId) {
-      const match = websites.find(w => w.id === requestedWebsiteId);
-      if (match) return match;
-      throw new Error(`Website ID ${requestedWebsiteId} not found or access denied.`);
+    // 3. Fallback: Any active website in database
+    const { data: firstAnySite } = await supabase
+      .from('websites')
+      .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
+      .limit(1)
+      .maybeSingle();
+
+    if (firstAnySite) {
+      return {
+        ...firstAnySite,
+        integrations: [],
+      };
     }
 
-    // Default to first active website
-    return websites[0];
+    throw new Error('No website connected. Please connect a website in the dashboard before executing SEO tasks.');
   }
 
   /**

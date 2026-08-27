@@ -55,7 +55,10 @@ export class Orchestrator {
           target_agent: z.string(),
           task_type: z.string(),
           objective: z.string(),
-          input_data: z.any(),
+          input_data: z.object({
+            target_url: z.string(),
+            notes: z.string(),
+          }),
           priority: z.enum(['high', 'medium', 'low']),
           dependencies: z.array(z.string()).nullable()
         }))

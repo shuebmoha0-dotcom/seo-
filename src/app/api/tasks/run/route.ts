@@ -40,47 +40,33 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    // 2. Create task_execution record
-    const { data: execution } = await supabase
+    // 2. Create task_execution record in queued state for Background Worker pickup
+    const { data: execution, error: execErr } = await supabase
       .from('task_executions')
       .insert({
         task_id: task?.id || '00000000-0000-0000-0000-000000000000',
         project_id: website.project_id,
-        status: 'running',
-        started_at: new Date().toISOString(),
+        status: 'queued',
+        execution_payload: {
+          goal: orchestratorGoal,
+          website_id: website.id,
+          website_url: website.url,
+          domain: website.domain,
+          user_id: userId,
+          type: 'orchestrator_goal',
+        },
       })
       .select()
       .single();
 
-    // 3. Initialize & execute workflow through Orchestrator
-    const orchestrator = new Orchestrator();
-    const workflowState = await orchestrator.initializeWorkflow(orchestratorGoal, {
-      userId,
-      projectId: website.project_id,
-      websiteId: website.id,
-    });
-
-    const completedState = await orchestrator.executeWorkflow(workflowState);
-
-    // 4. Update task execution status
-    const finalStatus = completedState.current_stage === 'PAUSED_FOR_APPROVAL' ? 'waiting_for_approval' : 'completed';
-    if (execution) {
-      await supabase
-        .from('task_executions')
-        .update({
-          status: finalStatus,
-          completed_at: new Date().toISOString(),
-          result_summary: `Completed ${completedState.completed_steps.length} workflow steps. ${completedState.pending_packages?.length || 0} packages waiting approval.`,
-        })
-        .eq('id', execution.id);
-    }
+    if (execErr) throw execErr;
 
     return NextResponse.json({
       success: true,
-      execution_id: execution?.id,
-      status: finalStatus,
-      completed_steps: completedState.completed_steps,
-      history: completedState.history,
+      execution_id: execution.id,
+      task_id: task?.id,
+      status: 'queued',
+      message: 'Task enqueued for background worker execution.',
     });
   } catch (error: any) {
     console.error('[Tasks Run POST] Error:', error);
