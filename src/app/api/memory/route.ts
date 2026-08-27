@@ -192,7 +192,81 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, knowledge_bank: safeKnowledge });
     }
 
-    // 3. Save standard structured memory item
+    // 3. Batch Import Memory & Custom Instructions
+    if (type === 'import') {
+      const { import_data, mode = 'merge' } = body;
+      if (!import_data) {
+        return NextResponse.json({ error: 'import_data is required' }, { status: 400 });
+      }
+
+      let importedInstructionsCount = 0;
+      let importedMemoriesCount = 0;
+
+      // Handle custom instructions
+      const customInstr = import_data.custom_instructions || (typeof import_data === 'string' ? import_data : '');
+      if (customInstr && typeof customInstr === 'string' && customInstr.trim()) {
+        await supabase
+          .from('project_memory')
+          .delete()
+          .eq('source', 'project_custom_instructions');
+
+        await supabase.from('project_memory').insert({
+          website_id: website_id || null,
+          category: 'brand',
+          content: customInstr.trim(),
+          source: 'project_custom_instructions',
+          source_detail: 'Imported Custom Instructions',
+          confidence: 'high',
+          is_important: true,
+          tags: ['custom_instructions', 'imported'],
+        });
+        importedInstructionsCount = 1;
+      }
+
+      // Handle memories array
+      const rawMemories = Array.isArray(import_data.memories)
+        ? import_data.memories
+        : Array.isArray(import_data)
+        ? import_data
+        : [];
+
+      if (rawMemories.length > 0) {
+        if (mode === 'replace') {
+          // Delete non-instruction memories
+          await supabase
+            .from('project_memory')
+            .delete()
+            .neq('source', 'project_custom_instructions')
+            .neq('source', 'project_knowledge_bank');
+        }
+
+        const validMemories = rawMemories.map((m: any) => ({
+          website_id: website_id || null,
+          category: m.category || 'brand',
+          content: (m.content || m.text || (typeof m === 'string' ? m : '')).trim(),
+          source: m.source || 'imported_memory',
+          source_detail: m.source_detail || 'Imported Memory Item',
+          confidence: m.confidence || 'high',
+          is_important: !!m.is_important,
+          tags: Array.isArray(m.tags) ? m.tags : ['imported'],
+        })).filter((m: any) => m.content.length > 0);
+
+        if (validMemories.length > 0) {
+          const { error: insErr } = await supabase.from('project_memory').insert(validMemories);
+          if (insErr) throw insErr;
+          importedMemoriesCount = validMemories.length;
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Imported successfully: ${importedInstructionsCount} instruction set and ${importedMemoriesCount} memory items.`,
+        instructions_count: importedInstructionsCount,
+        memories_count: importedMemoriesCount,
+      });
+    }
+
+    // 4. Save standard structured memory item
     if (!category || !content) {
       return NextResponse.json({ error: 'category and content are required' }, { status: 400 });
     }
