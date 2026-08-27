@@ -591,7 +591,7 @@ Example:
                   + Audience Insights
                 </button>
                 <button
-                  onClick={() => appendMemoryTemplate("Product & Company Knowledge Bank:\n- BizAiGenius is a premier B2B SaaS platform and AI tools directory.\n- Core Solutions: AI-powered automated lead enrichment, outbound sales playbooks, and modern conversion workflows.")}
+                  onClick={() => appendMemoryTemplate("Product & Company Knowledge Bank:\n- [Company/Brand Name] is a leading [industry/niche] platform.\n- Core Solutions: [Detail your product features, services, and core value propositions here].")}
                   className="px-2.5 py-1 bg-neutral-50 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 border border-neutral-200 rounded-lg transition-colors text-[11px] font-medium"
                 >
                   + Company Facts

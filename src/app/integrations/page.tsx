@@ -8,6 +8,7 @@ import {
   Code2, Check, Settings2, Download
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useWebsite } from "@/lib/context/WebsiteContext";
 
 type Tab = "overview" | "actions";
 
@@ -105,6 +106,7 @@ const DEMO_ACTIONS: ExecutionAction[] = [
 ];
 
 export default function IntegrationsPage() {
+  const { currentWebsite } = useWebsite();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(DEFAULT_INTEGRATIONS);
   const [actions, setActions] = useState<ExecutionAction[]>(DEMO_ACTIONS);
@@ -118,7 +120,7 @@ export default function IntegrationsPage() {
     auth_method: 'agent_connector' | 'application_password' | 'botcreds';
     seo_plugin: string;
   }>({
-    site_url: "",
+    site_url: currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : ""),
     username: "",
     app_password: "",
     auth_method: "agent_connector",
@@ -131,7 +133,9 @@ export default function IntegrationsPage() {
   // Google Search Console Modal State
   const [showGscModal, setShowGscModal] = useState(false);
   const [gscAuthMode, setGscAuthMode] = useState<"service_account" | "oauth">("service_account");
-  const [gscPropertyUrl, setGscPropertyUrl] = useState("https://bizaigenius.com");
+  const [gscPropertyUrl, setGscPropertyUrl] = useState(
+    currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "")
+  );
   const [gscServiceAccountJson, setGscServiceAccountJson] = useState("");
   const [gscConnecting, setGscConnecting] = useState(false);
   const [gscFeedback, setGscFeedback] = useState<{ ok?: boolean; message?: string } | null>(null);
@@ -947,7 +951,7 @@ export default function IntegrationsPage() {
                     type="text"
                     value={gscPropertyUrl}
                     onChange={e => setGscPropertyUrl(e.target.value)}
-                    placeholder="https://bizaigenius.com or sc-domain:bizaigenius.com"
+                    placeholder="https://yourdomain.com or sc-domain:yourdomain.com"
                     className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-500 font-mono text-xs"
                   />
                 </div>
