@@ -186,8 +186,9 @@ Content type: ${input.content_type}
 Target audience: ${input.target_audience}
 
 MANDATORY INSTRUCTIONS:
-1. You MUST directly incorporate the company positioning, guidelines, and context from the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK into the headings and section notes.
-3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable content.
+1. Deeply understand and parse the natural language context from PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK (author persona, target business model, user roles, deliverable specs, tone, and positioning).
+2. You MUST directly incorporate the company positioning, guidelines, and context from the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK into the headings and section notes.
+3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable, actionable content.
 Competitor gaps: ${input.competitor_gaps || 'Not provided'}
 Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
 Important entities: ${(input.entities || []).join(', ')}
@@ -307,10 +308,14 @@ ${projectMemory}
 ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES:
+- 🧠 NATURAL LANGUAGE CONTEXT COMPREHENSION:
+  - Treat all Custom Instructions and Project Memory as rich, natural language context.
+  - Understand implicit and explicit human relationships: understand author personas (e.g. if instructed to write in first-person as a specific author like Alex Mercer, embody that persona completely), understand user/owner identity (e.g. Ssh is the site operator running BizAIGenius.com), understand deliverable specs (e.g. word counts, meta constraints, power words, formatting rules), and understand domain topics (e.g. cold email deliverability, AI tool comparisons).
+  - Extract and honor every constraint, preference, tone detail, and persona described in plain English naturally.
 - 🚫 ZERO RANDOM OR GENERIC FILLER: Never write generic textbook definitions, vague platitudes, or superficial overviews. Every paragraph must be deeply grounded in the company's real positioning, target audience nuances, and domain facts from the memory bank.
 - 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints with 100% precision throughout every single section.
 - 💡 TACTICAL & PRACTICAL DEPTH: For EVERY H2 and H3 section, write 2 to 4 detailed paragraphs with actionable step-by-step frameworks, battle-tested copyable templates, and concrete real-world breakdowns.
-- Use the primary keyword naturally — do NOT force it into every paragraph.
+- Use the primary keyword naturally — do NOT force it into every paragraph unless specifically requested.
 - Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
 - DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
