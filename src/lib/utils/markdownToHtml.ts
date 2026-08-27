@@ -13,6 +13,9 @@ export function markdownToWordPressHtml(markdown: string): string {
   // 2. Convert Markdown Images: ![alt](url_or_base64)
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
     const cleanAlt = alt || 'Illustration';
+    if (src.startsWith('data:image/') && src.length > 50000) {
+      return `\n\n<!-- wp:paragraph -->\n<p><em>📸 [Visual Illustration: ${cleanAlt}]</em></p>\n<!-- /wp:paragraph -->\n\n`;
+    }
     return `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${src}" alt="${cleanAlt}"/></figure>\n<!-- /wp:image -->\n\n`;
   });
 
