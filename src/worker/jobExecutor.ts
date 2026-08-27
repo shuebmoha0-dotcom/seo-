@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Job Executor for Background Worker
  * Dispatches claimed executions to the appropriate SEO Agent / Orchestrator.
  */
@@ -193,6 +193,61 @@ export class JobExecutor {
         updated_at: new Date().toISOString(),
       })
       .eq('id', draftId);
+
+    // Save versions, QA, and images
+    try {
+      await this.supabase.from('content_versions').insert({
+        draft_id: draftId,
+        version_number: 1,
+        content_body: output.content_body,
+        word_count: output.word_count,
+        status: output.status,
+        qa_results: output.qa,
+      });
+    } catch {}
+
+    try {
+      if (output.qa) {
+        await this.supabase.from('content_qa_results').insert({
+          draft_id: draftId,
+          version_number: 1,
+          ...output.qa,
+          facts_flagged: output.qa.facts_flagged,
+        });
+      }
+    } catch {}
+
+    if (Array.isArray(output.images)) {
+      for (const img of output.images) {
+        try {
+          await this.supabase.from('content_images').insert({
+            draft_id: draftId,
+            placement_context: img.placement_context || 'Article body',
+            image_type: img.image_type || 'featured',
+            purpose: img.purpose || 'Visual enhancement',
+            alt_text: img.alt_text || '',
+            suggested_filename: img.suggested_filename || 'image.webp',
+            status: img.generation_status || 'created',
+          });
+        } catch {}
+      }
+    }
+
+    try {
+      if (payload.website_id) {
+        const memoryFact = `Published Content: "${output.working_title || output.seo_title}" covering target keyword "${output.primary_keyword}" (${output.search_intent} intent). Tailored for ${output.target_audience || 'target audience'}.`;
+        await this.supabase.from('project_memory').insert({
+          website_id: payload.website_id,
+          category: 'content',
+          content: memoryFact,
+          source: 'autonomous_article_learning',
+          source_detail: `Generated from article: "${output.primary_keyword}"`,
+          confidence: 'high',
+          is_important: false,
+          tags: ['article_coverage', output.primary_keyword],
+        });
+      }
+    } catch {}
 
     const summary = `Generated draft "${output.working_title}" (${output.word_count} words, ${output.images?.length || 0} images). Status: ${output.status}`;
     await this.queueManager.completeJob(job.id, summary);
