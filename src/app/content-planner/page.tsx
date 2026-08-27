@@ -233,11 +233,18 @@ export default function ContentPlannerPage() {
         setLoadingDrafts(true);
       }
 
-      const url = currentWebsite
+      const baseUrl = currentWebsite
         ? `/api/agent/content/draft?website_id=${currentWebsite.id}`
         : `/api/agent/content/draft`;
+      const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         const loadedDrafts = data.drafts || [];

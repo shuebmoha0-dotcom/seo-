@@ -55,7 +55,13 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
   const refreshWebsites = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/websites");
+      const res = await fetch(`/api/websites?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         const siteList: WebsiteData[] = data.websites || [];

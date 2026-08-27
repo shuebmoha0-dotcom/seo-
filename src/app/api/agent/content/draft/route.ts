@@ -97,10 +97,25 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ drafts: formattedDrafts });
+    return NextResponse.json(
+      { drafts: formattedDrafts },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        },
+      }
+    );
   } catch (error: any) {
     console.error('[Content Draft GET] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message },
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        },
+      }
+    );
   }
 }
 
