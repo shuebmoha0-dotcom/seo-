@@ -548,10 +548,14 @@ After closing the </reflection> block, write the full article. Include the H1 at
 
     let content = rawContent;
 
-    // Embed generated images into the markdown body
+    // Embed generated images into the markdown body safely without bloating database rows
     for (const img of enrichedImages) {
       if (img.image_url) {
-        const imageMarkdown = `\n\n![${img.alt_text}](${img.image_url})\n*${img.alt_text}*\n\n`;
+        const isOversizedDataUri = img.image_url.startsWith('data:image/') && img.image_url.length > 50000;
+        const imageMarkdown = isOversizedDataUri
+          ? `\n\n> 📸 **[Visual Illustration: ${img.alt_text}]**\n\n`
+          : `\n\n![${img.alt_text}](${img.image_url})\n*${img.alt_text}*\n\n`;
+
         if (content.match(/\[IMAGE:[^\]]+\]/)) {
           content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
         } else if (img === enrichedImages[0]) {
