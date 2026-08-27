@@ -1,7 +1,4 @@
-﻿/**
- * Render Background Worker Core Engine
- */
-
+import http from 'http';
 import { WORKER_CONFIG } from './config';
 import { WorkerLogger } from './logger';
 import { QueueManager, TaskExecutionJob } from './queueManager';
@@ -13,6 +10,7 @@ export class RenderWorker {
   private queueManager: QueueManager;
   private schedulerEngine: SchedulerEngine;
   private jobExecutor: JobExecutor;
+  private httpServer: http.Server | null = null;
 
   private isRunning = false;
   private isShuttingDown = false;
@@ -61,7 +59,27 @@ export class RenderWorker {
       await this.renewActiveHeartbeats();
     }, WORKER_CONFIG.HEARTBEAT_INTERVAL_MS);
 
-    // 5. Register Process Signal Handlers
+    // 5. Start lightweight HTTP health server (enables running on Render Free Web Service tier)
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 10000;
+    try {
+      this.httpServer = http.createServer((req, res) => {
+        if (req.url === '/health' || req.url === '/' || req.url === '/status') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ok', worker: this.getHealthStatus() }, null, 2));
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
+
+      this.httpServer.listen(port, () => {
+        WorkerLogger.info(`Worker Health Check HTTP server listening on port ${port}`);
+      });
+    } catch (httpErr: any) {
+      WorkerLogger.warn('Could not start HTTP health server', { error: httpErr.message });
+    }
+
+    // 6. Register Process Signal Handlers
     this.setupSignalHandlers();
   }
 
