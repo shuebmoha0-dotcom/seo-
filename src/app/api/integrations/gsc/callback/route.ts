@@ -20,9 +20,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/integrations?error=oauth_cancelled', request.url));
     }
 
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const host = request.headers.get('host') || 'seo-hazel-eight.vercel.app';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`;
     const redirectUri = `${siteUrl}/api/integrations/gsc/callback`;
 
     let accessToken = 'gsc_access_token_simulated';
@@ -54,7 +54,8 @@ export async function GET(request: Request) {
       expiresIn = tokenData.expires_in || 3600;
     }
 
-    const supabase = await createClient();
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
 
     // Upsert integration record in action_required (awaiting property selection)
     let integrationId: string | null = null;

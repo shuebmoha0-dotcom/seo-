@@ -4,14 +4,16 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const website_id = searchParams.get('website_id') || 'default';
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const host = request.headers.get('host') || 'seo-hazel-eight.vercel.app';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`;
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
 
     if (!clientId || clientId.includes('your-')) {
       return NextResponse.json({
         configured: false,
-        error: 'Google Search Console OAuth is not configured by the administrator. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your server environment variables.',
+        error: 'Google Search Console OAuth is not configured on the server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in your Vercel/server environment variables.',
       }, { status: 400 });
     }
 

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const { website_id, integration_id } = body;
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     let query = supabase.from('integrations').select('id, config').eq('provider', 'google_search_console');
     if (integration_id) query = query.eq('id', integration_id);

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { decryptCredential } from '@/lib/utils/encryption';
 
 export async function GET(request: Request) {
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const integration_id = searchParams.get('integration_id');
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     let query = supabase.from('integrations').select('*').eq('provider', 'google_search_console');
     if (integration_id) query = query.eq('id', integration_id);
