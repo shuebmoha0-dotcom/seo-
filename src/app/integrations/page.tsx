@@ -130,10 +130,45 @@ export default function IntegrationsPage() {
 
   // Google Search Console Modal State
   const [showGscModal, setShowGscModal] = useState(false);
+  const [gscAuthMode, setGscAuthMode] = useState<"service_account" | "oauth">("service_account");
+  const [gscPropertyUrl, setGscPropertyUrl] = useState("https://bizaigenius.com");
+  const [gscServiceAccountJson, setGscServiceAccountJson] = useState("");
+  const [gscConnecting, setGscConnecting] = useState(false);
+  const [gscFeedback, setGscFeedback] = useState<{ ok?: boolean; message?: string } | null>(null);
   const [gscProperties, setGscProperties] = useState<Array<{ siteUrl: string; permissionLevel: string }>>([]);
   const [selectedGscProp, setSelectedGscProp] = useState("");
   const [gscLoading, setGscLoading] = useState(false);
   const [gscIntegrationId, setGscIntegrationId] = useState("");
+
+  const handleConnectGscServiceAccount = async () => {
+    if (!gscPropertyUrl || !gscServiceAccountJson) return;
+    setGscConnecting(true);
+    setGscFeedback(null);
+    try {
+      const res = await fetch("/api/integrations/gsc/service-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          property_url: gscPropertyUrl.trim(),
+          service_account_json: gscServiceAccountJson.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to connect Google Search Console.");
+      }
+      setGscFeedback({ ok: true, message: data.message || "Connected successfully!" });
+      setTimeout(() => {
+        setShowGscModal(false);
+        setGscFeedback(null);
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      setGscFeedback({ ok: false, message: err.message || "Connection failed." });
+    } finally {
+      setGscConnecting(false);
+    }
+  };
 
   // Google Analytics 4 Modal State
   const [showGa4Modal, setShowGa4Modal] = useState(false);
@@ -740,7 +775,7 @@ export default function IntegrationsPage() {
                           <>
                             <button
                               onClick={() => {
-                                if (item.provider === "google_search_console") initiateOAuth("google_search_console");
+                                if (item.provider === "google_search_console") { setShowGscModal(true); setGscFeedback(null); }
                                 else if (item.provider === "google_analytics") initiateOAuth("google_analytics");
                                 else if (item.provider === "github") setShowGithubModal(true);
                                 else if (item.provider === "wordpress") { setShowWpModal(true); setWpFeedback(null); }
@@ -853,50 +888,112 @@ export default function IntegrationsPage() {
       {/* ── 1. Google Search Console Modal ── */}
       {showGscModal && (
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
-            <div className="flex items-center justify-between">
+          <div className="bg-white border border-neutral-200 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>🔍</span> Select Google Search Console Property
+                <span>🔍</span> Setup Google Search Console
               </h3>
-              <button type="button" onClick={() => setShowGscModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowGscModal(false)} className="text-neutral-400 hover:text-neutral-600">✕</button>
             </div>
-            <p className="text-xs text-neutral-500">Select the Search Console property you want to connect to this project:</p>
 
-            {gscLoading ? (
-              <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-neutral-500">
-                <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                <span>Loading accessible Search Console properties...</span>
-              </div>
-            ) : gscProperties.length === 0 ? (
-              <div className="py-6 text-center text-xs text-neutral-500 space-y-3">
-                <p>No verified properties found or authorization pending.</p>
-                <button onClick={() => window.location.href = "/api/integrations/gsc/auth"} className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-xl text-xs">
-                  Authorize with Google
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {gscProperties.map(p => (
-                    <label key={p.siteUrl} className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-colors ${
-                      selectedGscProp === p.siteUrl ? "border-indigo-600 bg-indigo-50/50" : "border-neutral-200 hover:bg-neutral-50"
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <input type="radio" name="gsc_prop" checked={selectedGscProp === p.siteUrl} onChange={() => setSelectedGscProp(p.siteUrl)} className="accent-indigo-600" />
-                        <span className="font-mono font-medium text-neutral-900">{p.siteUrl}</span>
-                      </div>
-                      <span className="text-[10px] text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded">{p.permissionLevel}</span>
-                    </label>
-                  ))}
+            {/* Method selection tabs */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setGscAuthMode("service_account")}
+                className={`py-2 px-3 rounded-xl text-xs font-bold text-center border transition-all ${
+                  gscAuthMode === "service_account"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                    : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                Service Account (Recommended)
+              </button>
+              <button
+                type="button"
+                onClick={() => setGscAuthMode("oauth")}
+                className={`py-2 px-3 rounded-xl text-xs font-bold text-center border transition-all ${
+                  gscAuthMode === "oauth"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                    : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                Sign in with Google (OAuth)
+              </button>
+            </div>
+
+            {gscFeedback && (
+              <div className={`p-3.5 rounded-2xl text-xs border ${
+                gscFeedback.ok ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
+              }`}>
+                <div className="flex items-start gap-2">
+                  {gscFeedback.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                  <span className="leading-relaxed whitespace-pre-line font-medium">{gscFeedback.message}</span>
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={handleFinalizeGsc} disabled={!selectedGscProp || gscLoading} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors">
-                    Connect Selected Property
-                  </button>
-                  <button type="button" onClick={() => setShowGscModal(false)} className="bg-neutral-100 hover:bg-neutral-200 text-neutral-600 px-4 py-2.5 rounded-xl font-medium text-xs">
+              </div>
+            )}
+
+            {gscAuthMode === "service_account" ? (
+              <div className="space-y-3 text-xs">
+                <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-[11px] text-neutral-600 space-y-1">
+                  <div className="font-bold text-neutral-800">Quick 2-Step Setup:</div>
+                  <div>1. Open <a href="https://search.google.com/search-console/users" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline inline-flex items-center gap-0.5">Google Search Console Users <ExternalLink className="w-2.5 h-2.5" /></a> and add your service account email with <strong>Full</strong> permission.</div>
+                  <div>2. Paste the Property URL and your Service Account JSON Key below.</div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">Search Console Property URL / Domain</label>
+                  <input
+                    type="text"
+                    value={gscPropertyUrl}
+                    onChange={e => setGscPropertyUrl(e.target.value)}
+                    placeholder="https://bizaigenius.com or sc-domain:bizaigenius.com"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Paste Service Account JSON Key
+                  </label>
+                  <textarea
+                    value={gscServiceAccountJson}
+                    onChange={e => setGscServiceAccountJson(e.target.value)}
+                    placeholder='{"type": "service_account", "project_id": "...", "private_key": "...", "client_email": "..."}'
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl p-3 text-neutral-800 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                    rows={6}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+                  <button type="button" onClick={() => setShowGscModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
                     Cancel
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleConnectGscServiceAccount}
+                    disabled={!gscPropertyUrl || !gscServiceAccountJson || gscConnecting}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                  >
+                    {gscConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>{gscConnecting ? "Connecting & Verifying..." : "Connect Search Console"}</span>
+                  </button>
                 </div>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                <p className="text-neutral-600 leading-relaxed">
+                  Authorize direct read-only access to your Google Search Console performance data via official Google OAuth.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => initiateOAuth("google_search_console")}
+                  className="w-full py-3 bg-neutral-900 hover:bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-xs transition-colors text-xs"
+                >
+                  <span>🔍</span>
+                  <span>Sign in with Google OAuth</span>
+                </button>
               </div>
             )}
           </div>
