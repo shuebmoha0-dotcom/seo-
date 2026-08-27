@@ -20,6 +20,7 @@ export interface ContentRules {
 }
 
 export interface ContentInput {
+  website_id?: string;
   primary_keyword: string;
   secondary_keywords: string[];
   search_intent: string;
@@ -286,10 +287,10 @@ Generate an exhaustive, highly structured brief with 6 to 9 comprehensive H2 and
         system: `You are an elite SEO content writer powered by Claude Sonnet 5. Follow these instructions and guidelines strictly:
 
 ${projectInstructions ? `==================================================
-CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
+CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MANDATORY HUMAN RULES):
 ${projectInstructions}
 ==================================================\n` : ''}${projectMemory ? `==================================================
-PROJECT KNOWLEDGE BASE & ACCUMULATED FACTS:
+PROJECT KNOWLEDGE BASE & ACCUMULATED MEMORY:
 ${projectMemory}
 ==================================================\n` : ''}CONTENT RULES:
 - Language: ${rules.language}
@@ -306,11 +307,11 @@ ${projectMemory}
 ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES:
-- CRITICAL: Embody the PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints throughout every section.
-- Write deeply analytical, highly informative, and practical content for the reader.
-- For EVERY H2 and H3 section, write 2 to 4 detailed paragraphs with actionable examples, strategic breakdowns, and practical insights to thoroughly cover the topic.
-- Use the primary keyword naturally — do NOT force it into every paragraph
-- Short paragraphs. Clear sentences. No fluff.
+- 🚫 ZERO RANDOM OR GENERIC FILLER: Never write generic textbook definitions, vague platitudes, or superficial overviews. Every paragraph must be deeply grounded in the company's real positioning, target audience nuances, and domain facts from the memory bank.
+- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints with 100% precision throughout every single section.
+- 💡 TACTICAL & PRACTICAL DEPTH: For EVERY H2 and H3 section, write 2 to 4 detailed paragraphs with actionable step-by-step frameworks, battle-tested copyable templates, and concrete real-world breakdowns.
+- Use the primary keyword naturally — do NOT force it into every paragraph.
+- Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
 - DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
 ${revisionNotes ? `\nREVISION NOTES FROM HUMAN/QA: ${revisionNotes}` : ''}`,
@@ -338,10 +339,12 @@ ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
 
-${projectInstructions ? `\n==================================================\nMANDATORY PROJECT INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):\n${projectInstructions}\n==================================================\n` : ''}
-${projectMemory ? `\n==================================================\nMANDATORY COMPANY FACTS & KNOWLEDGE BANK (WEAVE DIRECTLY INTO THE COPY):\n${projectMemory}\n==================================================\n` : ''}
+${projectInstructions ? `\n==================================================\nMANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
+${projectMemory ? `\n==================================================\nPROJECT MEMORY & KNOWLEDGE BANK (WEAVE DIRECTLY INTO EXAMPLES & FRAMEWORKS):\n${projectMemory}\n==================================================\n` : ''}
 
-Before writing the article, you MUST open a <reflection> block. Inside it, explicitly confirm how you will follow the provided CONTENT RULES and how you will weave the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BASE directly into each section.
+Before writing the article, you MUST open a <reflection> block. Inside it:
+1. Explain how you will strictly adhere to every requirement in the MANDATORY HUMAN CUSTOM INSTRUCTIONS.
+2. Detail how you will draw upon the PROJECT MEMORY & KNOWLEDGE BANK so the article provides concrete, highly specific insights rather than generic advice.
 After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, exhaustive analysis under each heading to satisfy the ${rules.word_count_min}+ word requirement.`,
       });
 
@@ -467,12 +470,81 @@ After closing the </reflection> block, write the full article. Include the H1 at
     };
   }
 
+  // 6.5. Automatically crawl and hydrate latest Custom Instructions & Project Memory from Supabase
+  async hydrateMemoryAndInstructions(input: ContentInput): Promise<void> {
+    if (input.project_instructions && input.project_memory) return;
+
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const supabase = createAdminClient();
+
+      let websiteId = input.website_id;
+      if (!websiteId) {
+        const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
+        if (firstSite) websiteId = firstSite.id;
+      }
+
+      let query = supabase
+        .from('project_memory')
+        .select('*')
+        .eq('is_outdated', false)
+        .order('is_important', { ascending: false });
+
+      if (websiteId) {
+        query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
+      }
+
+      const { data: rows } = await query;
+      if (rows && rows.length > 0) {
+        const instrRow = rows.find((m: any) => m.source === 'project_custom_instructions');
+        const memoryRow = rows.find((m: any) => m.source === 'project_knowledge_bank');
+        const otherFacts = rows.filter(
+          (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+        );
+
+        if (!input.project_instructions && instrRow?.content) {
+          input.project_instructions = instrRow.content;
+        }
+
+        if (!input.project_memory) {
+          const parts: string[] = [];
+          if (memoryRow?.content) parts.push(memoryRow.content);
+          if (otherFacts.length > 0) {
+            const factText = otherFacts.map((f: any) => `[${f.category?.toUpperCase() || 'INSIGHT'}] ${f.content}`).join('\n\n');
+            parts.push(factText);
+          }
+          if (parts.length > 0) {
+            input.project_memory = parts.join('\n\n');
+          }
+        }
+      }
+
+      // Fallback to content_rules if custom instructions still empty
+      if (!input.project_instructions && websiteId) {
+        const { data: rulesRow } = await supabase
+          .from('content_rules')
+          .select('custom_rules')
+          .eq('website_id', websiteId)
+          .maybeSingle();
+
+        if (rulesRow?.custom_rules) {
+          input.project_instructions = rulesRow.custom_rules;
+        }
+      }
+    } catch (err) {
+      console.warn('[ContentAgent] Auto-crawling memory error:', err);
+    }
+  }
+
   // 7. Assemble final output
   async runFullPipeline(input: ContentInput, revisionNotes?: string): Promise<ContentOutput> {
     const validation = this.validateInputs(input);
     if (!validation.valid) {
       throw new Error(`Missing required inputs: ${validation.missing.join(', ')}`);
     }
+
+    // Always crawl and hydrate latest Custom Instructions and Autonomous Memory
+    await this.hydrateMemoryAndInstructions(input);
 
     const brief = await this.generateBrief(input);
 

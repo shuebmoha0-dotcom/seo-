@@ -279,6 +279,10 @@ export class JobExecutor {
       input.rules.custom_rules = projectInstructions;
     }
 
+    input.website_id = websiteId;
+    input.project_instructions = projectInstructions;
+    input.project_memory = projectMemory;
+
     WorkerLogger.info(`Generating content draft [${draftId}] for keyword "${input.primary_keyword}" with ${projectInstructions ? 'custom instructions' : 'default guidelines'} and ${projectMemory ? 'knowledge base memory' : 'no prior memory'}`);
 
     const agent = new ContentAgent();
