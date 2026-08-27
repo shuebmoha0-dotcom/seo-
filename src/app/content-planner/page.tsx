@@ -276,6 +276,10 @@ export default function ContentPlannerPage() {
     fetchDrafts(false);
   }, [currentWebsite?.id]);
 
+  useEffect(() => {
+    fetchDrafts(false);
+  }, []);
+
   // Real-time polling when any draft is queued or publishing so status flips to Live automatically
   useEffect(() => {
     const hasPending = drafts.some(d => d.status === "approved" || d.status === "ready_for_approval" || d.status === "generating" || d.status === "writing") || publishing !== null;
@@ -617,13 +621,26 @@ export default function ContentPlannerPage() {
         )}
 
         {/* DRAFTS LIST & VIEWER */}
-        {drafts.length === 0 && !loadingDrafts ? (
-          <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-lg mx-auto">
+        {loadingDrafts && drafts.length === 0 ? (
+          <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-4 max-w-lg mx-auto">
+            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mx-auto" />
+            <h3 className="text-base font-bold text-neutral-900">Loading Articles &amp; Drafts...</h3>
+            <p className="text-xs text-neutral-500">Connecting to your website database and retrieving latest articles.</p>
+          </div>
+        ) : drafts.length === 0 ? (
+          <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-4 max-w-lg mx-auto">
             <FileText className="w-8 h-8 text-neutral-400 mx-auto" />
-            <h3 className="text-base font-bold text-neutral-900">No Content Drafts Generated Yet</h3>
+            <h3 className="text-base font-bold text-neutral-900">No Content Drafts Found</h3>
             <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-              Type any keyword into the generator above to create your first article with an integrated high-resolution AI illustration.
+              Type any keyword into the generator above to create an article, or click below to sync from your database.
             </p>
+            <button
+              onClick={() => fetchDrafts(false)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-neutral-300 hover:border-neutral-400 rounded-xl text-xs font-bold text-neutral-800 shadow-xs transition-all hover:bg-neutral-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Reload / Sync Articles</span>
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -634,11 +651,11 @@ export default function ContentPlannerPage() {
                   Articles &amp; Drafts ({drafts.length})
                 </h3>
                 <button
-                  onClick={fetchDrafts}
-                  className="text-neutral-400 hover:text-neutral-700 transition-colors p-1"
+                  onClick={() => fetchDrafts(false)}
+                  className="text-neutral-400 hover:text-neutral-700 transition-colors p-1 flex items-center gap-1 text-xs"
                   title="Refresh articles"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingDrafts ? 'animate-spin text-indigo-600' : ''}`} />
                 </button>
               </div>
 
