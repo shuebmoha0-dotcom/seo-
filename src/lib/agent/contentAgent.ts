@@ -186,8 +186,7 @@ Target audience: ${input.target_audience}
 
 MANDATORY INSTRUCTIONS:
 1. You MUST directly incorporate the company positioning, guidelines, and context from the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK into the headings and section notes.
-2. Create practical, concrete H2 and H3 headings with specific subtopics, real-world scenarios, and actionable guidance rather than generic high-level headings.
-3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable content.`e}
+3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable content.
 Competitor gaps: ${input.competitor_gaps || 'Not provided'}
 Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
 Important entities: ${(input.entities || []).join(', ')}
