@@ -110,12 +110,29 @@ export class ContentAgent {
 
   // 1. Validate all required inputs before writing
   validateInputs(input: ContentInput): { valid: boolean; missing: string[] } {
+    if (!input.rules) {
+      input.rules = {
+        word_count_min: 1200,
+        word_count_max: 1800,
+        language: 'U.S. English',
+        tone: 'Professional, natural, helpful',
+        audience: input.target_audience || 'Business founders and search audience',
+        author_style: 'Experienced SEO content writer',
+        structure_rules: 'Use H2 and H3 headings. Short paragraphs.',
+        paragraph_style: 'Short and easy to read.',
+        image_rules: 'Include relevant original images.',
+        source_rules: 'Use reliable sources. Verify factual claims.',
+        brand_rules: 'Do not make unsupported claims.',
+        cta_rules: 'Include one relevant CTA.',
+        avoid_rules: 'No keyword stuffing. No filler. No robotic language.',
+        custom_rules: '',
+      };
+    }
     const missing: string[] = [];
     if (!input.primary_keyword) missing.push('primary_keyword');
     if (!input.search_intent) missing.push('search_intent');
     if (!input.content_type) missing.push('content_type');
     if (!input.target_audience) missing.push('target_audience');
-    if (!input.rules) missing.push('content_rules');
     return { valid: missing.length === 0, missing };
   }
 
