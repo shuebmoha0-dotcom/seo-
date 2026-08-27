@@ -115,10 +115,31 @@ export const GeminiImageProvider: ImageProvider = {
       }
 
       const mimeType = imagePart.inlineData.mimeType || 'image/png';
-      const base64Data = `data:${mimeType};base64,${imagePart.inlineData.data}`;
+      let publicUrl = `data:${mimeType};base64,${imagePart.inlineData.data}`;
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const buffer = Buffer.from(imagePart.inlineData.data, 'base64');
+        const ext = mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'png';
+        const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+        const { error } = await supabase.storage.from('content-images').upload(filename, buffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
+
+        if (!error) {
+          const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
+          if (urlData?.publicUrl) {
+            publicUrl = urlData.publicUrl;
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('[ImageRouter] Upload to Supabase storage failed, using fallback:', uploadErr);
+      }
 
       return {
-        url: base64Data,
+        url: publicUrl,
         base64: imagePart.inlineData.data,
       };
     }
