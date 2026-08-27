@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { decryptCredential } from '@/lib/utils/encryption';
 import { markdownToWordPressHtml } from '@/lib/utils/markdownToHtml';
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'action is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const statusMap: Record<string, string> = {
       approve: 'published',
