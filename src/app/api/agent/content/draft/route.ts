@@ -62,16 +62,81 @@ export async function GET(request: Request) {
     }
 
     const now = Date.now();
+
+    // Self-Healing Watchdog: auto-heal any stale placeholder drafts in the background
+    const stuckDrafts = (drafts || []).filter(
+      (d: any) =>
+        (d.status === 'writing' || d.status === 'generating' || d.content_body?.includes('AI agent is writing this article in the background...')) &&
+        d.created_at &&
+        now - new Date(d.created_at).getTime() > 40000
+    );
+
+    if (stuckDrafts.length > 0) {
+      after(async () => {
+        for (const stuck of stuckDrafts) {
+          try {
+            console.log(`[Watchdog] Auto-healing stuck draft ${stuck.id} for "${stuck.primary_keyword}"...`);
+            const watchdogAgent = new ContentAgent();
+            const output = await watchdogAgent.runFullPipeline({
+              website_id: stuck.website_id,
+              primary_keyword: stuck.primary_keyword,
+              secondary_keywords: stuck.secondary_keywords || [],
+              search_intent: stuck.search_intent || 'informational',
+              content_type: stuck.content_type || 'blog_article',
+              target_audience: stuck.target_audience || 'Target audience and searchers',
+              working_title: stuck.working_title?.replace('Writing article for "', '')?.replace('"...', ''),
+              rules: {
+                word_count_min: 1200,
+                word_count_max: 1800,
+                language: 'U.S. English',
+                tone: 'Professional, natural, helpful',
+                audience: stuck.target_audience || 'Target audience and searchers',
+                author_style: 'Experienced SEO content writer',
+                structure_rules: 'Use H2 and H3 headings. Short paragraphs.',
+                paragraph_style: 'Short and easy to read.',
+                image_rules: 'Include relevant original images.',
+                source_rules: 'Use reliable sources. Verify factual claims.',
+                brand_rules: 'Do not make unsupported claims.',
+                cta_rules: 'Include one relevant CTA.',
+                avoid_rules: 'No keyword stuffing. No filler. No robotic language.',
+              },
+            });
+
+            await supabase.from('content_drafts').update({
+              working_title: output.working_title,
+              h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+              content_body: output.content_body,
+              word_count: output.word_count,
+              reading_time_minutes: output.reading_time_minutes,
+              seo_title: output.seo_title,
+              meta_description: output.meta_description,
+              url_slug: output.url_slug,
+              status: output.status,
+              current_version: 1,
+              updated_at: new Date().toISOString(),
+            }).eq('id', stuck.id);
+
+            try {
+              await supabase.from('content_versions').insert({
+                draft_id: stuck.id,
+                version_number: 1,
+                content_body: output.content_body,
+                word_count: output.word_count,
+                status: output.status,
+                qa_results: output.qa,
+              });
+            } catch {}
+
+            console.log(`[Watchdog] Auto-healed stuck draft ${stuck.id} successfully!`);
+          } catch (wErr) {
+            console.warn(`[Watchdog] Failed to auto-heal draft ${stuck.id}:`, wErr);
+          }
+        }
+      });
+    }
+
     const formattedDrafts = (drafts || []).map((d: any) => {
       let currentStatus = d.status || 'ready_for_approval';
-
-      // Auto-recover stale drafts that timed out (older than 75s in writing state)
-      if ((currentStatus === 'writing' || currentStatus === 'generating') && d.created_at) {
-        const ageMs = now - new Date(d.created_at).getTime();
-        if (ageMs > 75000) {
-          currentStatus = 'needs_revision';
-        }
-      }
 
       return {
         id: d.id,
@@ -445,6 +510,62 @@ export async function POST(request: Request) {
     } catch (qErr) {
       console.warn('[Content Draft] Queue enqueue notice:', qErr);
     }
+
+    // Double-Redundancy Fallback: Execute via after() in background runtime
+    after(async () => {
+      try {
+        console.log(`[Content Draft] Running fallback parallel generation for draft ${draftId}...`);
+        const fallbackAgent = new ContentAgent();
+        const output = await fallbackAgent.runFullPipeline({
+          website_id,
+          primary_keyword,
+          secondary_keywords: secondary_keywords || [],
+          search_intent,
+          content_type: content_type || 'blog_article',
+          target_audience: target_audience || defaultRules.audience,
+          working_title: working_title || undefined,
+          competitor_gaps,
+          internal_linking_opportunities: internal_linking_opportunities || [],
+          entities: entities || [],
+          project_instructions: projectInstructions || undefined,
+          project_memory: projectMemory || undefined,
+          rules: defaultRules,
+        }, revision_notes);
+
+        // Check if draft is still in placeholder/writing state
+        const { data: latest } = await supabase.from('content_drafts').select('status, content_body').eq('id', draftId).maybeSingle();
+        if (latest && (latest.status === 'writing' || latest.content_body?.includes('AI agent is writing this article in the background...'))) {
+          await supabase.from('content_drafts').update({
+            working_title: output.working_title,
+            h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+            content_body: output.content_body,
+            word_count: output.word_count,
+            reading_time_minutes: output.reading_time_minutes,
+            seo_title: output.seo_title,
+            meta_description: output.meta_description,
+            url_slug: output.url_slug,
+            status: output.status,
+            current_version: 1,
+            updated_at: new Date().toISOString(),
+          }).eq('id', draftId);
+
+          try {
+            await supabase.from('content_versions').insert({
+              draft_id: draftId,
+              version_number: 1,
+              content_body: output.content_body,
+              word_count: output.word_count,
+              status: output.status,
+              qa_results: output.qa,
+            });
+          } catch {}
+
+          console.log(`[Content Draft] Parallel generation completed draft ${draftId} successfully!`);
+        }
+      } catch (err: any) {
+        console.warn(`[Content Draft] Parallel generation note:`, err);
+      }
+    });
 
     return NextResponse.json({
       success: true,
