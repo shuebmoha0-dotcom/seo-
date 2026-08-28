@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { decryptCredential } from '@/lib/utils/encryption';
-import { markdownToWordPressHtml } from '@/lib/utils/markdownToHtml';
+import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
 
 export async function POST(request: Request) {
   try {
@@ -119,8 +119,8 @@ export async function POST(request: Request) {
               content: formattedHtmlContent,
               slug: updatedDraft.url_slug,
               status: 'publish',
-              seo_title: updatedDraft.seo_title || updatedDraft.working_title,
-              meta_description: updatedDraft.meta_description || '',
+              seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
+              meta_description: cleanMetaString(updatedDraft.meta_description || ''),
             });
 
             wpPostResult = {
@@ -158,8 +158,8 @@ export async function POST(request: Request) {
               content: formattedHtmlContent,
               slug: updatedDraft.url_slug,
               status: 'publish',
-              seo_title: updatedDraft.seo_title || updatedDraft.working_title,
-              meta_description: updatedDraft.meta_description || '',
+              seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
+              meta_description: cleanMetaString(updatedDraft.meta_description || ''),
               canonical_url: `${wpSite.site_url.replace(/\/$/, '')}/${updatedDraft.url_slug}/`,
             },
             idempotency_key: `create_post_draft_${updatedDraft.id}_${Date.now()}`,

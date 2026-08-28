@@ -1,40 +1,70 @@
 /**
+ * Utility to clean metadata prefix tags from SEO titles and descriptions.
+ */
+export function cleanMetaString(text?: string): string {
+  if (!text) return '';
+  return text
+    .replace(/^(?:\*\*|\*)?Meta\s+(?:title|description|keywords|intent|slug)(?:\*\*|\*)?\s*:\s*/i, '')
+    .replace(/^(?:\*\*|\*)?SEO\s+(?:title|description)(?:\*\*|\*)?\s*:\s*/i, '')
+    .replace(/^["'`]|["'`]$/g, '')
+    .replace(/\*\*/g, '')
+    .trim();
+}
+
+/**
  * Utility to convert Markdown content into clean, semantic HTML and Gutenberg WordPress blocks.
+ * Automatically cleans and removes metadata prefixes, duplicate H1s, and raw image prompts.
  */
 export function markdownToWordPressHtml(markdown: string): string {
   if (!markdown) return '';
 
   let html = markdown.trim();
 
-  // 1. Remove duplicate leading H1 if it repeats the article title
-  // (WordPress already renders the post_title as the primary H1)
-  html = html.replace(/^#\s+[^\n]+\n+/, '');
+  // 1. Remove duplicate leading H1 (# Title) because WordPress renders post_title as primary H1
+  html = html.replace(/^#\s+[^\n]+\n*/i, '');
 
-  // 2. Convert Markdown Images: ![alt](url_or_base64)
+  // 2. Remove all meta lines that the AI model may have placed at the top or bottom of the article
+  html = html.replace(/^(?:\*\*|\*)?Meta\s+(?:title|description|keywords|intent|slug)(?:\*\*|\*)?\s*:.*$/gmi, '');
+  html = html.replace(/^(?:\*\*|\*)?SEO\s+(?:title|description)(?:\*\*|\*)?\s*:.*$/gmi, '');
+  html = html.replace(/^(?:\*\*|\*)?Target\s+(?:keyword|audience)(?:\*\*|\*)?\s*:.*$/gmi, '');
+  html = html.replace(/^(?:\*\*|\*)?Primary\s+(?:keyword)(?:\*\*|\*)?\s*:.*$/gmi, '');
+  html = html.replace(/^(?:\*\*|\*)?Secondary\s+(?:keywords)(?:\*\*|\*)?\s*:.*$/gmi, '');
+  html = html.replace(/\[IMAGE:\s*[^\]]+\]/gi, '');
+
+  // Clean empty lines at start
+  html = html.replace(/^\s+/, '');
+
+  // 3. Convert Markdown Images safely by protecting URLs with placeholders
+  const imagePlaceholders: string[] = [];
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
-    const cleanAlt = alt || 'Illustration';
-    if (src.startsWith('data:image/') && src.length > 50000) {
-      return `\n\n<!-- wp:paragraph -->\n<p><em>📸 [Visual Illustration: ${cleanAlt}]</em></p>\n<!-- /wp:paragraph -->\n\n`;
-    }
-    return `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${src}" alt="${cleanAlt}"/></figure>\n<!-- /wp:image -->\n\n`;
+    const cleanAlt = (alt || 'Illustration').replace(/"/g, '&quot;').trim();
+    const cleanSrc = src.trim();
+    const placeholder = `__PROTECTED_IMAGE_BLOCK_${imagePlaceholders.length}__`;
+    const imageTag = `\n\n<!-- wp:image {"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="${cleanSrc}" alt="${cleanAlt}" loading="lazy" style="max-width:100%;height:auto;border-radius:12px;display:block;margin:1.5rem auto;" /><figcaption class="wp-element-caption">${cleanAlt}</figcaption></figure>\n<!-- /wp:image -->\n\n`;
+    imagePlaceholders.push(imageTag);
+    return placeholder;
   });
 
-  // 3. Convert Headings: ### H3, ## H2, # H1
+  // 4. Convert Headings: ### H3, ## H2, # H1
   html = html.replace(/^###\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":3} -->\n<h3 class="wp-block-heading">$1</h3>\n<!-- /wp:heading -->\n\n');
   html = html.replace(/^##\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":2} -->\n<h2 class="wp-block-heading">$1</h2>\n<!-- /wp:heading -->\n\n');
   html = html.replace(/^#\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":1} -->\n<h1 class="wp-block-heading">$1</h1>\n<!-- /wp:heading -->\n\n');
 
-  // 4. Convert Bold & Italic
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+  // 5. Convert Bold & Italic (safe regex that never mangles URLs)
+  html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  html = html.replace(/(?<!\w)__([^_]+)__(?!\w)/g, '<strong>$1</strong>');
+  html = html.replace(/(?<!\w)_([^_]+)_(?!\w)/g, '<em>$1</em>');
 
-  // 5. Convert Blockquotes: > quote
+  // Restore protected images with intact URLs
+  imagePlaceholders.forEach((imgTag, idx) => {
+    html = html.replace(`__PROTECTED_IMAGE_BLOCK_${idx}__`, imgTag);
+  });
+
+  // 6. Convert Blockquotes: > quote
   html = html.replace(/^>\s+(.+)$/gm, '\n\n<!-- wp:quote -->\n<blockquote class="wp-block-quote"><p>$1</p></blockquote>\n<!-- /wp:quote -->\n\n');
 
-  // 6. Convert Lists: Unordered (- or *)
-  // Match contiguous list items
+  // 7. Convert Lists: Unordered (- or *)
   html = html.replace(/((?:^(?:-|\*)\s+.+\n?)+)/gm, (match) => {
     const items = match
       .trim()
@@ -46,7 +76,7 @@ export function markdownToWordPressHtml(markdown: string): string {
     return `\n\n<!-- wp:list -->\n<ul class="wp-block-list">\n${items}\n</ul>\n<!-- /wp:list -->\n\n`;
   });
 
-  // 7. Convert Lists: Ordered (1. 2. 3.)
+  // 8. Convert Lists: Ordered (1. 2. 3.)
   html = html.replace(/((?:^\d+\.\s+.+\n?)+)/gm, (match) => {
     const items = match
       .trim()
@@ -58,8 +88,7 @@ export function markdownToWordPressHtml(markdown: string): string {
     return `\n\n<!-- wp:list {"ordered":true} -->\n<ol class="wp-block-list">\n${items}\n</ol>\n<!-- /wp:list -->\n\n`;
   });
 
-  // 8. Convert Paragraphs
-  // Split by double newlines and wrap non-block elements in <p> tags
+  // 9. Convert Paragraphs
   const blocks = html.split(/\n\s*\n/);
   const formattedBlocks = blocks.map(block => {
     const trimmed = block.trim();
