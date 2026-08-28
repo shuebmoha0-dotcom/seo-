@@ -377,32 +377,71 @@ export async function POST(request: Request) {
         .eq('id', website_id)
         .maybeSingle();
 
-      await supabase.from('task_executions').insert({
-        task_id: '00000000-0000-0000-0000-000000000000',
-        project_id: websiteRow?.project_id || '00000000-0000-0000-0000-000000000000',
-        status: 'queued',
-        execution_payload: {
-          type: 'content_draft',
-          draft_id: draftId,
-          website_id,
-          content_input: {
-            primary_keyword,
-            secondary_keywords: secondary_keywords || [],
-            search_intent,
-            content_type: content_type || 'blog_article',
-            target_audience: target_audience || defaultRules.audience,
-            working_title: working_title || undefined,
-            competitor_gaps,
-            internal_linking_opportunities: internal_linking_opportunities || [],
-            entities: entities || [],
-            project_instructions: projectInstructions || undefined,
-            project_memory: projectMemory || undefined,
-            rules: defaultRules,
+      let projectId = websiteRow?.project_id;
+      if (!projectId) {
+        const { data: fallbackProj } = await supabase.from('projects').select('id').limit(1).maybeSingle();
+        projectId = fallbackProj?.id;
+      }
+
+      let taskId: string | null = null;
+      if (projectId) {
+        const { data: existingTask } = await supabase
+          .from('tasks')
+          .select('id')
+          .eq('project_id', projectId)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingTask) {
+          taskId = existingTask.id;
+        } else {
+          const { data: newTask } = await supabase
+            .from('tasks')
+            .insert({
+              project_id: projectId,
+              title: 'Content Draft Generation',
+              task_type: 'content_generation',
+              status: 'active',
+            })
+            .select('id')
+            .single();
+          taskId = newTask?.id || null;
+        }
+      }
+
+      if (projectId && taskId) {
+        const { error: insError } = await supabase.from('task_executions').insert({
+          task_id: taskId,
+          project_id: projectId,
+          status: 'queued',
+          execution_payload: {
+            type: 'content_draft',
+            draft_id: draftId,
+            website_id,
+            content_input: {
+              primary_keyword,
+              secondary_keywords: secondary_keywords || [],
+              search_intent,
+              content_type: content_type || 'blog_article',
+              target_audience: target_audience || defaultRules.audience,
+              working_title: working_title || undefined,
+              competitor_gaps,
+              internal_linking_opportunities: internal_linking_opportunities || [],
+              entities: entities || [],
+              project_instructions: projectInstructions || undefined,
+              project_memory: projectMemory || undefined,
+              rules: defaultRules,
+            },
+            revision_notes,
           },
-          revision_notes,
-        },
-      });
-      console.log(`[Content Draft] Successfully enqueued background job for draft ${draftId} to Render worker.`);
+        });
+
+        if (insError) {
+          console.error('[Content Draft] Enqueue error:', insError);
+        } else {
+          console.log(`[Content Draft] Successfully enqueued background job for draft ${draftId} to Render worker.`);
+        }
+      }
     } catch (qErr) {
       console.warn('[Content Draft] Queue enqueue notice:', qErr);
     }
