@@ -527,45 +527,21 @@ After closing the </reflection> block, write the full article. Include the H1 at
         }
       }
 
-      // Auto-hydrate at least 3-5 relevant internal linking opportunities
+      // Live crawl site to discover real published internal links
       if (!input.internal_linking_opportunities || input.internal_linking_opportunities.length < 3) {
-        const internalLinks: string[] = [...(input.internal_linking_opportunities || [])];
-
         try {
-          const { data: existingDrafts } = await supabase
-            .from('content_drafts')
-            .select('url_slug, working_title, primary_keyword')
-            .neq('url_slug', null)
-            .limit(10);
+          const { SiteLinkCrawler } = await import('./siteLinkCrawler');
+          const liveLinks = await SiteLinkCrawler.discoverLiveInternalLinks({
+            websiteId: websiteId || input.website_id,
+            currentKeyword: input.primary_keyword,
+          });
 
-          if (existingDrafts && existingDrafts.length > 0) {
-            for (const d of existingDrafts) {
-              if (d.url_slug && d.primary_keyword !== input.primary_keyword) {
-                const linkStr = `[${d.working_title || d.primary_keyword}](/${d.url_slug.replace(/^\//, '')})`;
-                if (!internalLinks.includes(linkStr)) {
-                  internalLinks.push(linkStr);
-                }
-              }
-            }
+          if (liveLinks && liveLinks.length > 0) {
+            input.internal_linking_opportunities = liveLinks;
           }
-        } catch {}
-
-        // If still fewer than 3 links, supply contextual internal topic links for the domain niche
-        if (internalLinks.length < 3) {
-          const defaultInternalLinks = [
-            `[outreach strategy](/outreach-strategy)`,
-            `[cold email subject lines](/cold-email-subject-lines)`,
-            `[email deliverability guide](/email-deliverability)`,
-            `[lead generation framework](/lead-generation-guide)`,
-          ];
-          for (const defLink of defaultInternalLinks) {
-            if (internalLinks.length < 4 && !internalLinks.includes(defLink)) {
-              internalLinks.push(defLink);
-            }
-          }
+        } catch (crawlErr) {
+          console.warn('[ContentAgent] Live link crawl error:', crawlErr);
         }
-
-        input.internal_linking_opportunities = internalLinks;
       }
     } catch (err) {
       console.warn('[ContentAgent] Auto-crawling memory error:', err);

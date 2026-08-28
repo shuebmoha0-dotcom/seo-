@@ -354,51 +354,21 @@ export async function POST(request: Request) {
 
     console.log(`[Content Draft] Applying target word count: ${defaultRules.word_count_min} - ${defaultRules.word_count_max} words`);
 
-    // Auto-discover at least 3-5 internal links
+    // Live crawl site to discover real published internal links
     if (!internal_linking_opportunities || internal_linking_opportunities.length < 3) {
-      const internalLinks: string[] = [...(internal_linking_opportunities || [])];
       try {
-        let existingQuery = supabase
-          .from('content_drafts')
-          .select('url_slug, seo_title, primary_keyword')
-          .neq('url_slug', null);
+        const { SiteLinkCrawler } = await import('@/lib/agent/siteLinkCrawler');
+        const liveLinks = await SiteLinkCrawler.discoverLiveInternalLinks({
+          websiteId: targetWebsiteId,
+          currentKeyword: primary_keyword,
+        });
 
-        if (targetWebsiteId) {
-          existingQuery = existingQuery.eq('website_id', targetWebsiteId);
+        if (liveLinks && liveLinks.length > 0) {
+          internal_linking_opportunities = liveLinks;
         }
-
-        const { data: existingDrafts } = await existingQuery.limit(15);
-
-        if (existingDrafts && existingDrafts.length > 0) {
-          for (const d of existingDrafts) {
-            if (d.url_slug && d.primary_keyword !== primary_keyword) {
-              const linkEntry = `[${d.seo_title || d.primary_keyword}](/${d.url_slug.replace(/^\//, '')})`;
-              if (!internalLinks.includes(linkEntry)) {
-                internalLinks.push(linkEntry);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to auto-fetch internal links', e);
+      } catch (crawlErr) {
+        console.warn('[Content Draft] Live link crawl error:', crawlErr);
       }
-
-      if (internalLinks.length < 3) {
-        const fallbacks = [
-          `[outreach strategy](/outreach-strategy)`,
-          `[cold email subject lines](/cold-email-subject-lines)`,
-          `[email deliverability guide](/email-deliverability)`,
-          `[lead generation framework](/lead-generation-guide)`,
-        ];
-        for (const fb of fallbacks) {
-          if (internalLinks.length < 4 && !internalLinks.includes(fb)) {
-            internalLinks.push(fb);
-          }
-        }
-      }
-
-      internal_linking_opportunities = internalLinks;
-      console.log(`[Content Draft] Auto-discovered ${internal_linking_opportunities.length} internal links for context.`);
     }
 
     // Determine execution mode (sync for guest/demo, async for registered users)
