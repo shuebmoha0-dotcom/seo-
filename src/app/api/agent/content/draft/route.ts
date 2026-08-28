@@ -256,14 +256,24 @@ export async function POST(request: Request) {
     let projectInstructions = body.project_instructions || '';
     let projectMemory = body.project_memory || '';
 
-    if (website_id) {
-      try {
-        const { data: memoryData } = await supabase
-          .from('project_memory')
-          .select('*')
-          .eq('website_id', website_id)
-          .eq('is_outdated', false)
-          .order('is_important', { ascending: false });
+    let targetWebsiteId = website_id;
+    try {
+      if (!targetWebsiteId) {
+        const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
+        if (firstSite) targetWebsiteId = firstSite.id;
+      }
+
+      let memoryQuery = supabase
+        .from('project_memory')
+        .select('*')
+        .eq('is_outdated', false)
+        .order('is_important', { ascending: false });
+
+      if (targetWebsiteId) {
+        memoryQuery = memoryQuery.or(`website_id.eq.${targetWebsiteId},website_id.is.null`);
+      }
+
+      const { data: memoryData } = await memoryQuery;
 
         if (memoryData && memoryData.length > 0) {
           // 1. Separate custom instructions and knowledge bank from standard facts

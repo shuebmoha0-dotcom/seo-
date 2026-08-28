@@ -166,12 +166,12 @@ export class ContentAgent {
         }),
         system: `You are an expert SEO content strategist. Create a precise, audience-first content brief.
 
-${input.project_instructions ? `==================================================
-CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MUST BE STRICTLY FOLLOWED):
-${input.project_instructions}
-==================================================\n` : ''}${input.project_memory ? `==================================================
-PROJECT KNOWLEDGE BANK & COMPANY FACTS:
+${input.project_memory ? `==================================================
+🧠 CRITICAL PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY (MANDATORY ACTIVE INTEGRATION):
 ${input.project_memory}
+==================================================\n` : ''}${input.project_instructions ? `==================================================
+📋 MANDATORY PROJECT CUSTOM INSTRUCTIONS & SPECIFICATIONS:
+${input.project_instructions}
 ==================================================\n` : ''}Rules to follow:
 - Audience: ${input.rules.audience}
 - Tone: ${input.rules.tone}
@@ -185,13 +185,13 @@ Search intent: ${input.search_intent}
 Content type: ${input.content_type}
 Target audience: ${input.target_audience}
 
-MANDATORY INSTRUCTIONS:
-1. Deeply understand and parse the natural language context from PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK (author persona, target business model, user roles, deliverable specs, tone, and positioning).
-2. You MUST directly incorporate the company positioning, guidelines, and context from the PROJECT CUSTOM INSTRUCTIONS and PROJECT KNOWLEDGE BANK into the headings and section notes.
-3. Structure the outline so the final article can comfortably reach at least ${input.rules.word_count_min} words of deep, valuable, actionable content.
-Competitor gaps: ${input.competitor_gaps || 'Not provided'}
-Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
-Important entities: ${(input.entities || []).join(', ')}
+MANDATORY MEMORY & INSTRUCTION COMPLIANCE:
+1. 🧠 DEEP MEMORY UTILIZATION:
+   - Deeply inspect the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY.
+   - If an author persona is defined in memory (e.g. Alex Mercer, first-person voice, founder identity), design the outline specifically around their perspective, tone, and domain expertise.
+   - Directly weave the specific concepts, tool frameworks, audience nuances, and domain insights from memory into the H2/H3 section notes and questions to answer.
+2. 🎯 INSTRUCTION COMPLIANCE:
+   - Honor all deliverable specs (e.g. power words, number in title, keyword placement) from the Project Custom Instructions.
 
 Generate a focused, highly structured brief with 4 to 6 actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
       });
@@ -287,12 +287,12 @@ Generate a focused, highly structured brief with 4 to 6 actionable H2/H3 section
         complexity: 'complex',
         system: `You are an elite SEO content writer powered by Claude Sonnet 5. Follow these instructions and guidelines strictly:
 
-${projectInstructions ? `==================================================
-CRITICAL DIRECTIVE — PROJECT CUSTOM INSTRUCTIONS (MANDATORY HUMAN RULES):
-${projectInstructions}
-==================================================\n` : ''}${projectMemory ? `==================================================
-PROJECT KNOWLEDGE BASE & ACCUMULATED MEMORY:
+${projectMemory ? `==================================================
+🧠 CRITICAL PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY (MANDATORY ACTIVE INTEGRATION):
 ${projectMemory}
+==================================================\n` : ''}${projectInstructions ? `==================================================
+📋 MANDATORY PROJECT CUSTOM INSTRUCTIONS & SPECIFICATIONS:
+${projectInstructions}
 ==================================================\n` : ''}CONTENT RULES:
 - Language: ${rules.language}
 - Tone: ${rules.tone}
@@ -307,14 +307,14 @@ ${projectMemory}
 - Sources: ${rules.source_rules}
 ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
-WRITING PRINCIPLES:
-- 🧠 NATURAL LANGUAGE CONTEXT COMPREHENSION:
-  - Treat all Custom Instructions and Project Memory as rich, natural language context.
-  - Understand implicit and explicit human relationships: understand author personas (e.g. if instructed to write in first-person as a specific author or founder, embody that persona completely), understand user/owner identity and business context, understand deliverable specs (e.g. word counts, meta constraints, power words, formatting rules), and understand domain topics.
-  - Extract and honor every constraint, preference, tone detail, and persona described in plain English naturally.
-- 🚫 ZERO RANDOM OR GENERIC FILLER: Never write generic textbook definitions, vague platitudes, or superficial overviews. Every paragraph must be deeply grounded in the company's real positioning, target audience nuances, and domain facts from the memory bank.
-- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, and forbidden topic constraints with 100% precision throughout every single section.
-- 💡 TACTICAL & PRACTICAL DEPTH: For EVERY H2 and H3 section, write 2 to 4 detailed paragraphs with actionable step-by-step frameworks, battle-tested copyable templates, and concrete real-world breakdowns.
+WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
+- 🧠 MANDATORY DEEP MEMORY UTILIZATION:
+  - You MUST actively draw upon and weave specific facts, author personas, domain knowledge, experiences, past lessons, and real positioning from the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY into the article.
+  - Author Persona: If an author persona is defined in memory (e.g. Alex Mercer, first-person voice, founder identity), write 100% in first-person as that author, referencing their experience, client work, campaigns, and perspective.
+  - Real Domain Grounding: If specific business context, audience pain points, tool benchmarks, or previous learnings are documented in memory, reference them directly in your frameworks, examples, and advice.
+  - Never write generic fluff or ignore the memory bank — it is the accumulated brain of this brand.
+- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, and forbidden topic constraints with 100% precision throughout every single section.
+- 💡 TACTICAL & PRACTICAL DEPTH: For EVERY H2 and H3 section, write actionable step-by-step frameworks, battle-tested copyable templates, and concrete real-world breakdowns.
 - Use the primary keyword naturally — do NOT force it into every paragraph unless specifically requested.
 - Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
@@ -344,13 +344,13 @@ ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
 
-${projectInstructions ? `\n==================================================\nMANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
-${projectMemory ? `\n==================================================\nPROJECT MEMORY & KNOWLEDGE BANK (WEAVE DIRECTLY INTO EXAMPLES & FRAMEWORKS):\n${projectMemory}\n==================================================\n` : ''}
+${projectMemory ? `\n==================================================\n🧠 PROJECT MEMORY & KNOWLEDGE BANK (WEAVE DIRECTLY INTO EXAMPLES & FRAMEWORKS):\n${projectMemory}\n==================================================\n` : ''}
+${projectInstructions ? `\n==================================================\n📋 MANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
 
 Before writing the article, you MUST open a <reflection> block. Inside it:
-1. Explain how you will strictly adhere to every requirement in the MANDATORY HUMAN CUSTOM INSTRUCTIONS.
-2. Detail how you will draw upon the PROJECT MEMORY & KNOWLEDGE BANK so the article provides concrete, highly specific insights rather than generic advice.
-After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, exhaustive analysis under each heading to satisfy the ${rules.word_count_min}+ word requirement.`,
+1. Explain how you will strictly embody the author persona and weave the specific domain facts, lessons, and experiences from the PROJECT MEMORY & KNOWLEDGE BANK into the article.
+2. Explain how you will strictly satisfy the deliverable requirements in the MANDATORY HUMAN CUSTOM INSTRUCTIONS.
+After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, high-value analysis under each heading to satisfy the ${rules.word_count_min}–${rules.word_count_max} word target.`,
       });
 
       // Strip the reflection block to ensure clean markdown
@@ -477,8 +477,6 @@ After closing the </reflection> block, write the full article. Include the H1 at
 
   // 6.5. Automatically crawl and hydrate latest Custom Instructions & Project Memory from Supabase
   async hydrateMemoryAndInstructions(input: ContentInput): Promise<void> {
-    if (input.project_instructions && input.project_memory) return;
-
     try {
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
@@ -511,7 +509,7 @@ After closing the </reflection> block, write the full article. Include the H1 at
           input.project_instructions = instrRow.content;
         }
 
-        if (!input.project_memory) {
+        if (!input.project_memory || input.project_memory.length < 50) {
           const parts: string[] = [];
           if (memoryRow?.content) parts.push(memoryRow.content);
           if (otherFacts.length > 0) {
