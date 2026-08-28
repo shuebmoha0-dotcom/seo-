@@ -575,7 +575,7 @@ After closing the </reflection> block, write the full article. Include the H1 at
               topic: brief.working_title,
               target_keyword: input.primary_keyword,
               purpose: req.purpose,
-              style: 'Ultra-realistic cinematic photography, premium editorial 8k resolution, highly detailed, soft natural lighting, professional business context, NO text overlays',
+              style: 'Authentic candid lifestyle and workplace editorial photography, real human environment, 35mm lens, f/1.8 aperture, natural sunlight, warm modern setting, high texture detail, strictly NO robotic or cartoon elements',
               dimensions: '1024x1024',
               image_placement: req.placement_context,
               brand_instructions: input.rules.brand_rules,

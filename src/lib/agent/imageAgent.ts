@@ -167,23 +167,20 @@ export class ImageAgent {
             screenshot_required_note: z.string().nullable(),
           })),
         }),
-        system: `You are a visual content strategist for an AI SEO content system.
+        system: `You are a visual content director for high-performing SaaS & SEO publications.
 
-Your job is to plan images that GENUINELY improve content — not to hit an image count target.
+Your job is to plan photorealistic, real-world images that look authentic and human — never robotic, cartoonish, or cheap CGI.
 
 PRINCIPLES:
-- Every image must have a clear, specific purpose
-- Match visual type to content type (how-to → steps/screenshots, data → charts, conceptual → diagrams)
-- Featured images should visually represent the topic cleanly
-- Diagrams should explain — not decorate
-- Never plan product screenshots if they'd need to be fabricated — mark as screenshot_required
-- Never plan images for topics where no useful visual exists
-- Prefer diagrams/workflows for complex processes
-- Keep it selective: 2 focused images > 5 generic ones
+- VISUAL STYLE: Authentic real-world editorial photography (e.g. real human hands holding a smartphone, a founder working on a sleek laptop at a sunlit wooden desk with an iced coffee, minimalist workspace, clean realistic device mockups).
+- NEVER use robotic androids, neon futuristic cyber holograms, 3D Pixar/cartoon characters, or cheesy stock illustrations.
+- Every image must have a clear, specific editorial purpose.
+- Featured images should visually represent the topic cleanly in an authentic real-life environment.
+- Keep it selective: 1-2 focused, beautiful photos > 5 generic ones.
 
-FILENAME RULES: lowercase-hyphen-separated.webp (e.g. saas-keyword-research-workflow.webp)
+FILENAME RULES: lowercase-hyphen-separated.webp (e.g. cold-email-length-guide.webp)
 ALT TEXT RULES: describe what is visible, natural language, no keyword stuffing, under 125 chars
-GENERATION PROMPT RULES: detailed visual description — subject, composition, style, colors, purpose, what to include/avoid`,
+GENERATION PROMPT RULES: detailed photographic description — 35mm lens, f/1.8 aperture, natural sunlight, subject, real-world context, no text overlays, strictly no robotic or sci-fi elements.`,
         prompt: `Plan images for this article:
 
 Title: "${params.article_title}"

@@ -43,21 +43,26 @@ export interface ImageProvider {
  * Uses GPT-5.6 Luna (with Claude Sonnet 5 fallback)
  */
 export async function generateImagePrompt(request: ImageGenerationRequest, context?: UsageContext): Promise<string> {
-  const promptGenerationPrompt = `You are a professional image prompt engineer for high-ranking SEO publications.
-Generate a concise, photorealistic, on-brand image generation prompt for an article image.
+  const promptGenerationPrompt = `You are an expert commercial photography director for top-tier SaaS and business publications.
+Generate a concise, ultra-photorealistic image prompt for an article visual.
 
 Topic: ${request.topic}
 Target Keyword: ${request.target_keyword || request.topic}
 Purpose: ${request.purpose}
-Visual Style: ${request.desired_visual_style || request.style || 'Clean modern editorial style'}
-Audience: ${request.intended_audience || 'Professionals and decision makers'}
-Placement: ${request.image_placement || 'Header featured image'}
-${request.brand_instructions ? `Brand Guidelines: ${request.brand_instructions}` : ''}
+Visual Context: ${request.image_placement || 'Editorial article photo'}
+Audience: ${request.intended_audience || 'Professionals and modern founders'}
 
-Rules:
-- Describe the visual composition, lighting, subject matter, and color palette.
-- Do NOT include text overlays or words in the image.
-- Keep the prompt under 80 words.`;
+MANDATORY VISUAL STYLE:
+- Style: Authentic, realistic editorial photography shot on 35mm lens (f/1.8 aperture) with soft natural daylight and subtle depth of field bokeh.
+- Scene: Real-world candid scenes (e.g. hands holding a modern smartphone showing a clean interface, professional working on a sleek laptop at a sunlit wooden desk with an iced coffee, authentic minimalist workspace or coffee shop setting).
+- Aesthetics: High texture detail, warm natural tones, authentic filmic grain, believable composition.
+
+STRICT NEGATIVE RULES (NEVER INCLUDE):
+- NO robotic cyborgs, NO humanoid androids, NO futuristic neon sci-fi glows, NO floating holograms.
+- NO 3D cartoon illustrations, NO Pixar/Disney styles, NO flat vector stock art, NO cheesy corporate clip art.
+- NO fake artificial hands or distorted geometry.
+
+Output ONLY the final image generation prompt (under 75 words).`;
 
   const { text } = await TextRouter.generateText({
     agent: 'ImageAgent',
