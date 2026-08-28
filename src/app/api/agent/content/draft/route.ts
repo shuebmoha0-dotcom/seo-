@@ -354,27 +354,51 @@ export async function POST(request: Request) {
 
     console.log(`[Content Draft] Applying target word count: ${defaultRules.word_count_min} - ${defaultRules.word_count_max} words`);
 
-    // Auto-discover internal links if not provided
-    if ((!internal_linking_opportunities || internal_linking_opportunities.length === 0) && website_id) {
+    // Auto-discover at least 3-5 internal links
+    if (!internal_linking_opportunities || internal_linking_opportunities.length < 3) {
+      const internalLinks: string[] = [...(internal_linking_opportunities || [])];
       try {
-        const { data: existingDrafts } = await supabase
+        let existingQuery = supabase
           .from('content_drafts')
           .select('url_slug, seo_title, primary_keyword')
-          .eq('website_id', website_id)
-          .neq('url_slug', null)
-          .limit(15);
+          .neq('url_slug', null);
+
+        if (targetWebsiteId) {
+          existingQuery = existingQuery.eq('website_id', targetWebsiteId);
+        }
+
+        const { data: existingDrafts } = await existingQuery.limit(15);
 
         if (existingDrafts && existingDrafts.length > 0) {
-          internal_linking_opportunities = existingDrafts
-            // Don't link to itself if by chance we have the same keyword
-            .filter((d: any) => d.primary_keyword !== primary_keyword)
-            .map((d: any) => `/${d.url_slug} (Topic: ${d.seo_title || d.primary_keyword})`);
-
-          console.log(`[Content Draft] Auto-discovered ${internal_linking_opportunities.length} internal links for context.`);
+          for (const d of existingDrafts) {
+            if (d.url_slug && d.primary_keyword !== primary_keyword) {
+              const linkEntry = `[${d.seo_title || d.primary_keyword}](/${d.url_slug.replace(/^\//, '')})`;
+              if (!internalLinks.includes(linkEntry)) {
+                internalLinks.push(linkEntry);
+              }
+            }
+          }
         }
       } catch (e) {
         console.warn('Failed to auto-fetch internal links', e);
       }
+
+      if (internalLinks.length < 3) {
+        const fallbacks = [
+          `[outreach strategy](/outreach-strategy)`,
+          `[cold email subject lines](/cold-email-subject-lines)`,
+          `[email deliverability guide](/email-deliverability)`,
+          `[lead generation framework](/lead-generation-guide)`,
+        ];
+        for (const fb of fallbacks) {
+          if (internalLinks.length < 4 && !internalLinks.includes(fb)) {
+            internalLinks.push(fb);
+          }
+        }
+      }
+
+      internal_linking_opportunities = internalLinks;
+      console.log(`[Content Draft] Auto-discovered ${internal_linking_opportunities.length} internal links for context.`);
     }
 
     // Determine execution mode (sync for guest/demo, async for registered users)

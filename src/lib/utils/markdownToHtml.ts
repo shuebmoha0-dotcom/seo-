@@ -61,7 +61,12 @@ export function markdownToWordPressHtml(markdown: string): string {
     html = html.replace(`__PROTECTED_IMAGE_BLOCK_${idx}__`, imgTag);
   });
 
-  // 6. Convert Blockquotes: > quote
+  // 6. Convert Links: [anchor text](url) (excluding images which are already protected)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+    return `<a href="${url.trim()}">${text.trim()}</a>`;
+  });
+
+  // 7. Convert Blockquotes: > quote
   html = html.replace(/^>\s+(.+)$/gm, '\n\n<!-- wp:quote -->\n<blockquote class="wp-block-quote"><p>$1</p></blockquote>\n<!-- /wp:quote -->\n\n');
 
   // 7. Convert Lists: Unordered (- or *)

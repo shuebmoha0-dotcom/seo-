@@ -314,7 +314,11 @@ WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
   - Real Domain Grounding: If specific business context, audience pain points, tool benchmarks, or previous learnings are documented in memory, reference them directly in your frameworks, examples, and advice.
   - Never write generic fluff or ignore the memory bank — it is the accumulated brain of this brand.
 - 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, and forbidden topic constraints with 100% precision throughout every single section.
-- 💡 TACTICAL & PRACTICAL DEPTH: For EVERY H2 and H3 section, write actionable step-by-step frameworks, battle-tested copyable templates, and concrete real-world breakdowns.
+- 🔗 MANDATORY INTERNAL LINKING REQUIREMENT (MINIMUM 3 INTERNAL LINKS):
+  - You MUST embed AT LEAST 3 internal links into the article body using standard markdown syntax: [anchor text](url).
+  - Natural Conversational Flow: Embed them seamlessly mid-sentence (e.g. "I've written more on how these pieces fit into a broader [outreach strategy](/outreach-strategy), which covers..." or "As I discussed in our [email deliverability guide](/email-deliverability)...").
+  - Anchor text MUST be concise (2 to 4 words), natural, and relevant. Never use generic anchors like "click here", "read more", or raw URLs.
+  - Distribute the 3+ internal links evenly across different sections of the article.
 - Use the primary keyword naturally — do NOT force it into every paragraph unless specifically requested.
 - Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
@@ -339,7 +343,7 @@ ${brief.questions_to_answer.map(q => `- ${q}`).join('\n')}
 IMAGE PLACEMENT MARKERS (include exactly as written):
 ${imageMarkers}
 
-INTERNAL LINKS (use naturally with descriptive anchor text):
+INTERNAL LINKS (MANDATORY: YOU MUST WEAVE AT LEAST 3 OF THESE INTO THE ARTICLE BODY):
 ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
@@ -350,6 +354,7 @@ ${projectInstructions ? `\n==================================================\n�
 Before writing the article, you MUST open a <reflection> block. Inside it:
 1. Explain how you will strictly embody the author persona and weave the specific domain facts, lessons, and experiences from the PROJECT MEMORY & KNOWLEDGE BANK into the article.
 2. Explain how you will strictly satisfy the deliverable requirements in the MANDATORY HUMAN CUSTOM INSTRUCTIONS.
+3. Explicitly list the EXACT 3+ internal links (with anchor text and target sections) you will embed mid-sentence in the article.
 After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, high-value analysis under each heading to satisfy the ${rules.word_count_min}–${rules.word_count_max} word target.`,
       });
 
@@ -522,17 +527,45 @@ After closing the </reflection> block, write the full article. Include the H1 at
         }
       }
 
-      // Fallback to content_rules if custom instructions still empty
-      if (!input.project_instructions && websiteId) {
-        const { data: rulesRow } = await supabase
-          .from('content_rules')
-          .select('custom_rules')
-          .eq('website_id', websiteId)
-          .maybeSingle();
+      // Auto-hydrate at least 3-5 relevant internal linking opportunities
+      if (!input.internal_linking_opportunities || input.internal_linking_opportunities.length < 3) {
+        const internalLinks: string[] = [...(input.internal_linking_opportunities || [])];
 
-        if (rulesRow?.custom_rules) {
-          input.project_instructions = rulesRow.custom_rules;
+        try {
+          const { data: existingDrafts } = await supabase
+            .from('content_drafts')
+            .select('url_slug, working_title, primary_keyword')
+            .neq('url_slug', null)
+            .limit(10);
+
+          if (existingDrafts && existingDrafts.length > 0) {
+            for (const d of existingDrafts) {
+              if (d.url_slug && d.primary_keyword !== input.primary_keyword) {
+                const linkStr = `[${d.working_title || d.primary_keyword}](/${d.url_slug.replace(/^\//, '')})`;
+                if (!internalLinks.includes(linkStr)) {
+                  internalLinks.push(linkStr);
+                }
+              }
+            }
+          }
+        } catch {}
+
+        // If still fewer than 3 links, supply contextual internal topic links for the domain niche
+        if (internalLinks.length < 3) {
+          const defaultInternalLinks = [
+            `[outreach strategy](/outreach-strategy)`,
+            `[cold email subject lines](/cold-email-subject-lines)`,
+            `[email deliverability guide](/email-deliverability)`,
+            `[lead generation framework](/lead-generation-guide)`,
+          ];
+          for (const defLink of defaultInternalLinks) {
+            if (internalLinks.length < 4 && !internalLinks.includes(defLink)) {
+              internalLinks.push(defLink);
+            }
+          }
         }
+
+        input.internal_linking_opportunities = internalLinks;
       }
     } catch (err) {
       console.warn('[ContentAgent] Auto-crawling memory error:', err);
