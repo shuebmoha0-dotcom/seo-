@@ -319,22 +319,27 @@ export async function POST(request: Request) {
       }
     }
 
-    // Extract word count targets from custom instructions or rules
-    const combinedInstructions = `${projectInstructions} ${rules?.custom_rules || ''} ${defaultRules.structure_rules}`;
-    const wordRangeMatch = combinedInstructions.match(/(\d{3,5})\s*(?:to|-)\s*(\d{3,5})\s*words/i);
-    const wordSingleMatch = combinedInstructions.match(/(?:at least|minimum|min|around|target|should be|approx|approximately)\s*(\d{3,5})\s*words/i) ||
-                            combinedInstructions.match(/(\d{3,5})\s*words/i);
+    // Extract word count targets: prioritize user-selected rules from UI, then custom instructions, then standard 800-1200 default
+    if (rules?.word_count_min && rules?.word_count_max) {
+      defaultRules.word_count_min = rules.word_count_min;
+      defaultRules.word_count_max = rules.word_count_max;
+    } else {
+      const combinedInstructions = `${projectInstructions} ${rules?.custom_rules || ''} ${defaultRules.structure_rules}`;
+      const wordRangeMatch = combinedInstructions.match(/(\d{3,5})\s*(?:to|-)\s*(\d{3,5})\s*words/i);
+      const wordSingleMatch = combinedInstructions.match(/(?:at least|minimum|min|around|target|should be|approx|approximately)\s*(\d{3,5})\s*words/i) ||
+                              combinedInstructions.match(/(\d{3,5})\s*words/i);
 
-    if (wordRangeMatch) {
-      defaultRules.word_count_min = parseInt(wordRangeMatch[1], 10);
-      defaultRules.word_count_max = parseInt(wordRangeMatch[2], 10);
-    } else if (wordSingleMatch && parseInt(wordSingleMatch[1], 10) >= 400) {
-      const target = parseInt(wordSingleMatch[1], 10);
-      defaultRules.word_count_min = target;
-      defaultRules.word_count_max = Math.round(target * 1.35);
-    } else if (!rules?.word_count_min) {
-      defaultRules.word_count_min = 1200;
-      defaultRules.word_count_max = 1800;
+      if (wordRangeMatch) {
+        defaultRules.word_count_min = parseInt(wordRangeMatch[1], 10);
+        defaultRules.word_count_max = parseInt(wordRangeMatch[2], 10);
+      } else if (wordSingleMatch && parseInt(wordSingleMatch[1], 10) >= 400) {
+        const target = parseInt(wordSingleMatch[1], 10);
+        defaultRules.word_count_min = target;
+        defaultRules.word_count_max = Math.round(target * 1.35);
+      } else {
+        defaultRules.word_count_min = 800;
+        defaultRules.word_count_max = 1200;
+      }
     }
 
     console.log(`[Content Draft] Applying target word count: ${defaultRules.word_count_min} - ${defaultRules.word_count_max} words`);

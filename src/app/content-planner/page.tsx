@@ -69,8 +69,8 @@ function formatPublishDate(dateStr?: string): string {
 }
 
 const DEFAULT_RULES = {
-  word_count_min: 900,
-  word_count_max: 1500,
+  word_count_min: 800,
+  word_count_max: 1200,
   language: "U.S. English",
   tone: "Professional, natural, helpful",
   audience: "SaaS founders and marketing teams",
@@ -132,6 +132,7 @@ export default function ContentPlannerPage() {
 
   // Quick 1-click generator keyword input
   const [quickKeyword, setQuickKeyword] = useState("");
+  const [targetLengthPreset, setTargetLengthPreset] = useState<"short" | "standard" | "long" | "pillar">("standard");
 
   const [newDraftForm, setNewDraftForm] = useState({
     primary_keyword: "",
@@ -541,11 +542,38 @@ export default function ContentPlannerPage() {
               </a>
             </div>
 
+          {/* Target Length / Word Count Controller */}
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="text-[11px] font-bold text-neutral-600">Target Word Count:</span>
+            {[
+              { id: "short", label: "Short (600–800 words)", min: 600, max: 800 },
+              { id: "standard", label: "Standard (800–1,200 words)", min: 800, max: 1200 },
+              { id: "long", label: "In-Depth (1,200–1,800 words)", min: 1200, max: 1800 },
+              { id: "pillar", label: "Pillar (1,800–2,500 words)", min: 1800, max: 2500 },
+            ].map(preset => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  setTargetLengthPreset(preset.id as any);
+                  setRules(prev => ({ ...prev, word_count_min: preset.min, word_count_max: preset.max }));
+                }}
+                className={`text-[11px] font-semibold px-3 py-1.5 rounded-xl border transition-all ${
+                  targetLengthPreset === preset.id
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                    : "bg-white text-neutral-600 border-neutral-200 hover:bg-neutral-50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="relative flex-1 w-full">
               <input
                 type="text"
-                placeholder="Enter target keyword (e.g. best ai seo agent software 2026)..."
+                placeholder="Enter target keyword (e.g. cold email follow up template)..."
                 value={quickKeyword}
                 onChange={e => setQuickKeyword(e.target.value)}
                 onKeyDown={e => {
@@ -563,7 +591,7 @@ export default function ContentPlannerPage() {
               className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-6 py-3 rounded-2xl transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
             >
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>{generating ? "Writing Article & Generating Visuals..." : "Generate Article"}</span>
+              <span>{generating ? "Writing Article..." : "Generate Article"}</span>
             </button>
           </div>
 
@@ -781,7 +809,7 @@ export default function ContentPlannerPage() {
                       className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
                     >
                       <Globe className="w-3.5 h-3.5" />
-                      <span>{publishing === selectedDraft.id ? "Publishing to WordPress..." : "🚀 Publish / Sync to WordPress"}</span>
+                      <span>{publishing === selectedDraft.id ? "Publishing to WordPress..." : "Publish to WordPress"}</span>
                     </button>
 
                     <button

@@ -193,7 +193,7 @@ Competitor gaps: ${input.competitor_gaps || 'Not provided'}
 Internal linking opportunities: ${(input.internal_linking_opportunities || []).join(', ')}
 Important entities: ${(input.entities || []).join(', ')}
 
-Generate an exhaustive, highly structured brief with 6 to 9 comprehensive H2 and H3 sections so the writer can produce an in-depth ${input.rules.word_count_min}–${input.rules.word_count_max} word article. Headings should serve the reader with actionable depth, not just insert keywords.`,
+Generate a focused, highly structured brief with 4 to 6 actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
       });
 
       return {
@@ -300,7 +300,7 @@ ${projectMemory}
 - Style: ${rules.author_style}
 - Structure: ${rules.structure_rules}
 - Paragraphs: ${rules.paragraph_style}
-- STRICT LENGTH REQUIREMENT: You MUST write a comprehensive, exhaustive long-form article of at least ${rules.word_count_min} words (target range: ${rules.word_count_min}–${rules.word_count_max} words). Do not write brief summaries or rush through sections.
+- STRICT LENGTH REQUIREMENT: Target length is ${rules.word_count_min}–${rules.word_count_max} words. Stay tightly within this word range without unnecessary padding or bloated sections.
 - CTA rule: ${rules.cta_rules}
 - Avoid: ${rules.avoid_rules}
 - Brand rule: ${rules.brand_rules}
@@ -320,7 +320,7 @@ WRITING PRINCIPLES:
 - Place image markers exactly where specified: [IMAGE: ...]
 - DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
 ${revisionNotes ? `\nREVISION NOTES FROM HUMAN/QA: ${revisionNotes}` : ''}`,
-        prompt: `Write a complete, in-depth ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below. Make sure the total word count is at least ${rules.word_count_min} words.
+        prompt: `Write a focused, high-value ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below. Stay tightly within the target ${rules.word_count_min}–${rules.word_count_max} word range.
 
 TITLE: ${brief.working_title}
 H1: ${brief.h1}
