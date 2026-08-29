@@ -2,13 +2,13 @@
 
 import { Sidebar } from "@/components/Sidebar";
 import {
-  Search, Download, Sparkles, ArrowUpRight, ArrowDownRight, Minus,
-  Star, ChevronDown, ChevronUp, Filter, Loader2, AlertTriangle,
-  Check, X, Edit2, FileText, Send, Brain, BarChart2, Target,
-  Tag, Layers, RefreshCw, Info, Globe, Plus
+  Search, Sparkles, ArrowUpRight, Target, FileText,
+  Loader2, Globe, Plus, PenTool, Hash, TrendingUp,
+  Layers, CheckCircle2, ChevronRight, BarChart2
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import Link from "next/link";
 
 const intentColors: Record<string, string> = {
   informational: "bg-blue-50 text-blue-700 border-blue-200",
@@ -21,10 +21,10 @@ const intentColors: Record<string, string> = {
 export default function KeywordsPage() {
   const { currentWebsite, openAddModal } = useWebsite();
 
-  const [activeTab, setActiveTab] = useState<"clusters" | "all_keywords" | "roadmap">("clusters");
+  const [activeTab, setActiveTab] = useState<"clusters" | "all_keywords">("clusters");
   const [siteMode, setSiteMode] = useState<"new" | "established">("new");
+  const [seedTopic, setSeedTopic] = useState("");
   const [discovering, setDiscovering] = useState(false);
-  const [expandedCluster, setExpandedCluster] = useState<string | null>(null);
 
   const [clusters, setClusters] = useState<any[]>([]);
   const [rawKeywords, setRawKeywords] = useState<any[]>([]);
@@ -52,9 +52,6 @@ export default function KeywordsPage() {
         setClusters(data.clusters || []);
         setRawKeywords(data.raw_keywords || []);
         setOpportunities(data.opportunities || []);
-        if (data.clusters && data.clusters.length > 0) {
-          setExpandedCluster(data.clusters[0].id || data.clusters[0].name);
-        }
       }
     } catch (err) {
       console.error("Error fetching keywords:", err);
@@ -80,6 +77,7 @@ export default function KeywordsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           website_id: currentWebsite.id,
+          seed_topic: seedTopic.trim() || undefined,
           mode: siteMode,
         }),
       });
@@ -103,11 +101,11 @@ export default function KeywordsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opportunity: {
-            keyword: kw.term || kw.keyword,
-            search_intent: kw.intent || "informational",
-            content_type: "blog_article",
-            business_relevance: kw.relevance || 90,
-            evidence: `Discovered search opportunity for ${currentWebsite?.domain || "target website"}.`,
+            keyword: kw.term || kw.keyword || kw.primary_keyword,
+            search_intent: kw.intent || kw.search_intent || "informational",
+            content_type: kw.recommended_content_type || kw.content_type || "blog_article",
+            business_relevance: kw.relevance || kw.business_relevance || 90,
+            evidence: kw.evidence || `Discovered search opportunity for ${currentWebsite?.domain || "target website"}.`,
           },
         }),
       });
@@ -140,12 +138,22 @@ export default function KeywordsPage() {
             </h1>
             <p className="text-neutral-500 text-xs mt-0.5">
               {currentWebsite
-                ? `Discovers intent-driven keyword opportunities tailored for ${currentWebsite.domain}.`
+                ? `Discovers high-converting topical authority clusters tailored for ${currentWebsite.domain}.`
                 : "Connect your website to research target search queries."}
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative">
+              <input
+                type="text"
+                value={seedTopic}
+                onChange={(e) => setSeedTopic(e.target.value)}
+                placeholder="Seed topic / niche (optional)..."
+                className="bg-neutral-50 border border-neutral-200 text-neutral-800 placeholder-neutral-400 text-xs rounded-xl px-3 py-2 w-56 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+
             <div className="flex items-center gap-1 bg-neutral-50 border border-neutral-200 rounded-xl p-1 text-xs font-semibold">
               <button
                 onClick={() => setSiteMode("new")}
@@ -171,7 +179,7 @@ export default function KeywordsPage() {
               className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
             >
               {discovering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              <span>{discovering ? "Discovering..." : "Discover Keywords"}</span>
+              <span>{discovering ? "Clustering..." : "Discover Keywords"}</span>
             </button>
           </div>
         </div>
@@ -201,9 +209,9 @@ export default function KeywordsPage() {
             {/* View Tabs */}
             <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 mb-6">
               {[
-                { id: "clusters", label: "Intent Clusters", count: clusters.length },
-                { id: "all_keywords", label: "All Tracked Keywords", count: rawKeywords.length },
-              ].map(tab => (
+                { id: "clusters", label: "Topical Clusters", count: clusters.length },
+                { id: "all_keywords", label: "All Discovered Keywords", count: rawKeywords.length },
+              ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
@@ -235,29 +243,57 @@ export default function KeywordsPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {clusters.map((cluster, idx) => (
-                      <div key={cluster.id || idx} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-bold text-sm text-neutral-900">{cluster.name || cluster.topic}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      <div key={cluster.id || idx} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-4 hover:border-neutral-300 transition-all flex flex-col justify-between">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h3 className="font-bold text-sm text-neutral-900">{cluster.cluster_name || cluster.name || cluster.topic}</h3>
+                              <p className="text-[11px] text-neutral-500 mt-0.5">
+                                Pillar Target: <span className="font-semibold text-neutral-900 font-mono">{cluster.primary_keyword}</span>
+                              </p>
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${
                               intentColors[cluster.search_intent || cluster.intent] || "bg-neutral-100 text-neutral-700 border-neutral-200"
                             }`}>
-                              {cluster.search_intent || cluster.intent || "Informational"}
+                              {(cluster.search_intent || cluster.intent || "informational").replace(/_/g, ' ')}
                             </span>
                           </div>
-                          <button
-                            onClick={() => handleGenerateBrief({ term: cluster.primary_keyword || cluster.name, intent: cluster.search_intent })}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors"
-                          >
-                            <FileText className="w-3 h-3" />
-                            Create Brief
-                          </button>
+
+                          {/* Secondary Supporting Keywords */}
+                          {cluster.secondary_keywords && cluster.secondary_keywords.length > 0 && (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">Cluster Supporting Articles:</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {cluster.secondary_keywords.map((sec: string, sIdx: number) => (
+                                  <span key={sIdx} className="text-[11px] bg-neutral-50 text-neutral-700 border border-neutral-200 rounded-lg px-2 py-0.5 font-medium">
+                                    {sec}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <p className="text-xs text-neutral-600">
-                          Primary Target: <span className="font-semibold text-neutral-800 font-mono">{cluster.primary_keyword || cluster.name}</span>
-                        </p>
+
+                        {/* Actions */}
+                        <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-xs">
+                          <button
+                            onClick={() => handleGenerateBrief(cluster)}
+                            className="text-neutral-600 hover:text-neutral-900 font-semibold inline-flex items-center gap-1 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>View Brief</span>
+                          </button>
+
+                          <Link
+                            href={`/content-planner`}
+                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold px-3 py-1.5 rounded-xl inline-flex items-center gap-1.5 transition-colors shadow-sm text-xs"
+                          >
+                            <PenTool className="w-3 h-3" />
+                            <span>Draft in Planner</span>
+                          </Link>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -284,13 +320,13 @@ export default function KeywordsPage() {
                           <th className="py-3 px-4">Keyword Term</th>
                           <th className="py-3 px-4">Search Intent</th>
                           <th className="py-3 px-4">Difficulty</th>
-                          <th className="py-3 px-4">Search Volume</th>
+                          <th className="py-3 px-4">Est. Volume</th>
                           <th className="py-3 px-4 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-200">
                         {rawKeywords.map((kw) => (
-                          <tr key={kw.id || kw.term} className="hover:bg-neutral-50">
+                          <tr key={kw.id || kw.term} className="hover:bg-neutral-50 transition-colors">
                             <td className="py-3 px-4 font-bold text-neutral-900">{kw.term}</td>
                             <td className="py-3 px-4">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200 capitalize">
@@ -299,14 +335,22 @@ export default function KeywordsPage() {
                             </td>
                             <td className="py-3 px-4 font-mono text-neutral-700 capitalize">{kw.difficulty || "Low"}</td>
                             <td className="py-3 px-4 font-mono text-neutral-700">{kw.volume ? kw.volume.toLocaleString() : "N/A"}</td>
-                            <td className="py-3 px-4 text-right">
+                            <td className="py-3 px-4 text-right space-x-2">
                               <button
                                 onClick={() => handleGenerateBrief(kw)}
-                                className="text-indigo-600 hover:text-indigo-800 font-semibold text-xs inline-flex items-center gap-1"
+                                className="text-neutral-500 hover:text-neutral-800 font-semibold text-xs inline-flex items-center gap-1"
                               >
-                                <FileText className="w-3 h-3" />
-                                <span>Generate Brief</span>
+                                <FileText className="w-3 h-3 text-indigo-600" />
+                                <span>Brief</span>
                               </button>
+
+                              <Link
+                                href={`/content-planner`}
+                                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[11px] inline-flex items-center gap-1 border border-indigo-200"
+                              >
+                                <PenTool className="w-2.5 h-2.5" />
+                                <span>Draft</span>
+                              </Link>
                             </td>
                           </tr>
                         ))}
@@ -323,11 +367,11 @@ export default function KeywordsPage() {
       {/* CONTENT BRIEF MODAL */}
       {briefModalOpportunity && (
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-xl w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
+          <div className="bg-white border border-neutral-200 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-600" />
-                Content Brief: {briefModalOpportunity.term || briefModalOpportunity.keyword}
+                <span>SEO Content Brief</span>
               </h3>
               <button onClick={() => setBriefModalOpportunity(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
             </div>
@@ -338,31 +382,56 @@ export default function KeywordsPage() {
                 <p className="text-xs text-neutral-500">Generating intent-driven content brief...</p>
               </div>
             ) : brief ? (
-              <div className="space-y-3 text-xs max-h-96 overflow-y-auto pr-1">
-                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl space-y-1">
-                  <p className="font-bold text-neutral-900">Recommended Title: {brief.recommended_title}</p>
-                  <p className="text-neutral-600">H1: {brief.h1}</p>
+              <div className="space-y-4 text-xs max-h-96 overflow-y-auto pr-1">
+                <div className="p-3.5 bg-neutral-50 border border-neutral-200 rounded-2xl space-y-1">
+                  <p className="font-bold text-neutral-900 text-sm">{brief.recommended_title}</p>
+                  <p className="text-neutral-600 font-mono text-[11px]">H1: {brief.h1}</p>
+                  <p className="text-neutral-500 text-[11px]">Target Audience: {brief.target_audience}</p>
                 </div>
-                <div className="space-y-1.5">
-                  <p className="font-bold text-neutral-900">Heading Outline:</p>
-                  {(brief.h2_h3_structure || []).map((h: any, i: number) => (
-                    <div key={i} className="p-2 bg-neutral-50 rounded-lg text-neutral-700 font-mono text-[11px]">
-                      <strong>[{h.level?.toUpperCase()}]</strong> {h.heading}
-                    </div>
-                  ))}
+
+                <div className="space-y-2">
+                  <p className="font-bold text-neutral-900 uppercase tracking-wider text-[10px] text-neutral-400">Heading Structure:</p>
+                  <div className="space-y-1.5">
+                    {(brief.h2_h3_structure || []).map((h: any, i: number) => (
+                      <div key={i} className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-800 text-[11px]">
+                        <span className="font-mono font-bold text-indigo-600 mr-1.5">[{h.level?.toUpperCase()}]</span>
+                        <span className="font-semibold">{h.heading}</span>
+                        {h.notes && <p className="text-[10px] text-neutral-500 mt-0.5">{h.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
+                {brief.questions_to_answer && brief.questions_to_answer.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="font-bold text-neutral-900 uppercase tracking-wider text-[10px] text-neutral-400">Questions to Answer:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-neutral-600 text-[11px]">
+                      {brief.questions_to_answer.map((q: string, qi: number) => (
+                        <li key={qi}>{q}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-neutral-500">Failed to generate brief.</p>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex items-center justify-between pt-3 border-t border-neutral-100">
               <button
                 onClick={() => setBriefModalOpportunity(null)}
                 className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-xl text-xs font-semibold"
               >
                 Close
               </button>
+
+              <Link
+                href="/content-planner"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs inline-flex items-center gap-1.5 shadow-sm"
+              >
+                <PenTool className="w-3.5 h-3.5" />
+                <span>Open in Content Planner</span>
+              </Link>
             </div>
           </div>
         </div>
