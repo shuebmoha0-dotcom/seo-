@@ -192,6 +192,9 @@ MANDATORY MEMORY & INSTRUCTION COMPLIANCE:
    - Directly weave the specific concepts, tool frameworks, audience nuances, and domain insights from memory into the H2/H3 section notes and questions to answer.
 2. 🎯 INSTRUCTION COMPLIANCE:
    - Honor all deliverable specs (e.g. power words, number in title, keyword placement) from the Project Custom Instructions.
+3. 🌐 BROAD & NATURAL AUDIENCE SCOPE:
+   - DO NOT artificially append "for SaaS teams" or narrow the working_title to "SaaS" unless the primary keyword explicitly contains "SaaS" or SaaS was specifically requested.
+   - For general keywords like "${input.primary_keyword}", write a natural, high-converting title (e.g. "7 Best Cold Sales Email Templates That Get Replies") that appeals to anyone interested in this topic.
 
 Generate a focused, highly structured brief with ${input.rules.word_count_max <= 1000 ? '3' : input.rules.word_count_max <= 1400 ? '3 to 4' : '4 to 6'} actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
       });
@@ -309,9 +312,11 @@ ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
 - 🚫 ZERO META TAGS IN BODY: DO NOT output "Meta title:", "**Meta title:**", "Meta description:", or "**Meta description:**" anywhere in the article text. Start directly with the H1.
-- 👤 MANDATORY AUTHOR PERSONA (ALEX MERCER & SAAS FOCUS):
-  - Embody Alex Mercer writing 100% in first-person ("I", "my outbound campaigns", "in my work with SaaS growth teams").
-  - Target audience is exclusively SaaS founders, B2B growth leads, and sales teams. Provide real copy-pasteable SaaS email templates with variables like {{FirstName}}, {{Company}}, {{PainPoint}}.
+- 👤 MANDATORY AUTHOR PERSONA (ALEX MERCER):
+  - Embody Alex Mercer writing 100% in first-person ("I", "in my outbound work", "in my campaigns").
+  - Target Audience: Write for everyone looking for "${brief.primary_keyword}" (sales professionals, founders, marketers, SDRs, agency owners, and consultants).
+  - DO NOT artificially restrict the audience or title to "SaaS" unless the keyword explicitly includes "SaaS".
+  - Provide real, copy-pasteable email templates with actionable variables like {{FirstName}}, {{Company}}, {{PainPoint}}.
 - 🧠 MANDATORY DEEP MEMORY UTILIZATION:
   - Actively weave specific facts, domain knowledge, experiences, past lessons, and real positioning from the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY into the article.
 - 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, power words, and structure rules with 100% precision.
@@ -334,7 +339,7 @@ H1: ${brief.h1}
 PRIMARY KEYWORD: "${brief.primary_keyword}"
 SECONDARY KEYWORDS: ${brief.secondary_keywords.join(', ')}
 SEARCH INTENT: ${brief.search_intent}
-TARGET AUDIENCE: SaaS founders and growth teams
+TARGET AUDIENCE: ${brief.target_audience || 'Everyone looking for ' + brief.primary_keyword}
 CONTENT OBJECTIVE: ${brief.content_objective}
 
 HEADING STRUCTURE TO FOLLOW:
@@ -355,7 +360,7 @@ ${projectMemory ? `\n==================================================\n🧠 PR
 ${projectInstructions ? `\n==================================================\n📋 MANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
 
 Before writing the article, you MUST open a <reflection> block. Inside it:
-1. Confirm that you are writing in first-person as Alex Mercer for SaaS teams.
+1. Confirm that you are writing in first-person as Alex Mercer for the broad target audience (${brief.target_audience || 'everyone interested in ' + brief.primary_keyword}).
 2. List the EXACT 3+ live URLs you will embed mid-sentence along with their short anchor text and target section.
 3. Confirm how you will stay strictly within ${rules.word_count_min}–${rules.word_count_max} words without bloating.
 After closing the </reflection> block, write the full article. Start directly with the H1 (# Title). DO NOT write Meta title or Meta description lines. Place image markers where indicated.`,
