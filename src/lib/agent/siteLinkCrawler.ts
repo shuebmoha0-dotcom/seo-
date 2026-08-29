@@ -155,13 +155,14 @@ export class SiteLinkCrawler {
       return !titleLower.includes(currentKwLower) && !slugLower.includes(currentKwLower.replace(/\s+/g, '-'));
     });
 
-    // Format into standard markdown anchor links for the LLM
+    // Format into clear, exact live link specifications for the LLM
     const formatted = filtered.map(item => {
-      const cleanPath = item.url.startsWith('http') ? item.url : `/${item.slug.replace(/^\//, '')}/`;
-      return `[${item.title}](${cleanPath}) (Topic: ${item.title})`;
+      const liveUrl = item.url.startsWith('http') ? item.url : `/${item.slug.replace(/^\//, '')}/`;
+      const shortAnchor = item.title.split(':')[0].split('—')[0].replace(/^\s*|\s*$/g, '');
+      return `URL: ${liveUrl} | Topic: "${item.title}" | Example Anchor: [${shortAnchor.toLowerCase()}](${liveUrl})`;
     });
 
     console.log(`[SiteLinkCrawler] Discovered ${formatted.length} verified live internal links for article generation.`);
-    return formatted.slice(0, 10);
+    return formatted.slice(0, 8);
   }
 }

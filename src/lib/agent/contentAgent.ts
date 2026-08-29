@@ -193,7 +193,7 @@ MANDATORY MEMORY & INSTRUCTION COMPLIANCE:
 2. 🎯 INSTRUCTION COMPLIANCE:
    - Honor all deliverable specs (e.g. power words, number in title, keyword placement) from the Project Custom Instructions.
 
-Generate a focused, highly structured brief with 4 to 6 actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
+Generate a focused, highly structured brief with ${input.rules.word_count_max <= 1000 ? '3' : input.rules.word_count_max <= 1400 ? '3 to 4' : '4 to 6'} actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
       });
 
       return {
@@ -308,18 +308,21 @@ ${projectInstructions}
 ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
+- 🚫 ZERO META TAGS IN BODY: DO NOT output "Meta title:", "**Meta title:**", "Meta description:", or "**Meta description:**" anywhere in the article text. Start directly with the H1.
+- 👤 MANDATORY AUTHOR PERSONA (ALEX MERCER & SAAS FOCUS):
+  - Embody Alex Mercer writing 100% in first-person ("I", "my outbound campaigns", "in my work with SaaS growth teams").
+  - Target audience is exclusively SaaS founders, B2B growth leads, and sales teams. Provide real copy-pasteable SaaS email templates with variables like {{FirstName}}, {{Company}}, {{PainPoint}}.
 - 🧠 MANDATORY DEEP MEMORY UTILIZATION:
-  - You MUST actively draw upon and weave specific facts, author personas, domain knowledge, experiences, past lessons, and real positioning from the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY into the article.
-  - Author Persona: If an author persona is defined in memory (e.g. Alex Mercer, first-person voice, founder identity), write 100% in first-person as that author, referencing their experience, client work, campaigns, and perspective.
-  - Real Domain Grounding: If specific business context, audience pain points, tool benchmarks, or previous learnings are documented in memory, reference them directly in your frameworks, examples, and advice.
-  - Never write generic fluff or ignore the memory bank — it is the accumulated brain of this brand.
-- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, and forbidden topic constraints with 100% precision throughout every single section.
-- 🔗 MANDATORY INTERNAL LINKING REQUIREMENT (MINIMUM 3 INTERNAL LINKS):
-  - You MUST embed AT LEAST 3 internal links into the article body using standard markdown syntax: [anchor text](url).
-  - Natural Conversational Flow: Embed them seamlessly mid-sentence (e.g. "I've written more on how these pieces fit into a broader [outreach strategy](/outreach-strategy), which covers..." or "As I discussed in our [email deliverability guide](/email-deliverability)...").
+  - Actively weave specific facts, domain knowledge, experiences, past lessons, and real positioning from the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY into the article.
+- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, power words, and structure rules with 100% precision.
+- 🔗 MANDATORY INTERNAL LINKING REQUIREMENT (MINIMUM 3 REAL LIVE URLS):
+  - You MUST embed AT LEAST 3 internal links into the article body using standard markdown syntax: [anchor text](EXACT_URL).
+  - Use the exact live URLs provided in the candidate list below. Embed them seamlessly mid-sentence (e.g. "As I explained when analyzing [cold email examples](https://bizaigenius.com/cold-email-examples-that-get-replies/), keeping your ask low-friction is essential." or "Check our breakdown on [daily sending limits](https://bizaigenius.com/how-many-emails-per-day-per-domain/) before scaling outreach.").
   - Anchor text MUST be concise (2 to 4 words), natural, and relevant. Never use generic anchors like "click here", "read more", or raw URLs.
-  - Distribute the 3+ internal links evenly across different sections of the article.
-- Use the primary keyword naturally — do NOT force it into every paragraph unless specifically requested.
+- 📏 STRICT LENGTH TARGET (${rules.word_count_min}–${rules.word_count_max} WORDS TOTAL):
+  - The human explicitly requested a ${rules.word_count_min}–${rules.word_count_max} word article.
+  - You MUST stay strictly within this target. For each H2/H3 section, write ONLY 1 to 2 compact, actionable paragraphs (around 120–180 words per heading) so the TOTAL article word count stays under ${rules.word_count_max} words.
+  - Do NOT write bloated fluff, multiple repeated explanations, or long multi-page dissertations. Keep every sentence high-signal and punchy.
 - Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
 - DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
@@ -331,7 +334,7 @@ H1: ${brief.h1}
 PRIMARY KEYWORD: "${brief.primary_keyword}"
 SECONDARY KEYWORDS: ${brief.secondary_keywords.join(', ')}
 SEARCH INTENT: ${brief.search_intent}
-TARGET AUDIENCE: ${brief.target_audience}
+TARGET AUDIENCE: SaaS founders and growth teams
 CONTENT OBJECTIVE: ${brief.content_objective}
 
 HEADING STRUCTURE TO FOLLOW:
@@ -343,7 +346,7 @@ ${brief.questions_to_answer.map(q => `- ${q}`).join('\n')}
 IMAGE PLACEMENT MARKERS (include exactly as written):
 ${imageMarkers}
 
-INTERNAL LINKS (MANDATORY: YOU MUST WEAVE AT LEAST 3 OF THESE INTO THE ARTICLE BODY):
+REAL LIVE VERIFIED INTERNAL LINKS (YOU MUST EMBED AT LEAST 3 OF THESE EXACT URLS):
 ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
@@ -352,14 +355,23 @@ ${projectMemory ? `\n==================================================\n🧠 PR
 ${projectInstructions ? `\n==================================================\n📋 MANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
 
 Before writing the article, you MUST open a <reflection> block. Inside it:
-1. Explain how you will strictly embody the author persona and weave the specific domain facts, lessons, and experiences from the PROJECT MEMORY & KNOWLEDGE BANK into the article.
-2. Explain how you will strictly satisfy the deliverable requirements in the MANDATORY HUMAN CUSTOM INSTRUCTIONS.
-3. Explicitly list the EXACT 3+ internal links (with anchor text and target sections) you will embed mid-sentence in the article.
-After closing the </reflection> block, write the full article. Include the H1 at the top. Follow the heading structure. Place image markers where indicated. Make sure to provide deep, high-value analysis under each heading to satisfy the ${rules.word_count_min}–${rules.word_count_max} word target.`,
+1. Confirm that you are writing in first-person as Alex Mercer for SaaS teams.
+2. List the EXACT 3+ live URLs you will embed mid-sentence along with their short anchor text and target section.
+3. Confirm how you will stay strictly within ${rules.word_count_min}–${rules.word_count_max} words without bloating.
+After closing the </reflection> block, write the full article. Start directly with the H1 (# Title). DO NOT write Meta title or Meta description lines. Place image markers where indicated.`,
       });
 
       // Strip the reflection block to ensure clean markdown
-      const finalArticle = text.replace(/<reflection>[\s\S]*?<\/reflection>/i, '').trim();
+      let finalArticle = text.replace(/<reflection>[\s\S]*?<\/reflection>/i, '').trim();
+
+      // Clean all meta lines from the markdown article body so they NEVER appear in the preview or database
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Meta\s+(?:title|description|keywords|intent|slug)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?SEO\s+(?:title|description)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Target\s+(?:keyword|audience)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Primary\s+(?:keyword)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Secondary\s+(?:keywords)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      finalArticle = finalArticle.replace(/^\s+/, '');
+
       return finalArticle;
     } catch (err: any) {
       console.error('[ContentAgent] writeDraft error:', err);
@@ -456,17 +468,21 @@ After closing the </reflection> block, write the full article. Include the H1 at
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-');
 
-    const firstParagraph = content.split('\n').find(line =>
-      line.trim().length > 80 && !line.startsWith('#') && !line.startsWith('[')
-    ) || '';
+    const cleanBodyForMeta = content
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\*[^*]+\*/g, '')
+      .replace(/^#+\s+.+$/gm, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .trim();
 
-    const meta = firstParagraph.slice(0, 155).trim() + (firstParagraph.length > 155 ? '...' : '');
+    const firstParagraph = cleanBodyForMeta.split(/\n\s*\n/).find(p => p.trim().length > 50) || '';
+    const meta = firstParagraph.replace(/\s+/g, ' ').slice(0, 155).trim() + (firstParagraph.length > 155 ? '...' : '');
 
     return {
       seo_title: brief.working_title.length <= 60
         ? brief.working_title
-        : brief.working_title.slice(0, 57) + '...',
-      meta_description: meta || `Learn everything about ${brief.primary_keyword} — a practical guide for ${brief.target_audience}.`,
+        : `${brief.working_title.slice(0, 57)}...`,
+      meta_description: meta,
       url_slug: slug,
     };
   }
@@ -653,6 +669,14 @@ After closing the </reflection> block, write the full article. Include the H1 at
     content = content.replace(/!\[.*?prompt.*?\]\([^)]*\)/gi, '');
     content = content.replace(/\*\*Image prompt:?\*\*.*/gi, '');
     content = content.replace(/Image prompt:.*/gi, '');
+
+    // Clean all meta lines from the markdown article body so they NEVER appear in the preview or database
+    content = content.replace(/^(?:\*\*|\*)?Meta\s+(?:title|description|keywords|intent|slug)(?:\*\*|\*)?\s*:.*$/gmi, '');
+    content = content.replace(/^(?:\*\*|\*)?SEO\s+(?:title|description)(?:\*\*|\*)?\s*:.*$/gmi, '');
+    content = content.replace(/^(?:\*\*|\*)?Target\s+(?:keyword|audience)(?:\*\*|\*)?\s*:.*$/gmi, '');
+    content = content.replace(/^(?:\*\*|\*)?Primary\s+(?:keyword)(?:\*\*|\*)?\s*:.*$/gmi, '');
+    content = content.replace(/^(?:\*\*|\*)?Secondary\s+(?:keywords)(?:\*\*|\*)?\s*:.*$/gmi, '');
+    content = content.replace(/^\s+/, '');
 
     const { word_count, reading_time_minutes } = this.countWords(content);
     const seoMeta = this.generateSEOMetadata(brief, content);
