@@ -25,6 +25,9 @@ export async function GET(request: Request) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`;
     const redirectUri = `${siteUrl}/api/integrations/gsc/callback`;
 
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
     let accessToken = 'gsc_access_token_simulated';
     let refreshToken = 'gsc_refresh_token_simulated';
     let expiresIn = 3600;
