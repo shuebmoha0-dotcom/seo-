@@ -210,30 +210,15 @@ export default function IntegrationsPage() {
   const [analysisStarted, setAnalysisStarted] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
 
-  const initiateOAuth = async (provider: string) => {
+  const initiateOAuth = (provider: string) => {
     setOauthError(null);
     let authUrl = `/api/integrations/${provider}/auth`;
     if (provider === "google_search_console") authUrl = "/api/integrations/gsc/auth";
     else if (provider === "google_analytics") authUrl = "/api/integrations/ga4/auth";
     else if (provider === "github") authUrl = "/api/integrations/github/auth";
 
-    try {
-      const res = await fetch(authUrl);
-      if (res.redirected) {
-        window.location.href = res.url;
-        return;
-      }
-      const data = await res.json().catch(() => null);
-      if (data && data.configured === false) {
-        setOauthError(data.error);
-        return;
-      }
-      if (res.ok && res.url) {
-        window.location.href = res.url;
-      }
-    } catch (err: any) {
-      setOauthError(err.message || "Failed to initiate authorization.");
-    }
+    // Direct browser navigation for OAuth redirect (avoids browser fetch CORS blocks on Google OAuth)
+    window.location.href = authUrl;
   };
 
   // 1. Fetch live database integrations & check URL query params on mount
