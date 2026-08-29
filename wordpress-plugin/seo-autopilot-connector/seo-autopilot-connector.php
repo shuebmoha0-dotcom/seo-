@@ -3,7 +3,7 @@
  * Plugin Name:       SEO Autopilot Agent Connector
  * Plugin URI:        https://seautopilot.io
  * Description:       Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via outbound reverse-connection architecture without sharing passwords or requiring inbound access.
- * Version:           1.1.6
+ * Version:           1.1.7
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            SEO Autopilot Team
@@ -18,23 +18,51 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-define('SEO_AUTOPILOT_VERSION', '1.1.6');
+define('SEO_AUTOPILOT_VERSION', '1.1.7');
 define('SEO_AUTOPILOT_API_VERSION', 'v1');
 define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
-// Load Subsystems
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-updater.php';
-new SEO_Autopilot_Updater();
+/**
+ * Fail-safe, multi-platform include resolver (Self-Healing)
+ */
+function seo_autopilot_safe_require($relative_file) {
+    $dir = rtrim(SEO_AUTOPILOT_PLUGIN_DIR, '/\\') . '/';
+    $candidates = array(
+        $dir . 'includes/' . $relative_file,
+        $dir . 'includes\\' . $relative_file,
+        $dir . $relative_file,
+        dirname(__FILE__) . '/includes/' . $relative_file,
+        dirname(__FILE__) . '/' . $relative_file,
+    );
+
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate) && is_readable($candidate)) {
+            require_once $candidate;
+            return true;
+        }
+    }
+
+    error_log('[SEO Autopilot Connector] Error: Unable to locate include file ' . $relative_file);
+    add_action('admin_notices', function() use ($relative_file) {
+        echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Missing component file <code>' . esc_html($relative_file) . '</code>. Please reinstall the plugin zip.</p></div>';
+    });
+    return false;
+}
+
+// Load Subsystems Safely
+if (seo_autopilot_safe_require('class-seo-autopilot-updater.php') && class_exists('SEO_Autopilot_Updater')) {
+    new SEO_Autopilot_Updater();
+}
 
 // Require Core Subsystems
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-auth.php';
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-activity.php';
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-worker.php';
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-outbound.php';
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-rest.php';
-require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-admin.php';
+seo_autopilot_safe_require('class-seo-autopilot-auth.php');
+seo_autopilot_safe_require('class-seo-autopilot-activity.php');
+seo_autopilot_safe_require('class-seo-autopilot-worker.php');
+seo_autopilot_safe_require('class-seo-autopilot-outbound.php');
+seo_autopilot_safe_require('class-seo-autopilot-rest.php');
+seo_autopilot_safe_require('class-seo-autopilot-admin.php');
 
 /**
  * Main Plugin Class
