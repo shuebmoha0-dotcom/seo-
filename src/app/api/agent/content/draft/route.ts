@@ -317,7 +317,7 @@ export async function POST(request: Request) {
           const { data: websiteRules } = await supabase
             .from('content_rules')
             .select('custom_rules')
-            .eq('website_id', website_id)
+            .eq('website_id', targetWebsiteId)
             .maybeSingle();
 
           if (websiteRules?.custom_rules) {
@@ -327,7 +327,6 @@ export async function POST(request: Request) {
       } catch (memErr) {
         console.warn('[Content Draft] Memory load error:', memErr);
       }
-    }
 
     // Extract word count targets: prioritize user-selected rules from UI, then custom instructions, then standard 800-1200 default
     if (rules?.word_count_min && rules?.word_count_max) {
