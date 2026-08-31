@@ -18,68 +18,71 @@ export async function GET(request: Request) {
     let { data, error } = await query;
     if (error) throw error;
 
-    // Check if WordPress outbound site is active and ensure it reflects in integrations
-    const { data: outboundSite } = await supabase
+    // 2. Evaluate WordPress live connection based on real-time heartbeat liveness
+    let wpQuery = supabase
       .from('wordpress_outbound_sites')
       .select('*')
-      // Don't filter by active only, because our old buggy ping might have marked it action_required
-      .neq('status', 'disconnected')
+      .eq('status', 'active')
       .order('last_ping_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
 
-    if (outboundSite) {
-      const wpItem = (data || []).find((i: any) => i.provider === 'wordpress');
-      if (!wpItem) {
-        // Evaluate health based solely on heartbeat/ping timestamp (Outbound Architecture)
-        const lastPing = new Date(outboundSite.last_ping_at).getTime();
-        const now = Date.now();
-        const minutesSincePing = (now - lastPing) / (1000 * 60);
-        
-        let liveStatus = 'connected';
-        let liveMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`;
-        
-        // If it hasn't pinged in 30 minutes, it might be disabled
-        if (minutesSincePing > 30) {
-           liveStatus = 'action_required';
-           liveMessage = 'The WordPress plugin stopped responding. Please ensure it is active.';
-        } else if (outboundSite.status === 'action_required') {
-           // Auto-heal the database record if it was broken by the old Vercel ping logic
-           supabase.from('wordpress_outbound_sites')
-              .update({ status: 'active', updated_at: new Date().toISOString() })
-              .eq('id', outboundSite.id)
-              .then(() => {});
-        }
+    if (website_id) wpQuery = wpQuery.eq('website_id', website_id);
+    const { data: outboundSite } = await wpQuery.maybeSingle();
 
+    const now = Date.now();
+    let isWpLive = false;
+    let wpStatus = 'disconnected';
+    let wpMessage = 'Plugin disconnected or not active.';
 
-        data = [
-          ...(data || []),
-          {
-            id: outboundSite.id,
-            provider: 'wordpress',
-            display_name: 'WordPress',
-            status: liveStatus,
-            status_message: liveMessage,
-            config: {
-              site_url: outboundSite.site_url,
-              site_id: outboundSite.id,
-              connection_mode: 'outbound',
-              auth_method: 'agent_connector',
-              wp_version: outboundSite.wp_version,
-              plugin_version: outboundSite.plugin_version,
-            },
-            capabilities: ['READ_CONTENT', 'CREATE_DRAFT', 'UPDATE_CONTENT', 'PUBLISH_CONTENT', 'UPLOAD_MEDIA', 'UPDATE_METADATA', 'ADD_INTERNAL_LINK'],
-            last_tested_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
-            last_synced_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
-            last_success_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
-            error_code: null,
-            error_detail: null,
-            connected_at: outboundSite.created_at || new Date().toISOString(),
-            has_access_token: true,
-            scopes: ['site:read', 'content:read', 'content:write', 'media:read', 'media:write', 'seo:read'],
-          } as any
-        ];
+    if (outboundSite && outboundSite.last_ping_at) {
+      const minutesSincePing = (now - new Date(outboundSite.last_ping_at).getTime()) / (1000 * 60);
+      // WordPress must send an outbound heartbeat at least once every 5 minutes
+      if (minutesSincePing <= 5) {
+        isWpLive = true;
+        wpStatus = 'connected';
+        wpMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`;
+      } else {
+        wpStatus = 'disconnected';
+        wpMessage = `Plugin stopped responding (${Math.round(minutesSincePing)}m ago). Reconnect to resume.`;
       }
+    }
+
+    // Update or insert WordPress in returned integrations list
+    const wpIndex = (data || []).findIndex((i: any) => i.provider === 'wordpress');
+    if (wpIndex !== -1 && data) {
+      data[wpIndex].status = wpStatus;
+      data[wpIndex].status_message = wpMessage;
+      if (!isWpLive) {
+        data[wpIndex].has_access_token = false;
+      }
+    } else if (outboundSite) {
+      data = [
+        ...(data || []),
+        {
+          id: outboundSite.id,
+          provider: 'wordpress',
+          display_name: 'WordPress',
+          status: wpStatus,
+          status_message: wpMessage,
+          config: {
+            site_url: outboundSite.site_url,
+            site_id: outboundSite.id,
+            connection_mode: 'outbound',
+            auth_method: 'agent_connector',
+            wp_version: outboundSite.wp_version,
+            plugin_version: outboundSite.plugin_version,
+          },
+          capabilities: ['READ_CONTENT', 'CREATE_DRAFT', 'UPDATE_CONTENT', 'PUBLISH_CONTENT', 'UPLOAD_MEDIA', 'UPDATE_METADATA', 'ADD_INTERNAL_LINK'],
+          last_tested_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+          last_synced_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+          last_success_at: outboundSite.last_sync_at || outboundSite.last_ping_at,
+          error_code: null,
+          error_detail: null,
+          connected_at: outboundSite.created_at || new Date().toISOString(),
+          has_access_token: isWpLive,
+          scopes: ['site:read', 'content:read', 'content:write', 'media:read', 'media:write', 'seo:read'],
+        } as any
+      ];
     }
 
     return NextResponse.json({ integrations: data || [] });

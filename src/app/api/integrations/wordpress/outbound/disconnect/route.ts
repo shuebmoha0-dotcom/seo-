@@ -11,12 +11,27 @@ export async function POST(request: Request) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Explicitly update the status so the UI knows it's manually disconnected
-    await supabase.from('wordpress_outbound_sites')
+    const { data: site } = await supabase.from('wordpress_outbound_sites')
       .update({ 
-        status: 'disconnected', 
+        status: 'revoked', 
         updated_at: new Date().toISOString() 
       })
-      .eq('id', siteId);
+      .eq('id', siteId)
+      .select('website_id')
+      .maybeSingle();
+
+    if (site?.website_id) {
+      await supabase.from('integrations')
+        .update({
+          status: 'disconnected',
+          status_message: 'Disconnected by WordPress plugin.',
+          disconnected_at: new Date().toISOString(),
+          has_access_token: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('website_id', site.website_id)
+        .eq('provider', 'wordpress');
+    }
 
     return NextResponse.json({ success: true, message: 'Site disconnected' });
   } catch (error: any) {

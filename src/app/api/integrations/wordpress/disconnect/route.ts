@@ -26,11 +26,10 @@ export async function POST(request: Request) {
       }).eq('id', integration.id);
     }
       
-    if (integration_id || integration) {
-      await supabase.from('wordpress_outbound_sites')
-        .update({ status: 'deleted', updated_at: new Date().toISOString() })
-        .eq('id', integration_id || integration?.id);
-    }
+    // Mark outbound sites as revoked
+    await supabase.from('wordpress_outbound_sites')
+      .update({ status: 'revoked', updated_at: new Date().toISOString() })
+      .or(`website_id.eq.${website_id || integration?.website_id},id.eq.${integration_id || integration?.id}`);
 
     if (user && integration) {
       await supabase.from('audit_logs').insert({
