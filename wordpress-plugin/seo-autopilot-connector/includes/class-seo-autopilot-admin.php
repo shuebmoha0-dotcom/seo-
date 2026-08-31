@@ -24,6 +24,36 @@ class SEO_Autopilot_Admin {
         add_action('admin_menu', array($this, 'add_admin_menu'), 9);
         add_action('admin_init', array($this, 'handle_admin_actions'));
         add_filter('plugin_action_links', array($this, 'filter_plugin_action_links'), 10, 2);
+        add_action('admin_bar_menu', array($this, 'add_admin_bar_menu'), 100);
+        add_action('admin_notices', array($this, 'render_setup_notice'));
+    }
+
+    public function add_admin_bar_menu($wp_admin_bar) {
+        if (!current_user_can('manage_options')) return;
+        $wp_admin_bar->add_node(array(
+            'id'    => 'seo-autopilot-topbar',
+            'title' => '⚡ SEO Autopilot',
+            'href'  => admin_url('admin.php?page=seo-autopilot-connector'),
+            'meta'  => array('title' => 'SEO Autopilot Settings & Pairing'),
+        ));
+    }
+
+    public function render_setup_notice() {
+        $screen = get_current_screen();
+        if (!$screen || !current_user_can('manage_options')) return;
+        
+        // Only show if not on our own settings page
+        if ($screen->id === 'toplevel_page_seo-autopilot-connector' || $screen->id === 'settings_page_seo-autopilot-connector') {
+            return;
+        }
+
+        $is_paired = SEO_Autopilot_Outbound::is_paired();
+        if (!$is_paired) {
+            echo '<div class="notice notice-info is-dismissible" style="border-left-color: #4f46e5; padding: 12px 16px;">
+                <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>🚀 SEO Autopilot Agent Connector is active!</strong> Pair your site with the AI SaaS platform to start autonomous optimization.</p>
+                <p style="margin: 0;"><a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" class="button button-primary" style="background: #4f46e5; border-color: #4338ca;">Open SEO Autopilot Settings &rarr;</a></p>
+            </div>';
+        }
     }
 
     public function filter_plugin_action_links($links, $file) {

@@ -101,6 +101,10 @@ final class SEO_Autopilot_Connector {
 
     private function __construct() {
         $this->init_hooks();
+        // Initialize Admin UI immediately if class exists
+        if (class_exists('SEO_Autopilot_Admin')) {
+            SEO_Autopilot_Admin::instance();
+        }
     }
 
     private function init_hooks() {
