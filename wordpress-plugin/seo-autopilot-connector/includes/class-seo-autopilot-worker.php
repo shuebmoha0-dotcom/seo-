@@ -3,6 +3,22 @@ if (!defined('ABSPATH')) { exit; }
 
 class SEO_Autopilot_Worker {
 
+    public static function execute_job($job) {
+        try {
+            $result = self::process_job($job);
+            return array(
+                'status' => 'completed',
+                'result' => $result,
+            );
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Worker] Job execution failed: ' . $e->getMessage());
+            return array(
+                'status' => 'failed',
+                'error'  => $e->getMessage(),
+            );
+        }
+    }
+
     public static function process_job($job) {
         if (empty($job['job_type'])) {
             throw new Exception('Missing job_type');
@@ -10,35 +26,42 @@ class SEO_Autopilot_Worker {
 
         switch ($job['job_type']) {
             case 'create_post':
-                return self::op_create_post($job['payload']);
+                return self::op_create_post($job['payload'] ?? array());
             case 'update_post':
-                return self::op_update_post($job['payload']);
+                return self::op_update_post($job['payload'] ?? array());
             case 'upload_media':
-                return self::op_upload_media($job['payload']);
+                return self::op_upload_media($job['payload'] ?? array());
             case 'update_metadata':
-                return self::op_update_metadata($job['payload']);
+                return self::op_update_metadata($job['payload'] ?? array());
             case 'add_internal_link':
-                return self::op_add_internal_link($job['payload']);
+                return self::op_add_internal_link($job['payload'] ?? array());
             default:
                 throw new Exception("Unknown job_type: {$job['job_type']}");
         }
     }
 
     private static function save_seo_meta($post_id, $payload) {
+        if (!function_exists('is_plugin_active')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+
         $seo_title = sanitize_text_field($payload['seo_title'] ?? '');
         $meta_desc = sanitize_textarea_field($payload['meta_description'] ?? '');
 
-        if (is_plugin_active('wordpress-seo/wp-seo.php')) {
+        // Yoast SEO
+        if (defined('WPSEO_VERSION') || (function_exists('is_plugin_active') && is_plugin_active('wordpress-seo/wp-seo.php'))) {
             if ($seo_title) update_post_meta($post_id, '_yoast_wpseo_title', $seo_title);
             if ($meta_desc) update_post_meta($post_id, '_yoast_wpseo_metadesc', $meta_desc);
         }
 
-        if (is_plugin_active('seo-by-rank-math/rank-math.php')) {
+        // Rank Math
+        if (defined('RANK_MATH_VERSION') || class_exists('RankMath') || (function_exists('is_plugin_active') && is_plugin_active('seo-by-rank-math/rank-math.php'))) {
             if ($seo_title) update_post_meta($post_id, 'rank_math_title', $seo_title);
             if ($meta_desc) update_post_meta($post_id, 'rank_math_description', $meta_desc);
         }
 
-        if (is_plugin_active('all-in-one-seo-pack/all_in_one_seo_pack.php')) {
+        // All in One SEO
+        if (defined('AIOSEO_VERSION') || (function_exists('is_plugin_active') && is_plugin_active('all-in-one-seo-pack/all_in_one_seo_pack.php'))) {
             if ($seo_title) update_post_meta($post_id, '_aioseo_title', $seo_title);
             if ($meta_desc) update_post_meta($post_id, '_aioseo_description', $meta_desc);
         }

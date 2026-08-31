@@ -53,33 +53,37 @@ class SEO_Autopilot_Activity {
      * Log an activity event safely (never log raw secrets or tokens)
      */
     public static function log($event_type, $target_type, $user_id, $message, $http_status = 200) {
-        global $wpdb;
-        $table_name = $wpdb->prefix . self::TABLE_NAME;
+        try {
+            global $wpdb;
+            $table_name = $wpdb->prefix . self::TABLE_NAME;
 
-        $ip = sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? '');
-        $sanitized_message = wp_strip_all_tags($message);
+            $ip = sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? '');
+            $sanitized_message = wp_strip_all_tags($message);
 
-        // Sanitize out any accidental token appearances
-        $sanitized_message = preg_replace('/seo_live_[a-f0-9]{48}/i', 'seo_live_***', $sanitized_message);
-        $sanitized_message = preg_replace('/Bearer\s+[a-zA-Z0-9_\-\.]+/i', 'Bearer ***', $sanitized_message);
+            // Sanitize out any accidental token appearances
+            $sanitized_message = preg_replace('/seo_live_[a-f0-9]{48}/i', 'seo_live_***', $sanitized_message);
+            $sanitized_message = preg_replace('/Bearer\s+[a-zA-Z0-9_\-\.]+/i', 'Bearer ***', $sanitized_message);
 
-        $inserted = $wpdb->insert(
-            $table_name,
-            array(
-                'created_at'  => current_time('mysql', 1),
-                'event_type'  => sanitize_key($event_type),
-                'target_type' => sanitize_key($target_type),
-                'user_id'     => (int)$user_id,
-                'message'     => $sanitized_message,
-                'http_status' => (int)$http_status,
-                'ip_address'  => $ip,
-            ),
-            array('%s', '%s', '%s', '%d', '%s', '%d', '%s')
-        );
+            $inserted = $wpdb->insert(
+                $table_name,
+                array(
+                    'created_at'  => current_time('mysql', 1),
+                    'event_type'  => sanitize_key($event_type),
+                    'target_type' => sanitize_key($target_type),
+                    'user_id'     => (int)$user_id,
+                    'message'     => $sanitized_message,
+                    'http_status' => (int)$http_status,
+                    'ip_address'  => $ip,
+                ),
+                array('%s', '%s', '%s', '%d', '%s', '%d', '%s')
+            );
 
-        // Keep table size under 1,000 rows
-        if ($inserted && mt_rand(1, 50) === 1) {
-            $wpdb->query("DELETE FROM {$table_name} WHERE id NOT IN (SELECT id FROM (SELECT id FROM {$table_name} ORDER BY id DESC LIMIT 1000) foo)");
+            // Keep table capped under 500 rows to prevent DB bloat
+            if ($inserted && mt_rand(1, 100) === 1) {
+                $wpdb->query("DELETE FROM {$table_name} WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            }
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Activity] Log failed: ' . $e->getMessage());
         }
     }
 

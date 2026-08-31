@@ -24,6 +24,14 @@ define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
+// Guard minimum PHP version safely
+if (version_compare(PHP_VERSION, '7.4', '<')) {
+    add_action('admin_notices', function() {
+        echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Requires PHP 7.4 or higher. Your server is running PHP ' . esc_html(PHP_VERSION) . '.</p></div>';
+    });
+    return;
+}
+
 /**
  * Fail-safe, multi-platform include resolver (Self-Healing)
  */
@@ -39,21 +47,34 @@ function seo_autopilot_safe_require($relative_file) {
 
     foreach ($candidates as $candidate) {
         if (file_exists($candidate) && is_readable($candidate)) {
-            require_once $candidate;
-            return true;
+            try {
+                require_once $candidate;
+                return true;
+            } catch (\Throwable $e) {
+                error_log('[SEO Autopilot Connector] Exception loading ' . $relative_file . ': ' . $e->getMessage());
+                return false;
+            }
         }
     }
 
     error_log('[SEO Autopilot Connector] Error: Unable to locate include file ' . $relative_file);
-    add_action('admin_notices', function() use ($relative_file) {
-        echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Missing component file <code>' . esc_html($relative_file) . '</code>. Please reinstall the plugin zip.</p></div>';
-    });
+    if (is_admin()) {
+        add_action('admin_notices', function() use ($relative_file) {
+            echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Missing component file <code>' . esc_html($relative_file) . '</code>. Please reinstall the plugin.</p></div>';
+        });
+    }
     return false;
 }
 
 // Load Subsystems Safely
-if (seo_autopilot_safe_require('class-seo-autopilot-updater.php') && class_exists('SEO_Autopilot_Updater')) {
-    new SEO_Autopilot_Updater();
+if (is_admin() || wp_doing_cron()) {
+    if (seo_autopilot_safe_require('class-seo-autopilot-updater.php') && class_exists('SEO_Autopilot_Updater')) {
+        try {
+            new SEO_Autopilot_Updater();
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Connector] Updater init error: ' . $e->getMessage());
+        }
+    }
 }
 
 // Require Core Subsystems
@@ -62,7 +83,9 @@ seo_autopilot_safe_require('class-seo-autopilot-activity.php');
 seo_autopilot_safe_require('class-seo-autopilot-worker.php');
 seo_autopilot_safe_require('class-seo-autopilot-outbound.php');
 seo_autopilot_safe_require('class-seo-autopilot-rest.php');
-seo_autopilot_safe_require('class-seo-autopilot-admin.php');
+if (is_admin()) {
+    seo_autopilot_safe_require('class-seo-autopilot-admin.php');
+}
 
 /**
  * Main Plugin Class
@@ -90,36 +113,69 @@ final class SEO_Autopilot_Connector {
     }
 
     public function init_subsystems() {
-        SEO_Autopilot_Auth::instance();
-        SEO_Autopilot_Activity::instance();
-        SEO_Autopilot_Outbound::instance();
-        SEO_Autopilot_Outbound::init_subsystem();
-        SEO_Autopilot_REST::instance();
+        try {
+            if (class_exists('SEO_Autopilot_Auth')) {
+                SEO_Autopilot_Auth::instance();
+            }
+            if (class_exists('SEO_Autopilot_Activity')) {
+                SEO_Autopilot_Activity::instance();
+            }
+            if (class_exists('SEO_Autopilot_Outbound')) {
+                SEO_Autopilot_Outbound::instance();
+                SEO_Autopilot_Outbound::init_subsystem();
+            }
+            if (class_exists('SEO_Autopilot_REST')) {
+                SEO_Autopilot_REST::instance();
+            }
 
-        if (is_admin()) {
-            SEO_Autopilot_Admin::instance();
+            if (is_admin() && class_exists('SEO_Autopilot_Admin')) {
+                SEO_Autopilot_Admin::instance();
+            }
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Connector] Subsystem initialization exception: ' . $e->getMessage());
         }
     }
 
     public function activate() {
-        SEO_Autopilot_Auth::init_db();
-        SEO_Autopilot_Activity::init_db();
-        SEO_Autopilot_Outbound::init_subsystem();
-        if (SEO_Autopilot_Outbound::is_paired() && !wp_next_scheduled(SEO_Autopilot_Outbound::CRON_HOOK)) {
-            wp_schedule_event(time(), 'every_minute', SEO_Autopilot_Outbound::CRON_HOOK);
+        try {
+            if (class_exists('SEO_Autopilot_Auth')) {
+                SEO_Autopilot_Auth::init_db();
+            }
+            if (class_exists('SEO_Autopilot_Activity')) {
+                SEO_Autopilot_Activity::init_db();
+            }
+            if (class_exists('SEO_Autopilot_Outbound')) {
+                SEO_Autopilot_Outbound::init_subsystem();
+                if (SEO_Autopilot_Outbound::is_paired() && !wp_next_scheduled(SEO_Autopilot_Outbound::CRON_HOOK)) {
+                    wp_schedule_event(time(), 'every_minute', SEO_Autopilot_Outbound::CRON_HOOK);
+                }
+            }
+            flush_rewrite_rules();
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Connector] Activation error: ' . $e->getMessage());
         }
-        flush_rewrite_rules();
     }
 
     public function deactivate() {
-        SEO_Autopilot_Outbound::notify_disconnect();
-        wp_clear_scheduled_hook(SEO_Autopilot_Outbound::CRON_HOOK);
-        flush_rewrite_rules();
+        try {
+            if (class_exists('SEO_Autopilot_Outbound')) {
+                SEO_Autopilot_Outbound::notify_disconnect();
+                wp_clear_scheduled_hook(SEO_Autopilot_Outbound::CRON_HOOK);
+            }
+            flush_rewrite_rules();
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Connector] Deactivation error: ' . $e->getMessage());
+        }
     }
 }
 
-// Initialize Plugin
+// Initialize Plugin Safely
 function seo_autopilot_connector() {
-    return SEO_Autopilot_Connector::instance();
+    try {
+        return SEO_Autopilot_Connector::instance();
+    } catch (\Throwable $e) {
+        error_log('[SEO Autopilot Connector] Init error: ' . $e->getMessage());
+        return null;
+    }
 }
 seo_autopilot_connector();

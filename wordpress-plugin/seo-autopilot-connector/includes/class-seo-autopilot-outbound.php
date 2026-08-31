@@ -58,7 +58,7 @@ class SEO_Autopilot_Outbound {
     }
 
     public function ensure_cron_scheduled() {
-        if (!wp_next_scheduled(self::CRON_HOOK) && self::is_paired()) {
+        if ((is_admin() || wp_doing_cron()) && !wp_next_scheduled(self::CRON_HOOK) && self::is_paired()) {
             wp_schedule_event(time(), 'every_minute', self::CRON_HOOK);
         }
     }
@@ -179,119 +179,157 @@ class SEO_Autopilot_Outbound {
             return false;
         }
 
-        $site_id  = get_option(self::OPTION_SITE_ID);
-        $secret   = get_option(self::OPTION_SECRET_KEY);
-        $saas_url = self::get_saas_url();
+        // 1. Prevent concurrent polling runs (30-second lock)
+        $lock = get_transient('seo_ap_poll_lock');
+        if ($lock) {
+            return false;
+        }
+        set_transient('seo_ap_poll_lock', 1, 30);
 
-        $telemetry = self::get_telemetry_data();
-        $payload_data = array(
-            'telemetry' => $telemetry,
-        );
-        $body_json = wp_json_encode($payload_data);
-
-        // Compute HMAC Signature with timestamp and nonce
-        $timestamp = (string)time();
-        $nonce     = wp_generate_password(16, false);
-        $signature = hash_hmac('sha256', $timestamp . '.' . $nonce . '.' . $body_json, $secret);
-
-        $endpoint = $saas_url . '/api/integrations/wordpress/outbound/poll';
-
-        $response = wp_remote_post($endpoint, array(
-            'headers'     => array(
-                'Content-Type'                 => 'application/json',
-                'Accept'                       => 'application/json',
-                'X-SEO-Autopilot-Site-ID'      => $site_id,
-                'X-SEO-Autopilot-Timestamp'    => $timestamp,
-                'X-SEO-Autopilot-Nonce'        => $nonce,
-                'X-SEO-Autopilot-Signature'    => $signature,
-            ),
-            'body'        => $body_json,
-            'timeout'     => 12,
-            'sslverify'   => true,
-            'data_format' => 'body',
-        ));
-
-        if (is_wp_error($response)) {
-            update_option(self::OPTION_LAST_ERROR, $response->get_error_message());
+        // 2. Respect failure backoff (don't hammer server if unreachable)
+        $backoff = get_transient('seo_ap_poll_backoff');
+        if ($backoff) {
+            delete_transient('seo_ap_poll_lock');
             return false;
         }
 
-        $code = wp_remote_retrieve_response_code($response);
-        $body = json_decode(wp_remote_retrieve_body($response), true);
+        try {
+            $site_id  = get_option(self::OPTION_SITE_ID);
+            $secret   = get_option(self::OPTION_SECRET_KEY);
+            $saas_url = self::get_saas_url();
 
-        if ($code >= 400 || empty($body['success'])) {
-            update_option(self::OPTION_LAST_ERROR, $body['error'] ?? ('HTTP ' . $code));
-            return false;
-        }
+            $telemetry = self::get_telemetry_data();
+            $payload_data = array(
+                'telemetry' => $telemetry,
+            );
+            $body_json = wp_json_encode($payload_data);
 
-        update_option(self::OPTION_LAST_SYNC, current_time('mysql', 1));
-        delete_option(self::OPTION_LAST_ERROR);
+            // Compute HMAC Signature with timestamp and nonce
+            $timestamp = (string)time();
+            $nonce     = wp_generate_password(16, false);
+            $signature = hash_hmac('sha256', $timestamp . '.' . $nonce . '.' . $body_json, $secret);
 
-        // If no pending job, return early
-        if (empty($body['has_job']) || empty($body['job'])) {
+            $endpoint = $saas_url . '/api/integrations/wordpress/outbound/poll';
+
+            $response = wp_remote_post($endpoint, array(
+                'headers'     => array(
+                    'Content-Type'                 => 'application/json',
+                    'Accept'                       => 'application/json',
+                    'X-SEO-Autopilot-Site-ID'      => $site_id,
+                    'X-SEO-Autopilot-Timestamp'    => $timestamp,
+                    'X-SEO-Autopilot-Nonce'        => $nonce,
+                    'X-SEO-Autopilot-Signature'    => $signature,
+                ),
+                'body'        => $body_json,
+                'timeout'     => 8,
+                'sslverify'   => true,
+                'data_format' => 'body',
+            ));
+
+            if (is_wp_error($response)) {
+                $err = $response->get_error_message();
+                update_option(self::OPTION_LAST_ERROR, $err);
+                // Backoff for 60 seconds on network failure
+                set_transient('seo_ap_poll_backoff', 1, 60);
+                delete_transient('seo_ap_poll_lock');
+                return false;
+            }
+
+            $code = wp_remote_retrieve_response_code($response);
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+
+            if ($code >= 400 || empty($body['success'])) {
+                $err = $body['error'] ?? ('HTTP ' . $code);
+                update_option(self::OPTION_LAST_ERROR, $err);
+                set_transient('seo_ap_poll_backoff', 1, 60);
+                delete_transient('seo_ap_poll_lock');
+                return false;
+            }
+
+            update_option(self::OPTION_LAST_SYNC, current_time('mysql', 1));
+            delete_option(self::OPTION_LAST_ERROR);
+            delete_transient('seo_ap_poll_backoff');
+
+            // If no pending job, return early
+            if (empty($body['has_job']) || empty($body['job'])) {
+                delete_transient('seo_ap_poll_lock');
+                return true;
+            }
+
+            // Execute Job via Worker with safe error isolation
+            $job = $body['job'];
+            if (class_exists('SEO_Autopilot_Worker')) {
+                $execution_result = SEO_Autopilot_Worker::execute_job($job);
+
+                // Report result back to SaaS
+                self::report_job_result(
+                    $job['id'],
+                    $execution_result['status'],
+                    $execution_result['result'] ?? null,
+                    $execution_result['error'] ?? null
+                );
+            }
+
+            delete_transient('seo_ap_poll_lock');
             return true;
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Outbound] Poll exception: ' . $e->getMessage());
+            update_option(self::OPTION_LAST_ERROR, $e->getMessage());
+            set_transient('seo_ap_poll_backoff', 1, 60);
+            delete_transient('seo_ap_poll_lock');
+            return false;
         }
-
-        // Execute Job via Worker
-        $job = $body['job'];
-        require_once SEO_AUTOPILOT_PLUGIN_DIR . 'includes/class-seo-autopilot-worker.php';
-        $execution_result = SEO_Autopilot_Worker::execute_job($job);
-
-        // Report result back to SaaS
-        self::report_job_result(
-            $job['id'],
-            $execution_result['status'],
-            $execution_result['result'] ?? null,
-            $execution_result['error'] ?? null
-        );
-
-        return true;
     }
 
     /**
      * Report execution result or failure back to SaaS
      */
     public static function report_job_result($job_id, $status, $result = null, $error = null) {
-        $site_id  = get_option(self::OPTION_SITE_ID);
-        $secret   = get_option(self::OPTION_SECRET_KEY);
-        $saas_url = self::get_saas_url();
+        try {
+            $site_id  = get_option(self::OPTION_SITE_ID);
+            $secret   = get_option(self::OPTION_SECRET_KEY);
+            $saas_url = self::get_saas_url();
 
-        $payload_data = array(
-            'job_id' => $job_id,
-            'status' => $status,
-            'result' => $result,
-            'error'  => $error,
-        );
-        $body_json = wp_json_encode($payload_data);
+            $payload_data = array(
+                'job_id' => $job_id,
+                'status' => $status,
+                'result' => $result,
+                'error'  => $error,
+            );
+            $body_json = wp_json_encode($payload_data);
 
-        $timestamp = (string)time();
-        $nonce     = wp_generate_password(16, false);
-        $signature = hash_hmac('sha256', $timestamp . '.' . $nonce . '.' . $body_json, $secret);
+            $timestamp = (string)time();
+            $nonce     = wp_generate_password(16, false);
+            $signature = hash_hmac('sha256', $timestamp . '.' . $nonce . '.' . $body_json, $secret);
 
-        $endpoint = $saas_url . '/api/integrations/wordpress/outbound/report';
+            $endpoint = $saas_url . '/api/integrations/wordpress/outbound/report';
 
-        $response = wp_remote_post($endpoint, array(
-            'headers'     => array(
-                'Content-Type'                 => 'application/json',
-                'Accept'                       => 'application/json',
-                'X-SEO-Autopilot-Site-ID'      => $site_id,
-                'X-SEO-Autopilot-Timestamp'    => $timestamp,
-                'X-SEO-Autopilot-Nonce'        => $nonce,
-                'X-SEO-Autopilot-Signature'    => $signature,
-            ),
-            'body'        => $body_json,
-            'timeout'     => 15,
-            'sslverify'   => true,
-            'data_format' => 'body',
-        ));
+            $response = wp_remote_post($endpoint, array(
+                'headers'     => array(
+                    'Content-Type'                 => 'application/json',
+                    'Accept'                       => 'application/json',
+                    'X-SEO-Autopilot-Site-ID'      => $site_id,
+                    'X-SEO-Autopilot-Timestamp'    => $timestamp,
+                    'X-SEO-Autopilot-Nonce'        => $nonce,
+                    'X-SEO-Autopilot-Signature'    => $signature,
+                ),
+                'body'        => $body_json,
+                'timeout'     => 10,
+                'sslverify'   => true,
+                'data_format' => 'body',
+            ));
 
-        if (is_wp_error($response)) {
-            SEO_Autopilot_Activity::log('outbound.report_failed', 'job', 0, "Failed to report job #{$job_id}: " . $response->get_error_message(), 500);
+            if (is_wp_error($response)) {
+                SEO_Autopilot_Activity::log('outbound.report_failed', 'job', 0, "Failed to report job #{$job_id}: " . $response->get_error_message(), 500);
+                return false;
+            }
+
+            SEO_Autopilot_Activity::log('outbound.job_completed', 'job', 0, "Reported job #{$job_id} ({$status}) to SaaS");
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Outbound] Report error: ' . $e->getMessage());
             return false;
         }
-
-        SEO_Autopilot_Activity::log('outbound.job_completed', 'job', 0, "Reported job #{$job_id} ({$status}) to SaaS");
-        return true;
     }
 
     public function handle_cron_poll() {

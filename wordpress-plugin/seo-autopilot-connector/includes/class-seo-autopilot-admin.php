@@ -42,48 +42,54 @@ class SEO_Autopilot_Admin {
 
         check_admin_referer('seo_ap_admin_nonce', 'seo_ap_nonce');
 
-        $action = sanitize_key($_POST['seo_ap_action']);
+        try {
+            $action = sanitize_key($_POST['seo_ap_action']);
 
-        if ($action === 'pair_saas') {
-            $saas_url = esc_url_raw($_POST['seo_ap_saas_url'] ?? SEO_Autopilot_Outbound::DEFAULT_SAAS_URL);
-            $user_id  = (int)($_POST['seo_ap_user_id'] ?? get_current_user_id());
+            if ($action === 'pair_saas') {
+                $saas_url = esc_url_raw($_POST['seo_ap_saas_url'] ?? SEO_Autopilot_Outbound::DEFAULT_SAAS_URL);
+                $user_id  = (int)($_POST['seo_ap_user_id'] ?? get_current_user_id());
 
-            $result = SEO_Autopilot_Outbound::pair_with_saas($saas_url, $user_id);
-            if (is_wp_error($result)) {
-                wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'error' => urlencode($result->get_error_message())), admin_url('options-general.php')));
+                $result = SEO_Autopilot_Outbound::pair_with_saas($saas_url, $user_id);
+                if (is_wp_error($result)) {
+                    wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'error' => urlencode($result->get_error_message())), admin_url('options-general.php')));
+                    exit;
+                }
+
+                wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'paired'), admin_url('options-general.php')));
                 exit;
             }
 
-            wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'paired'), admin_url('options-general.php')));
-            exit;
-        }
+            if ($action === 'sync_jobs') {
+                SEO_Autopilot_Outbound::poll_and_execute_jobs();
+                wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'synced'), admin_url('options-general.php')));
+                exit;
+            }
 
-        if ($action === 'sync_jobs') {
-            SEO_Autopilot_Outbound::poll_and_execute_jobs();
-            wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'synced'), admin_url('options-general.php')));
-            exit;
-        }
+            if ($action === 'generate' || $action === 'rotate') {
+                $user_id  = (int)($_POST['seo_ap_user_id'] ?? get_current_user_id());
+                $saas_url = esc_url_raw($_POST['seo_ap_saas_url'] ?? SEO_Autopilot_Outbound::get_saas_url());
+                
+                $creds = SEO_Autopilot_Auth::generate_api_key($user_id);
+                update_option(SEO_Autopilot_Outbound::OPTION_SECRET_KEY, $creds['raw_key']);
+                SEO_Autopilot_Outbound::pair_with_saas($saas_url, $user_id);
 
-        if ($action === 'generate' || $action === 'rotate') {
-            $user_id  = (int)($_POST['seo_ap_user_id'] ?? get_current_user_id());
-            $saas_url = esc_url_raw($_POST['seo_ap_saas_url'] ?? SEO_Autopilot_Outbound::get_saas_url());
-            
-            $creds = SEO_Autopilot_Auth::generate_api_key($user_id);
-            update_option(SEO_Autopilot_Outbound::OPTION_SECRET_KEY, $creds['raw_key']);
-            SEO_Autopilot_Outbound::pair_with_saas($saas_url, $user_id);
+                set_transient('seo_ap_fresh_key_' . get_current_user_id(), $creds['raw_key'], 300);
+                wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'rotated'), admin_url('options-general.php')));
+                exit;
+            }
 
-            set_transient('seo_ap_fresh_key_' . get_current_user_id(), $creds['raw_key'], 300);
-            wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'rotated'), admin_url('options-general.php')));
-            exit;
-        }
-
-        if ($action === 'revoke') {
-            SEO_Autopilot_Outbound::notify_disconnect();
-            SEO_Autopilot_Auth::revoke_api_key();
-            delete_option(SEO_Autopilot_Outbound::OPTION_SITE_ID);
-            delete_option(SEO_Autopilot_Outbound::OPTION_SECRET_KEY);
-            delete_option(SEO_Autopilot_Outbound::OPTION_LAST_SYNC);
-            wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'revoked'), admin_url('options-general.php')));
+            if ($action === 'revoke') {
+                SEO_Autopilot_Outbound::notify_disconnect();
+                SEO_Autopilot_Auth::revoke_api_key();
+                delete_option(SEO_Autopilot_Outbound::OPTION_SITE_ID);
+                delete_option(SEO_Autopilot_Outbound::OPTION_SECRET_KEY);
+                delete_option(SEO_Autopilot_Outbound::OPTION_LAST_SYNC);
+                wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'msg' => 'revoked'), admin_url('options-general.php')));
+                exit;
+            }
+        } catch (\Throwable $e) {
+            error_log('[SEO Autopilot Admin] Action error: ' . $e->getMessage());
+            wp_safe_redirect(add_query_arg(array('page' => 'seo-autopilot-connector', 'error' => urlencode($e->getMessage())), admin_url('options-general.php')));
             exit;
         }
     }
@@ -93,11 +99,12 @@ class SEO_Autopilot_Admin {
             return;
         }
 
-        $is_paired   = SEO_Autopilot_Outbound::is_paired();
-        $site_id     = get_option(SEO_Autopilot_Outbound::OPTION_SITE_ID, '');
-        $saas_url    = SEO_Autopilot_Outbound::get_saas_url();
-        $last_sync   = get_option(SEO_Autopilot_Outbound::OPTION_LAST_SYNC, '');
-        $last_error  = get_option(SEO_Autopilot_Outbound::OPTION_LAST_ERROR, '');
+        try {
+            $is_paired   = SEO_Autopilot_Outbound::is_paired();
+            $site_id     = get_option(SEO_Autopilot_Outbound::OPTION_SITE_ID, '');
+            $saas_url    = SEO_Autopilot_Outbound::get_saas_url();
+            $last_sync   = get_option(SEO_Autopilot_Outbound::OPTION_LAST_SYNC, '');
+            $last_error  = get_option(SEO_Autopilot_Outbound::OPTION_LAST_ERROR, '');
         $info        = SEO_Autopilot_Auth::get_connection_info();
         $fresh_key   = get_transient('seo_ap_fresh_key_' . get_current_user_id());
         if ($fresh_key) {
@@ -275,9 +282,12 @@ class SEO_Autopilot_Admin {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
-                <?php endif; ?>
             </div>
         </div>
         <?php
+        } catch (\Throwable $e) {
+            echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> An error occurred while rendering the settings page: ' . esc_html($e->getMessage()) . '</p></div>';
+        }
     }
 }
+
