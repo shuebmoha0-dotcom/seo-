@@ -23,9 +23,31 @@ class SEO_Autopilot_Admin {
     private function __construct() {
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_init', array($this, 'handle_admin_actions'));
+        
+        $basename = defined('SEO_AUTOPILOT_PLUGIN_BASENAME') ? SEO_AUTOPILOT_PLUGIN_BASENAME : 'seo-autopilot-connector/seo-autopilot-connector.php';
+        add_filter('plugin_action_links_' . $basename, array($this, 'add_action_links'));
+        add_filter('plugin_action_links_seo-autopilot-connector/seo-autopilot-connector.php', array($this, 'add_action_links'));
+    }
+
+    public function add_action_links($links) {
+        $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings & Pairing', 'seo-autopilot-connector') . '</a>';
+        array_unshift($links, $settings_link);
+        return $links;
     }
 
     public function add_admin_menu() {
+        // 1. Top-Level Main WordPress Sidebar Menu (Prominent & Unmissable)
+        add_menu_page(
+            'SEO Autopilot Agent Connector',
+            'SEO Autopilot',
+            'manage_options',
+            'seo-autopilot-connector',
+            array($this, 'render_admin_page'),
+            'dashicons-chart-line',
+            58
+        );
+
+        // 2. Also register under Settings -> SEO Autopilot as submenu
         add_options_page(
             'SEO Autopilot Agent Connector',
             'SEO Autopilot',

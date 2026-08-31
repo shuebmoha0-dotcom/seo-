@@ -8,7 +8,7 @@ export async function GET() {
   return NextResponse.json({
     name: 'SEO Autopilot Agent Connector',
     slug: 'seo-autopilot-connector',
-    version: '1.1.7',
+    version: '1.1.8',
     download_url: siteUrl + '/api/integrations/wordpress/plugin',
     requires: '5.8',
     tested: '6.4',
@@ -18,7 +18,7 @@ export async function GET() {
     last_updated: new Date().toISOString(),
     sections: {
       description: 'Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization and publishing.',
-      changelog: '<h4>1.1.7</h4><ul><li>Fix Linux/Unix zip path extraction compatibility and add fail-safe self-healing component loader.</li></ul><h4>1.1.6</h4><ul><li>Added instant disconnect notification hook.</li></ul><h4>1.1.5</h4><ul><li>Fix Gutenberg block recovery error caused by inline image styles.</li></ul><h4>1.1.4</h4><ul><li>Fix base64 memory limit exception for very large AI images.</li></ul>'
+      changelog: '<h4>1.1.8</h4><ul><li>Added top-level WordPress sidebar menu and direct Settings action link on Plugins page for instant 1-click access.</li></ul><h4>1.1.7</h4><ul><li>Fix Linux/Unix zip path extraction compatibility and add fail-safe self-healing component loader.</li></ul>'
     }
   });
 }
