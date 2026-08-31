@@ -21,17 +21,16 @@ class SEO_Autopilot_Admin {
     }
 
     private function __construct() {
-        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_menu', array($this, 'add_admin_menu'), 9);
         add_action('admin_init', array($this, 'handle_admin_actions'));
-        
-        $basename = defined('SEO_AUTOPILOT_PLUGIN_BASENAME') ? SEO_AUTOPILOT_PLUGIN_BASENAME : 'seo-autopilot-connector/seo-autopilot-connector.php';
-        add_filter('plugin_action_links_' . $basename, array($this, 'add_action_links'));
-        add_filter('plugin_action_links_seo-autopilot-connector/seo-autopilot-connector.php', array($this, 'add_action_links'));
+        add_filter('plugin_action_links', array($this, 'filter_plugin_action_links'), 10, 2);
     }
 
-    public function add_action_links($links) {
-        $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings & Pairing', 'seo-autopilot-connector') . '</a>';
-        array_unshift($links, $settings_link);
+    public function filter_plugin_action_links($links, $file) {
+        if (strpos($file, 'seo-autopilot-connector') !== false) {
+            $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings & Pairing', 'seo-autopilot-connector') . '</a>';
+            array_unshift($links, $settings_link);
+        }
         return $links;
     }
 
@@ -44,7 +43,7 @@ class SEO_Autopilot_Admin {
             'seo-autopilot-connector',
             array($this, 'render_admin_page'),
             'dashicons-chart-line',
-            58
+            30
         );
 
         // 2. Also register under Settings -> SEO Autopilot as submenu

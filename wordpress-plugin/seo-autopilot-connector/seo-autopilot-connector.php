@@ -83,9 +83,7 @@ seo_autopilot_safe_require('class-seo-autopilot-activity.php');
 seo_autopilot_safe_require('class-seo-autopilot-worker.php');
 seo_autopilot_safe_require('class-seo-autopilot-outbound.php');
 seo_autopilot_safe_require('class-seo-autopilot-rest.php');
-if (is_admin()) {
-    seo_autopilot_safe_require('class-seo-autopilot-admin.php');
-}
+seo_autopilot_safe_require('class-seo-autopilot-admin.php');
 
 /**
  * Main Plugin Class
@@ -127,8 +125,7 @@ final class SEO_Autopilot_Connector {
             if (class_exists('SEO_Autopilot_REST')) {
                 SEO_Autopilot_REST::instance();
             }
-
-            if (is_admin() && class_exists('SEO_Autopilot_Admin')) {
+            if (class_exists('SEO_Autopilot_Admin')) {
                 SEO_Autopilot_Admin::instance();
             }
         } catch (\Throwable $e) {
