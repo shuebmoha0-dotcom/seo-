@@ -180,30 +180,8 @@ seo_autopilot_connector();
  * Direct Global Admin Hooks (Guaranteed to fire on any WordPress installation)
  */
 if (is_admin()) {
-    // 1. Direct Admin Menu Registration
+    // 1. Direct Admin Menu Registration under Settings -> SEO Autopilot
     add_action('admin_menu', function() {
-        // Top Level Sidebar Menu
-        add_menu_page(
-            'SEO Autopilot Agent Connector',
-            'SEO Autopilot',
-            'manage_options',
-            'seo-autopilot-connector',
-            'seo_autopilot_direct_render_page',
-            'dashicons-chart-line',
-            30
-        );
-
-        // Submenu under SEO Autopilot
-        add_submenu_page(
-            'seo-autopilot-connector',
-            'SEO Autopilot Settings',
-            'Settings & Pairing',
-            'manage_options',
-            'seo-autopilot-connector',
-            'seo_autopilot_direct_render_page'
-        );
-
-        // Submenu under Settings (options-general.php)
         add_options_page(
             'SEO Autopilot Agent Connector',
             'SEO Autopilot',
@@ -215,13 +193,13 @@ if (is_admin()) {
 
     // 2. Direct Plugin Action Links on Plugins Page
     add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
-        $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings & Pairing', 'seo-autopilot-connector') . '</a>';
+        $settings_link = '<a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings', 'seo-autopilot-connector') . '</a>';
         array_unshift($links, $settings_link);
         return $links;
     });
     add_filter('plugin_action_links', function($links, $file) {
         if (strpos($file, 'seo-autopilot-connector') !== false) {
-            $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings & Pairing', 'seo-autopilot-connector') . '</a>';
+            $settings_link = '<a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings', 'seo-autopilot-connector') . '</a>';
             array_unshift($links, $settings_link);
         }
         return $links;
@@ -233,7 +211,7 @@ if (is_admin()) {
         $wp_admin_bar->add_node(array(
             'id'    => 'seo-autopilot-topbar',
             'title' => '⚡ SEO Autopilot',
-            'href'  => admin_url('admin.php?page=seo-autopilot-connector'),
+            'href'  => admin_url('options-general.php?page=seo-autopilot-connector'),
             'meta'  => array('title' => 'SEO Autopilot Settings & Pairing'),
         ));
     }, 100);
@@ -248,7 +226,7 @@ if (is_admin()) {
         if (!$is_paired) {
             echo '<div class="notice notice-info is-dismissible" style="border-left: 4px solid #4f46e5; padding: 12px 16px; margin: 15px 0;">
                 <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>🚀 SEO Autopilot Connector is active!</strong> Pair your site to start autonomous optimization.</p>
-                <p style="margin: 0;"><a href="' . esc_url(admin_url('admin.php?page=seo-autopilot-connector')) . '" class="button button-primary" style="background: #4f46e5; border-color: #4338ca; font-weight: 600;">Open SEO Autopilot Settings &rarr;</a></p>
+                <p style="margin: 0;"><a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" class="button button-primary" style="background: #4f46e5; border-color: #4338ca; font-weight: 600;">Open SEO Autopilot Settings &rarr;</a></p>
             </div>';
         }
     });
