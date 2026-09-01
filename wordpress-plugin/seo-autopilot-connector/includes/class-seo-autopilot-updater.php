@@ -14,22 +14,23 @@ class SEO_Autopilot_Updater {
     }
     
     public function check_for_updates($transient) {
-        if (empty($transient) || !is_object($transient) || empty($transient->checked)) {
+        if (empty($transient) || !is_object($transient)) {
             return $transient;
         }
         
         try {
-            // Check transient cache first to avoid slow HTTP calls
-            $body = get_transient(self::TRANSIENT_KEY);
+            // Check transient cache, but bypass if force-checking updates
+            $is_force = isset($_GET['force-check']) || (isset($_GET['action']) && $_GET['action'] === 'check-updates');
+            $body = $is_force ? false : get_transient(self::TRANSIENT_KEY);
+
             if (false === $body) {
                 $response = wp_remote_get($this->version_url, array(
-                    'timeout'   => 3,
+                    'timeout'   => 4,
                     'sslverify' => true,
                 ));
 
                 if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-                    // Cache failure for 1 hour to prevent hammering
-                    set_transient(self::TRANSIENT_KEY, array('version' => SEO_AUTOPILOT_VERSION), 3600);
+                    set_transient(self::TRANSIENT_KEY, array('version' => SEO_AUTOPILOT_VERSION), 300);
                     return $transient;
                 }
                 
@@ -38,8 +39,8 @@ class SEO_Autopilot_Updater {
                     return $transient;
                 }
 
-                // Cache valid response for 12 hours
-                set_transient(self::TRANSIENT_KEY, $body, 12 * HOUR_IN_SECONDS);
+                // Cache valid response for 2 hours
+                set_transient(self::TRANSIENT_KEY, $body, 2 * HOUR_IN_SECONDS);
             }
             
             if (empty($body['version'])) {
@@ -48,9 +49,11 @@ class SEO_Autopilot_Updater {
             
             $remote_version = $body['version'];
             if (version_compare(SEO_AUTOPILOT_VERSION, $remote_version, '<')) {
+                $plugin_file = defined('SEO_AUTOPILOT_PLUGIN_BASENAME') ? SEO_AUTOPILOT_PLUGIN_BASENAME : 'seo-autopilot-connector/seo-autopilot-connector.php';
+                
                 $obj = new stdClass();
                 $obj->slug = 'seo-autopilot-connector';
-                $obj->plugin = 'seo-autopilot-connector/seo-autopilot-connector.php';
+                $obj->plugin = $plugin_file;
                 $obj->new_version = $remote_version;
                 $obj->url = $body['author_profile'] ?? 'https://seautopilot.io';
                 $obj->package = $body['download_url'] ?? '';
@@ -58,6 +61,10 @@ class SEO_Autopilot_Updater {
                     '1x' => 'https://ps.w.org/seo-autopilot/assets/icon-128x128.png',
                 );
                 
+                if (!isset($transient->response)) {
+                    $transient->response = array();
+                }
+                $transient->response[$plugin_file] = $obj;
                 $transient->response['seo-autopilot-connector/seo-autopilot-connector.php'] = $obj;
             }
         } catch (\Throwable $e) {

@@ -65,7 +65,7 @@ class SEO_Autopilot_Admin {
     }
 
     public function add_admin_menu() {
-        // 1. Top-Level Main WordPress Sidebar Menu (Prominent & Unmissable)
+        // 1. Dedicated Top-Level Main WordPress Sidebar Menu
         add_menu_page(
             'SEO Autopilot Agent Connector',
             'SEO Autopilot',
@@ -76,12 +76,22 @@ class SEO_Autopilot_Admin {
             30
         );
 
-        // 2. Also register under Settings -> SEO Autopilot as submenu
+        // Submenu under top-level menu
+        add_submenu_page(
+            'seo-autopilot-connector',
+            'SEO Autopilot Settings',
+            'Settings & Pairing',
+            'manage_options',
+            'seo-autopilot-connector',
+            array($this, 'render_admin_page')
+        );
+
+        // 2. Dedicated Submenu under Settings (options-general.php) with unique slug
         add_options_page(
             'SEO Autopilot Agent Connector',
             'SEO Autopilot',
             'manage_options',
-            'seo-autopilot-connector',
+            'seo-autopilot-settings',
             array($this, 'render_admin_page')
         );
     }
