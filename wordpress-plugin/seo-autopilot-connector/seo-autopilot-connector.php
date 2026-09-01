@@ -36,54 +36,49 @@ if (version_compare(PHP_VERSION, '7.4', '<')) {
  * Fail-safe, multi-platform include resolver (Self-Healing)
  */
 function seo_autopilot_safe_require($relative_file) {
-    $dir = rtrim(SEO_AUTOPILOT_PLUGIN_DIR, '/\\') . '/';
     $candidates = array(
-        $dir . 'includes/' . $relative_file,
-        $dir . 'includes\\' . $relative_file,
-        $dir . $relative_file,
+        __DIR__ . '/includes/' . $relative_file,
+        __DIR__ . '/' . $relative_file,
         dirname(__FILE__) . '/includes/' . $relative_file,
         dirname(__FILE__) . '/' . $relative_file,
     );
 
     foreach ($candidates as $candidate) {
-        if (file_exists($candidate) && is_readable($candidate)) {
+        if (@file_exists($candidate)) {
             try {
                 require_once $candidate;
                 return true;
             } catch (\Throwable $e) {
                 error_log('[SEO Autopilot Connector] Exception loading ' . $relative_file . ': ' . $e->getMessage());
-                return false;
             }
         }
     }
 
-    error_log('[SEO Autopilot Connector] Error: Unable to locate include file ' . $relative_file);
-    if (is_admin()) {
-        add_action('admin_notices', function() use ($relative_file) {
-            echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Missing component file <code>' . esc_html($relative_file) . '</code>. Please reinstall the plugin.</p></div>';
-        });
-    }
-    return false;
-}
-
-// Load Subsystems Safely
-if (is_admin() || wp_doing_cron()) {
-    if (seo_autopilot_safe_require('class-seo-autopilot-updater.php') && class_exists('SEO_Autopilot_Updater')) {
-        try {
-            new SEO_Autopilot_Updater();
-        } catch (\Throwable $e) {
-            error_log('[SEO Autopilot Connector] Updater init error: ' . $e->getMessage());
-        }
+    // Direct fallback attempt
+    try {
+        @include_once __DIR__ . '/includes/' . $relative_file;
+        return true;
+    } catch (\Throwable $e) {
+        return false;
     }
 }
 
-// Require Core Subsystems
+// Load Core Subsystems Safely
 seo_autopilot_safe_require('class-seo-autopilot-auth.php');
 seo_autopilot_safe_require('class-seo-autopilot-activity.php');
 seo_autopilot_safe_require('class-seo-autopilot-worker.php');
 seo_autopilot_safe_require('class-seo-autopilot-outbound.php');
 seo_autopilot_safe_require('class-seo-autopilot-rest.php');
 seo_autopilot_safe_require('class-seo-autopilot-admin.php');
+seo_autopilot_safe_require('class-seo-autopilot-updater.php');
+
+if (class_exists('SEO_Autopilot_Updater')) {
+    try {
+        new SEO_Autopilot_Updater();
+    } catch (\Throwable $e) {
+        error_log('[SEO Autopilot Connector] Updater init error: ' . $e->getMessage());
+    }
+}
 
 /**
  * Main Plugin Class
@@ -260,9 +255,12 @@ if (is_admin()) {
 }
 
 function seo_autopilot_direct_render_page() {
+    if (!class_exists('SEO_Autopilot_Admin')) {
+        seo_autopilot_safe_require('class-seo-autopilot-admin.php');
+    }
     if (class_exists('SEO_Autopilot_Admin')) {
         SEO_Autopilot_Admin::instance()->render_admin_page();
     } else {
-        echo '<div class="wrap"><h1>SEO Autopilot Agent Connector</h1><p>Please reinstall the plugin to complete setup.</p></div>';
+        echo '<div class="wrap"><h1>SEO Autopilot Agent Connector</h1><p>Unable to load admin template. Please check file permissions.</p></div>';
     }
 }
