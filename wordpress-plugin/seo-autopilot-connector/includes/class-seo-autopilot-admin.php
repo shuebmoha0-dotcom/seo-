@@ -322,6 +322,7 @@ class SEO_Autopilot_Admin {
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                <?php endif; ?>
             </div>
         </div>
         <?php

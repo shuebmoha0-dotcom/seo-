@@ -150,13 +150,10 @@ class SEO_Autopilot_Worker {
                 
                 $url = self::upload_base64_safely($base64, $ext);
                 if ($url) {
-                    $replacement = "
-
-<!-- wp:image {"sizeSlug":"large"} -->
-<figure class="wp-block-image size-large"><img src="$url" alt="$alt" class="wp-image" style="border-radius:12px;margin:24px 0;max-width:100%;height:auto;"/><figcaption class="wp-element-caption">$alt</figcaption></figure>
-<!-- /wp:image -->
-
-";
+                    $escaped_url = esc_url($url);
+                    $escaped_alt = esc_attr($alt);
+                    $caption_alt = esc_html($alt);
+                    $replacement = "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$escaped_url}\" alt=\"{$escaped_alt}\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">{$caption_alt}</figcaption></figure>\n<!-- /wp:image -->\n\n";
                     $content = str_replace($full_match, $replacement, $content);
                     $offset = $start_markdown + strlen($replacement);
                     continue;
@@ -166,49 +163,26 @@ class SEO_Autopilot_Worker {
         }
 
         // Convert standard Markdown Images to Gutenberg
-        $content = preg_replace_callback('/![([^]]*)](([^)]+))/', function($matches) {
-            $alt = $matches[1];
-            $src = $matches[2];
-            return "
-
-<!-- wp:image {"sizeSlug":"large"} -->
-<figure class="wp-block-image size-large"><img src="$src" alt="$alt" class="wp-image" style="border-radius:12px;margin:24px 0;max-width:100%;height:auto;"/><figcaption class="wp-element-caption">$alt</figcaption></figure>
-<!-- /wp:image -->
-
-";
+        $content = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function($matches) {
+            $alt = esc_attr($matches[1]);
+            $caption = esc_html($matches[1]);
+            $src = esc_url($matches[2]);
+            return "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$src}\" alt=\"{$alt}\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">{$caption}</figcaption></figure>\n<!-- /wp:image -->\n\n";
         }, $content);
 
-        // Convert Headings
-        $content = preg_replace('/^###s+(.+)$/m', "
-
-<!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">$1</h3>
-<!-- /wp:heading -->
-
-", $content);
-        $content = preg_replace('/^##s+(.+)$/m', "
-
-<!-- wp:heading {"level":2} -->
-<h2 class="wp-block-heading">$1</h2>
-<!-- /wp:heading -->
-
-", $content);
-        $content = preg_replace('/^#s+(.+)$/m', "
-
-<!-- wp:heading {"level":1} -->
-<h1 class="wp-block-heading">$1</h1>
-<!-- /wp:heading -->
-
-", $content);
+        // Convert Headings safely
+        $content = preg_replace_callback('/^(#{1,3})\s+(.+)$/m', function($matches) {
+            $level = strlen($matches[1]);
+            $title = esc_html(trim($matches[2]));
+            return "\n\n<!-- wp:heading " . '{"level":' . $level . '}' . " -->\n<h{$level} class=\"wp-block-heading\">{$title}</h{$level}>\n<!-- /wp:heading -->\n\n";
+        }, $content);
 
         // Convert Bold & Italic
-        $content = preg_replace('/**([^*]+)**/', '<strong>$1</strong>', $content);
-        $content = preg_replace('/*([^*]+)*/', '<em>$1</em>', $content);
+        $content = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $content);
+        $content = preg_replace('/\*([^*]+)\*/', '<em>$1</em>', $content);
 
         // Convert Paragraphs
-        $paragraphs = preg_split('/
-s*
-/', $content);
+        $paragraphs = preg_split('/\r?\n\s*\r?\n/', $content);
         $formatted = array();
         foreach ($paragraphs as $p) {
             $p = trim($p);
@@ -216,15 +190,11 @@ s*
             if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0) {
                 $formatted[] = $p;
             } else {
-                $formatted[] = "<!-- wp:paragraph -->
-<p>" . nl2br($p) . "</p>
-<!-- /wp:paragraph -->";
+                $formatted[] = "<!-- wp:paragraph -->\n<p>" . nl2br($p) . "</p>\n<!-- /wp:paragraph -->";
             }
         }
 
-        return implode("
-
-", $formatted);
+        return implode("\n\n", $formatted);
     }
 
     private static function op_create_post($payload) {
