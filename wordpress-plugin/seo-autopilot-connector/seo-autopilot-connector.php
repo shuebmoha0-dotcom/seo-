@@ -576,8 +576,8 @@ class SEO_Autopilot_Worker {
                 if ($url) {
                     $escaped_url = esc_url($url);
                     $escaped_alt = esc_attr($alt);
-                    $caption_alt = esc_html($alt);
-                    $replacement = "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$escaped_url}\" alt=\"{$escaped_alt}\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">{$caption_alt}</figcaption></figure>\n<!-- /wp:image -->\n\n";
+                    $caption_html = !empty($alt) ? "<figcaption class=\"wp-element-caption\">" . esc_html($alt) . "</figcaption>" : "";
+                    $replacement = "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$escaped_url}\" alt=\"{$escaped_alt}\"/>{$caption_html}</figure>\n<!-- /wp:image -->\n\n";
                     $content = str_replace($full_match, $replacement, $content);
                     $offset = $start_markdown + strlen($replacement);
                     continue;
@@ -589,9 +589,9 @@ class SEO_Autopilot_Worker {
         // Convert standard Markdown Images to Gutenberg
         $content = preg_replace_callback('/!\[([^\]]*)\]\(([^)]+)\)/', function($matches) {
             $alt = esc_attr($matches[1]);
-            $caption = esc_html($matches[1]);
+            $caption = !empty($matches[1]) ? "<figcaption class=\"wp-element-caption\">" . esc_html($matches[1]) . "</figcaption>" : "";
             $src = esc_url($matches[2]);
-            return "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$src}\" alt=\"{$alt}\" class=\"wp-image\" style=\"border-radius:12px;margin:24px 0;max-width:100%;height:auto;\"/><figcaption class=\"wp-element-caption\">{$caption}</figcaption></figure>\n<!-- /wp:image -->\n\n";
+            return "\n\n<!-- wp:image " . '{"sizeSlug":"large"}' . " -->\n<figure class=\"wp-block-image size-large\"><img src=\"{$src}\" alt=\"{$alt}\"/>{$caption}</figure>\n<!-- /wp:image -->\n\n";
         }, $content);
 
         // Convert Headings safely
