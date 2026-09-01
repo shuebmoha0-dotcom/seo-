@@ -171,15 +171,57 @@ class SEO_Autopilot_Worker {
         }, $content);
 
         // Convert Headings safely
-        $content = preg_replace_callback('/^(#{1,3})\s+(.+)$/m', function($matches) {
+        $content = preg_replace_callback('/^(#{1,4})\s+(.+)$/m', function($matches) {
             $level = strlen($matches[1]);
             $title = esc_html(trim($matches[2]));
             return "\n\n<!-- wp:heading " . '{"level":' . $level . '}' . " -->\n<h{$level} class=\"wp-block-heading\">{$title}</h{$level}>\n<!-- /wp:heading -->\n\n";
         }, $content);
 
+        // Convert Blockquotes
+        $content = preg_replace_callback('/^>\s+(.+)$/m', function($matches) {
+            $quote = esc_html(trim($matches[1]));
+            return "\n\n<!-- wp:quote -->\n<blockquote class=\"wp-block-quote\"><p>{$quote}</p></blockquote>\n<!-- /wp:quote -->\n\n";
+        }, $content);
+
+        // Convert Horizontal Rules
+        $content = preg_replace('/^---$/m', "\n\n<!-- wp:separator -->\n<hr class=\"wp-block-separator has-alpha-channel-opacity\"/>\n<!-- /wp:separator -->\n\n", $content);
+
+        // Convert Unordered Lists
+        $content = preg_replace_callback('/((?:^[*-]\s+.+$\n?)+)/m', function($matches) {
+            $lines = explode("\n", trim($matches[1]));
+            $items = '';
+            foreach ($lines as $line) {
+                $line = trim(preg_replace('/^[*-]\s+/', '', $line));
+                if (!empty($line)) {
+                    $items .= '<li>' . esc_html($line) . '</li>';
+                }
+            }
+            return "\n\n<!-- wp:list -->\n<ul class=\"wp-block-list\">{$items}</ul>\n<!-- /wp:list -->\n\n";
+        }, $content);
+
+        // Convert Ordered Lists
+        $content = preg_replace_callback('/((?:^\d+\.\s+.+$\n?)+)/m', function($matches) {
+            $lines = explode("\n", trim($matches[1]));
+            $items = '';
+            foreach ($lines as $line) {
+                $line = trim(preg_replace('/^\d+\.\s+/', '', $line));
+                if (!empty($line)) {
+                    $items .= '<li>' . esc_html($line) . '</li>';
+                }
+            }
+            return "\n\n<!-- wp:list " . '{"ordered":true}' . " -->\n<ol class=\"wp-block-list\">{$items}</ol>\n<!-- /wp:list -->\n\n";
+        }, $content);
+
         // Convert Bold & Italic
         $content = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $content);
         $content = preg_replace('/\*([^*]+)\*/', '<em>$1</em>', $content);
+
+        // Convert Markdown Links
+        $content = preg_replace_callback('/(?<!!)\[([^\]]+)\]\(([^)]+)\)/', function($matches) {
+            $anchor = esc_html($matches[1]);
+            $href = esc_url($matches[2]);
+            return "<a href=\"{$href}\">{$anchor}</a>";
+        }, $content);
 
         // Convert Paragraphs
         $paragraphs = preg_split('/\r?\n\s*\r?\n/', $content);
@@ -187,7 +229,7 @@ class SEO_Autopilot_Worker {
         foreach ($paragraphs as $p) {
             $p = trim($p);
             if (empty($p)) continue;
-            if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0) {
+            if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0 || strpos($p, '<ul') === 0 || strpos($p, '<ol') === 0 || strpos($p, '<blockquote') === 0) {
                 $formatted[] = $p;
             } else {
                 $formatted[] = "<!-- wp:paragraph -->\n<p>" . nl2br($p) . "</p>\n<!-- /wp:paragraph -->";
