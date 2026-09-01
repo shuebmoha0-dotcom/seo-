@@ -2293,36 +2293,3 @@ function seo_autopilot_connector() {
     }
 }
 seo_autopilot_connector();
-
-// Direct Global Admin Hooks for guaranteed registration
-if (is_admin()) {
-    add_action('admin_menu', function() {
-        add_options_page(
-            'SEO Autopilot Agent Connector',
-            'SEO Autopilot',
-            'manage_options',
-            'seo-autopilot-connector',
-            function() {
-                if (class_exists('SEO_Autopilot_Admin')) {
-                    SEO_Autopilot_Admin::instance()->render_admin_page();
-                }
-            }
-        );
-    }, 5);
-
-    add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
-        $settings_link = '<a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" style="font-weight: 700; color: #4f46e5;">' . __('Settings', 'seo-autopilot-connector') . '</a>';
-        array_unshift($links, $settings_link);
-        return $links;
-    });
-
-    add_action('admin_bar_menu', function($wp_admin_bar) {
-        if (!current_user_can('manage_options')) return;
-        $wp_admin_bar->add_node(array(
-            'id'    => 'seo-autopilot-topbar',
-            'title' => '⚡ SEO Autopilot',
-            'href'  => admin_url('options-general.php?page=seo-autopilot-connector'),
-            'meta'  => array('title' => 'SEO Autopilot Settings & Pairing'),
-        ));
-    }, 100);
-}
