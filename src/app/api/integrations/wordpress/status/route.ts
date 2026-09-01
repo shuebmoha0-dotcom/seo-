@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
     if (outboundSite && outboundSite.last_ping_at) {
       const minutesSincePing = (now - new Date(outboundSite.last_ping_at).getTime()) / (1000 * 60);
-      if (minutesSincePing <= 5) {
+      if (minutesSincePing <= 1440) {
         isConnected = true;
         status = 'connected';
       }

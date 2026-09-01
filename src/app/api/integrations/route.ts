@@ -36,14 +36,17 @@ export async function GET(request: Request) {
 
     if (outboundSite && outboundSite.last_ping_at) {
       const minutesSincePing = (now - new Date(outboundSite.last_ping_at).getTime()) / (1000 * 60);
-      // WordPress must send an outbound heartbeat at least once every 5 minutes
-      if (minutesSincePing <= 5) {
+      if (minutesSincePing <= 120) {
         isWpLive = true;
         wpStatus = 'connected';
         wpMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} via Outbound Agent Connector`;
+      } else if (minutesSincePing <= 1440) {
+        isWpLive = true;
+        wpStatus = 'connected';
+        wpMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} (Last sync: ${Math.round(minutesSincePing / 60)}h ago)`;
       } else {
         wpStatus = 'disconnected';
-        wpMessage = `Plugin stopped responding (${Math.round(minutesSincePing)}m ago). Reconnect to resume.`;
+        wpMessage = `Plugin idle for >24 hours. Check Settings > SEO Autopilot in WordPress.`;
       }
     }
 
