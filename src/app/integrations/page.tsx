@@ -1220,7 +1220,7 @@ export default function IntegrationsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
                       <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
-                        <span>⚡</span> SEO Autopilot Outbound Connector Plugin (v1.1.0)
+                        <span>⚡</span> SEO Autopilot Outbound Connector Plugin (v1.2.0)
                       </div>
                       <p className="text-[11px] text-indigo-800 leading-tight">
                         <strong>Outbound Reverse Architecture</strong>: WordPress initiates requests to our SaaS queue. Eliminates all 403 WAF/firewall blocks.
@@ -1232,7 +1232,7 @@ export default function IntegrationsPage() {
                       className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-[11px] transition-colors shadow-xs"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      Download .zip
+                      Download .zip (v1.2.0)
                     </a>
                   </div>
                   <div className="text-[10px] text-indigo-700 bg-white/70 p-2 rounded-lg border border-indigo-100">
