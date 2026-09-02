@@ -43,24 +43,26 @@ export interface ImageProvider {
  * Uses GPT-5.6 Luna (with Claude Sonnet 5 fallback)
  */
 export async function generateImagePrompt(request: ImageGenerationRequest, context?: UsageContext): Promise<string> {
-  const promptGenerationPrompt = `You are an expert commercial photography director for top-tier SaaS and business publications.
-Generate a concise, ultra-photorealistic image prompt for an article visual.
+  const promptGenerationPrompt = `You are a world-class creative art director for leading tech companies and design publications (like Stripe, Linear, Notion, Pitch, and Wired).
+Generate a concise, striking, non-photographic image prompt for an article visual.
 
 Topic: ${request.topic}
 Target Keyword: ${request.target_keyword || request.topic}
 Purpose: ${request.purpose}
-Visual Context: ${request.image_placement || 'Editorial article photo'}
-Audience: ${request.intended_audience || 'Professionals and modern founders'}
+Visual Context: ${request.image_placement || 'Editorial article visual'}
+Requested Visual Style: ${request.desired_visual_style || request.style || 'Modern editorial illustration or 3D isometric tech visual'}
+Audience: ${request.intended_audience || 'Professionals, modern founders, and tech builders'}
 
-MANDATORY VISUAL STYLE:
-- Style: Authentic, realistic editorial photography shot on 35mm lens (f/1.8 aperture) with soft natural daylight and subtle depth of field bokeh.
-- Scene: Real-world candid scenes (e.g. hands holding a modern smartphone showing a clean interface, professional working on a sleek laptop at a sunlit wooden desk with an iced coffee, authentic minimalist workspace or coffee shop setting).
-- Aesthetics: High texture detail, warm natural tones, authentic filmic grain, believable composition.
+CREATIVE DIRECTION:
+- Produce a modern, visually captivating conceptual illustration, 3D isometric render, or sleek infographic artwork that visually explains or represents the topic.
+- Use a sophisticated modern color palette: rich indigo, deep slate, warm amber, emerald accents, subtle soft gradients, and balanced negative space.
+- Composition: High-end editorial quality, clean geometry, cohesive elements (such as stylized dashboard cards, floating conceptual nodes, isometric pathways, or creative visual metaphors).
 
-STRICT NEGATIVE RULES (NEVER INCLUDE):
-- NO robotic cyborgs, NO humanoid androids, NO futuristic neon sci-fi glows, NO floating holograms.
-- NO 3D cartoon illustrations, NO Pixar/Disney styles, NO flat vector stock art, NO cheesy corporate clip art.
-- NO fake artificial hands or distorted geometry.
+STRICT NEGATIVE RULES (ABSOLUTELY FORBIDDEN):
+- NO generic realistic stock photography of people sitting at laptops or drinking coffee.
+- NO cheesy corporate clip art, NO childish cartoons, NO low-effort isolated icons.
+- NO blurry or deformed anatomy.
+- NO unreadable or garbled pseudo-text in the image.
 
 Output ONLY the final image generation prompt (under 75 words).`;
 

@@ -599,13 +599,24 @@ After closing the </reflection> block, write the full article. Start directly wi
         console.log(`[ContentAgent] Generating images in parallel with drafting for "${brief.working_title}"...`);
         const imagePromises = brief.image_requirements.map(async (req, i) => {
           try {
+            // Dynamic diverse visual style selection based on image requirement type and context
+            let visualStyle = 'Modern editorial SaaS illustration with sophisticated color palette and clean conceptual metaphors';
+            if (req.image_type === 'diagram' || req.purpose.toLowerCase().includes('workflow') || req.purpose.toLowerCase().includes('process')) {
+              visualStyle = 'Clean isometric workflow diagram, modern tech infographic style with connected geometric modules and elegant lighting';
+            } else if (i === 0) {
+              visualStyle = 'Premium 3D isometric conceptual tech artwork with matte geometric surfaces, floating UI elements, and modern studio lighting';
+            } else {
+              visualStyle = 'Modern editorial vector illustration with clean conceptual iconography, subtle textures, and rich color accents';
+            }
+
             const generatedImage = await ImageRouter.generate({
               topic: brief.working_title,
               target_keyword: input.primary_keyword,
               purpose: req.purpose,
-              style: 'Authentic candid lifestyle and workplace editorial photography, real human environment, 35mm lens, f/1.8 aperture, natural sunlight, warm modern setting, high texture detail, strictly NO robotic or cartoon elements',
+              style: visualStyle,
               dimensions: '1024x1024',
               image_placement: req.placement_context,
+              desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,
             });
 
