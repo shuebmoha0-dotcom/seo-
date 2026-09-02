@@ -33,7 +33,6 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Autopilot", href: "/autopilot", icon: Clock, badge: "New" },
-    { name: "Workflows", href: "/workflows", icon: Network, badge: "Active" },
     { name: "Project Memory", href: "/memory", icon: Brain },
     { name: "Strategy Agent", href: "/strategy", icon: Compass, badge: "AI" },
     { name: "Competitors", href: "/competitors", icon: Users, badge: "AI" },
