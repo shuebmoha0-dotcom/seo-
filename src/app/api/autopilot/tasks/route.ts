@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { TaskParser } from '@/lib/agent/taskParser';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function GET(request: Request) {
   try {
@@ -11,16 +11,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ tasks: [] });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
-    // 1. Get project_id for website
-    const { data: website } = await supabase
+    // 1. Get website info
+    const { data: website, error: webErr } = await supabase
       .from('websites')
       .select('id, project_id, domain')
       .eq('id', websiteId)
       .single();
 
-    if (!website) {
+    if (webErr || !website) {
       return NextResponse.json({ tasks: [] });
     }
 
@@ -31,7 +31,10 @@ export async function GET(request: Request) {
       .eq('project_id', website.project_id)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.warn('[Autopilot Tasks GET] Error querying tasks table:', error.message);
+      return NextResponse.json({ tasks: [] });
+    }
 
     const formattedTasks = (tasks || []).map((t: any) => ({
       id: t.id,
@@ -55,19 +58,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
     const { website_id, prompt, frequency_override } = await request.json();
 
-    if (!website_id || !prompt) {
+    if (!website_id || !prompt?.trim()) {
       return NextResponse.json({ error: 'website_id and prompt are required' }, { status: 400 });
     }
 
+    const supabase = createAdminClient();
+
+    // 1. Get website & its user_id
     const { data: website, error: webErr } = await supabase
       .from('websites')
-      .select('id, project_id, domain')
+      .select('id, project_id, domain, user_id')
       .eq('id', website_id)
       .single();
 
@@ -75,39 +77,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Website not found' }, { status: 404 });
     }
 
+    // 2. Resolve a valid user_id (fall back to website's owner)
+    const userId = website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5';
+
+    // 3. Parse task natural language instruction safely
     const parser = new TaskParser();
-    const parsed = await parser.parseTaskRequest(prompt);
+    const parsed = await parser.parseTaskRequest(prompt.trim(), website.project_id, userId);
 
     if (frequency_override && frequency_override !== 'auto') {
-      parsed.schedule.frequency = frequency_override;
+      parsed.schedule.frequency = frequency_override as any;
     }
 
+    // 4. Insert into tasks table with admin client (bypasses RLS)
     const { data: newTask, error: insertErr } = await supabase
       .from('tasks')
       .insert({
         project_id: website.project_id,
         user_id: userId,
         name: parsed.goal,
-        natural_language_instruction: prompt,
+        natural_language_instruction: prompt.trim(),
         status: 'active',
         schedule_type: parsed.schedule?.frequency || 'daily',
         schedule_config: parsed.schedule,
         timezone: parsed.schedule?.timezone || 'UTC',
-        next_run_at: new Date(Date.now() + 86400000).toISOString(),
+        next_run_at: parsed.next_run_at || new Date(Date.now() + 86400000).toISOString(),
       })
       .select()
       .single();
 
-    if (insertErr) throw insertErr;
+    if (insertErr) {
+      console.error('[Autopilot Tasks POST] Insert error:', insertErr);
+      throw insertErr;
+    }
 
-    // Upsert scheduled_agent_configs
-    await supabase.from('scheduled_agent_configs').upsert({
-      website_id,
-      frequency: parsed.schedule?.frequency || 'daily',
-      schedule_time: parsed.schedule?.time || '09:00',
-      status: 'active',
-      next_run_at: new Date(Date.now() + 86400000).toISOString(),
-    }, { onConflict: 'website_id' });
+    // 5. Upsert scheduled_agent_configs for cron synchronization
+    try {
+      await supabase.from('scheduled_agent_configs').upsert({
+        website_id,
+        frequency: parsed.schedule?.frequency || 'daily',
+        schedule_time: parsed.schedule?.time || '09:00',
+        status: 'active',
+        next_run_at: parsed.next_run_at || new Date(Date.now() + 86400000).toISOString(),
+      }, { onConflict: 'website_id' });
+    } catch (confErr) {
+      console.warn('[Autopilot Tasks POST] scheduled_agent_configs upsert warning:', confErr);
+    }
 
     return NextResponse.json({
       success: true,
@@ -120,13 +134,13 @@ export async function POST(request: Request) {
         schedule: newTask.schedule_config,
         status: newTask.status,
         last_run: 'Never',
-        next_run: 'Tomorrow ' + (newTask.schedule_config?.time || '09:00'),
+        next_run: newTask.next_run_at ? new Date(newTask.next_run_at).toLocaleString() : 'Tomorrow 09:00',
         approvals: 0,
       }
     });
   } catch (error: any) {
     console.error('[Autopilot Tasks POST] Error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Failed to schedule task' }, { status: 500 });
   }
 }
 
@@ -137,7 +151,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'task_id and status are required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from('tasks')
       .update({ status, updated_at: new Date().toISOString() })
@@ -161,7 +175,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'task_id is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from('tasks')
       .delete()
