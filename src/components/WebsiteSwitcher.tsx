@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useWebsite, WebsiteData } from "@/lib/context/WebsiteContext";
 import { Globe, ChevronDown, Plus, Check, ExternalLink, Settings, ShieldCheck } from "lucide-react";
+import { WebsiteFavicon } from "@/components/WebsiteFavicon";
 
 export function WebsiteSwitcher() {
   const { websites, currentWebsite, setCurrentWebsite, openAddModal, loading, planLimit } = useWebsite();
@@ -20,14 +21,6 @@ export function WebsiteSwitcher() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const getPlatformIcon = (site: WebsiteData) => {
-    const mainInt = site.integrations?.find(i => i.status === "connected");
-    if (mainInt?.provider === "wordpress" || site.platform === "wordpress") return "🟦";
-    if (mainInt?.provider === "github" || site.platform === "nextjs") return "🐙";
-    if (mainInt?.provider === "custom_api" || site.platform === "custom_saas") return "⚡";
-    return "🌐";
-  };
-
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Trigger Button */}
@@ -38,7 +31,7 @@ export function WebsiteSwitcher() {
         className="w-full flex items-center justify-between p-2.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-xl transition-all text-left group"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-base shrink-0">{currentWebsite ? getPlatformIcon(currentWebsite) : "🌐"}</span>
+          <WebsiteFavicon domain={currentWebsite?.domain} className="w-7 h-7 shrink-0" size={64} />
           <div className="truncate">
             <span className="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider leading-none mb-1">
               Active Website
@@ -76,8 +69,8 @@ export function WebsiteSwitcher() {
                     isSelected ? "bg-indigo-50 text-indigo-900 font-semibold" : "hover:bg-neutral-50 text-neutral-700"
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span>{getPlatformIcon(site)}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <WebsiteFavicon domain={site.domain} className="w-5 h-5 shrink-0" size={48} />
                     <div className="truncate">
                       <span className="block truncate font-medium">{site.domain}</span>
                       <span className="text-[10px] text-neutral-400 block">

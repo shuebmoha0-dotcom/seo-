@@ -2,6 +2,7 @@
 
 import { Calendar, Bell, ChevronDown, Globe, Plus } from "lucide-react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import { WebsiteFavicon } from "@/components/WebsiteFavicon";
 
 export function DashboardHeader() {
   const { currentWebsite, openAddModal } = useWebsite();
@@ -22,8 +23,8 @@ export function DashboardHeader() {
       <div className="flex items-center gap-3 self-start md:self-auto">
         {/* Active Website Pill */}
         {currentWebsite ? (
-          <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-indigo-600" />
+          <div className="bg-white border border-neutral-200/90 text-neutral-800 text-xs pl-1.5 pr-3 py-1 rounded-full font-semibold flex items-center gap-2 shadow-2xs">
+            <WebsiteFavicon domain={currentWebsite.domain} className="w-5 h-5 rounded-full" size={32} />
             <span>{currentWebsite.domain}</span>
           </div>
         ) : (
