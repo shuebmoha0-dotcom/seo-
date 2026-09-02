@@ -6,6 +6,7 @@ import {
   PRICING_RATES,
   recordProviderSuccess,
   recordProviderFailure,
+  normalizeAnthropicModel,
 } from './config';
 
 export type TaskComplexity = 'simple' | 'complex';
@@ -117,7 +118,8 @@ function resolveModel(provider: 'openai' | 'anthropic', modelName: string): Lang
     if (!process.env.ANTHROPIC_API_KEY) {
       throw new Error('ANTHROPIC_API_KEY is not configured.');
     }
-    return anthropic(modelName) as LanguageModel;
+    const canonicalModel = normalizeAnthropicModel(modelName);
+    return anthropic(canonicalModel) as LanguageModel;
   }
 
   if (!process.env.OPENAI_API_KEY) {

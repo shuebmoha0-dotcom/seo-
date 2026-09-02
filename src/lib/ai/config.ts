@@ -7,13 +7,27 @@ export interface ModelPricing {
   out: number; // Price per 1K output tokens in USD
 }
 
+export function normalizeAnthropicModel(rawName?: string): string {
+  const clean = (rawName || '').toLowerCase().trim();
+  if (!clean || clean.includes('sonnet') || clean.includes('claude-5') || clean.includes('claude-sonnet')) {
+    return 'claude-sonnet-5';
+  }
+  if (clean.includes('opus')) {
+    return 'claude-opus-5';
+  }
+  if (clean.includes('haiku')) {
+    return 'claude-haiku-4-5-20251001';
+  }
+  return 'claude-sonnet-5';
+}
+
 export const AI_CONFIG = {
   // ── Text Models ─────────────────────────────────────────────────────────────
   // GPT-5.6 Luna: Default for fast, routine, cost-sensitive tasks
   LUNA_MODEL: process.env.LUNA_MODEL || 'gpt-5.6-luna',
   
   // Claude Sonnet 5: For deep reasoning, complex analysis, and long-form writing
-  SONNET_MODEL: process.env.SONNET_MODEL || 'claude-sonnet-5',
+  SONNET_MODEL: normalizeAnthropicModel(process.env.SONNET_MODEL || 'claude-sonnet-5'),
 
   // ── Image Models ────────────────────────────────────────────────────────────
   // Gemini Image Generation via Google AI Studio (Primary Image Provider)
