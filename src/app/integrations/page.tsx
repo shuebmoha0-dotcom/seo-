@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import { PlatformLogo } from "@/components/PlatformLogo";
 
 type Tab = "overview" | "actions";
 
@@ -688,8 +689,10 @@ export default function IntegrationsPage() {
                   <div key={item.id} className="bg-white border border-neutral-200 rounded-2xl p-6 hover:shadow-sm transition-shadow flex flex-col justify-between space-y-4">
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-2">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{item.icon}</span>
+                        <div className="flex items-center gap-3.5">
+                          <div className="w-11 h-11 rounded-xl bg-neutral-50 border border-neutral-200/90 shadow-2xs flex items-center justify-center p-2 shrink-0">
+                            <PlatformLogo provider={item.provider} className="w-7 h-7 object-contain" size={28} />
+                          </div>
                           <div>
                             <h3 className="font-bold text-neutral-900 text-sm">{item.display_name}</h3>
                             <p className="text-[11px] text-neutral-500">{item.status_message}</p>
@@ -879,8 +882,8 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-neutral-200 rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl animate-fadeIn">
             <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>🔍</span> Setup Google Search Console
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
+                <PlatformLogo provider="google_search_console" className="w-5 h-5" size={20} /> Setup Google Search Console
               </h3>
               <button type="button" onClick={() => setShowGscModal(false)} className="text-neutral-400 hover:text-neutral-600">✕</button>
             </div>
@@ -978,9 +981,9 @@ export default function IntegrationsPage() {
                 <button
                   type="button"
                   onClick={() => initiateOAuth("google_search_console")}
-                  className="w-full py-3 bg-neutral-900 hover:bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-xs transition-colors text-xs"
+                  className="w-full py-3 bg-neutral-900 hover:bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2.5 shadow-xs transition-colors text-xs"
                 >
-                  <span>🔍</span>
+                  <PlatformLogo provider="google_search_console" className="w-4 h-4" size={16} />
                   <span>Sign in with Google OAuth</span>
                 </button>
               </div>
@@ -994,8 +997,8 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>📊</span> Select Google Analytics 4 Property
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
+                <PlatformLogo provider="google_analytics" className="w-5 h-5" size={20} /> Select Google Analytics 4 Property
               </h3>
               <button type="button" onClick={() => setShowGa4Modal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
             </div>
@@ -1042,16 +1045,16 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>🐙</span> Connect GitHub Repository
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
+                <PlatformLogo provider="github" className="w-5 h-5 text-neutral-900" size={20} /> Connect GitHub Repository
               </h3>
               <button type="button" onClick={() => setShowGithubModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
             </div>
             <p className="text-xs text-neutral-500">Connect your repository for automated technical SEO Pull Requests.</p>
 
             <div className="flex gap-2 border-b border-neutral-200 pb-2">
-              <button type="button" onClick={() => window.location.href = "/api/integrations/github/auth"} className="flex-1 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-1.5">
-                <span>🐙</span> Authorize with GitHub OAuth
+              <button type="button" onClick={() => window.location.href = "/api/integrations/github/auth"} className="flex-1 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2">
+                <PlatformLogo provider="github" className="w-4 h-4 text-white" size={16} /> Authorize with GitHub OAuth
               </button>
             </div>
 
@@ -1113,8 +1116,8 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>🟦</span> Connect WordPress Site
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
+                <PlatformLogo provider="wordpress" className="w-5 h-5" size={20} /> Connect WordPress Site
               </h3>
               <button type="button" onClick={() => setShowWpModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
             </div>
@@ -1315,8 +1318,8 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                <span>⚡</span> Connect Custom Website API
+              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
+                <PlatformLogo provider="custom_api" className="w-5 h-5" size={20} /> Connect Custom Website API
               </h3>
               <button type="button" onClick={() => setShowCustomApiModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
             </div>
