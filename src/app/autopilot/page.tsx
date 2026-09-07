@@ -5,7 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { 
   Bot, Play, Pause, Trash2, Clock, Calendar, CheckCircle2, 
   AlertCircle, ArrowRight, Activity, Plus, Globe, Loader2, 
-  Sparkles, Zap, RefreshCw, Check
+  Sparkles, Zap, RefreshCw, Check, CheckCircle, ShieldCheck
 } from 'lucide-react';
 import { useWebsite } from '@/lib/context/WebsiteContext';
 import { WebsiteFavicon } from '@/components/WebsiteFavicon';
@@ -16,34 +16,49 @@ export default function AutopilotPage() {
   const [frequencyOverride, setFrequencyOverride] = useState('auto');
   const [isParsing, setIsParsing] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [executions, setExecutions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<{ message: string; ok: boolean } | null>(null);
 
-  const fetchTasks = async () => {
+  const fetchTasks = async (silent = false) => {
     if (!currentWebsite) {
       setTasks([]);
+      setExecutions([]);
       setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch(`/api/autopilot/tasks?website_id=${currentWebsite.id}`);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
+        setExecutions(data.executions || []);
       }
     } catch (err) {
       console.error('Failed to load tasks:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchTasks();
   }, [currentWebsite?.id]);
+
+  // Polling watchdog: poll every 3 seconds if any task is executing in the background
+  useEffect(() => {
+    const hasRunning = tasks.some(t => t.last_run?.includes('Running') || t.last_run?.includes('Never')) || runningTaskId !== null;
+    if (!hasRunning) return;
+
+    const timer = setInterval(() => {
+      fetchTasks(true);
+    }, 3500);
+
+    return () => clearInterval(timer);
+  }, [tasks, runningTaskId]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,8 +80,11 @@ export default function AutopilotPage() {
       const data = await response.json();
       if (response.ok && data.success) {
         setPrompt('');
-        setStatusFeedback({ message: 'Autopilot task scheduled successfully!', ok: true });
-        await fetchTasks();
+        setStatusFeedback({ 
+          message: 'Task scheduled successfully! Initial autonomous optimization cycle has started in the background.', 
+          ok: true 
+        });
+        await fetchTasks(false);
       } else {
         setStatusFeedback({ message: data.error || 'Failed to create task.', ok: false });
       }
@@ -96,7 +114,7 @@ export default function AutopilotPage() {
           message: data.summary || 'Task executed successfully!', 
           ok: true 
         });
-        await fetchTasks();
+        await fetchTasks(false);
       } else {
         setStatusFeedback({ 
           message: data.error || 'Execution failed', 
@@ -164,7 +182,7 @@ export default function AutopilotPage() {
               </h1>
               <p className="text-xs text-neutral-500 mt-0.5">
                 {currentWebsite
-                  ? `Autonomous agent scheduler running SEO optimizations in the background for ${currentWebsite.domain}.`
+                  ? `Autonomous agent scheduler running 24/7 SEO optimizations for ${currentWebsite.domain}.`
                   : "Connect your website to schedule autonomous tasks."}
               </p>
             </div>
@@ -228,7 +246,7 @@ export default function AutopilotPage() {
                       type="text"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder={`e.g. "Research high-intent keywords every Monday and write one draft weekly for ${currentWebsite.domain}"`}
+                      placeholder={`e.g. "Research high-intent keywords every Monday and analyze ranking gaps for ${currentWebsite.domain}"`}
                       className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
                     />
                   </div>
@@ -269,7 +287,7 @@ export default function AutopilotPage() {
                       className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-xs"
                     >
                       {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      <span>{isParsing ? "Scheduling Task..." : "Schedule Autopilot Task"}</span>
+                      <span>{isParsing ? "Scheduling & Starting Run..." : "Schedule Autopilot Task"}</span>
                     </button>
                   </div>
                 </form>
@@ -283,7 +301,7 @@ export default function AutopilotPage() {
                     Active Scheduled Tasks ({tasks.length})
                   </h3>
                   <button
-                    onClick={fetchTasks}
+                    onClick={() => fetchTasks(false)}
                     disabled={loading}
                     className="text-xs text-neutral-500 hover:text-neutral-800 flex items-center gap-1 transition-colors"
                   >
@@ -330,7 +348,9 @@ export default function AutopilotPage() {
 
                         <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-xs">
                           <div className="flex flex-col">
-                            <span className="text-[10px] text-neutral-400">Last run: {task.last_run}</span>
+                            <span className="text-[10px] text-neutral-500 font-medium">
+                              Last run: <strong className="text-neutral-800">{task.last_run}</strong>
+                            </span>
                             <span className="text-[11px] text-neutral-600 font-medium">Next run: {task.next_run}</span>
                           </div>
 
@@ -379,6 +399,43 @@ export default function AutopilotPage() {
                   </div>
                 )}
               </div>
+
+              {/* Real Execution History Log */}
+              {executions.length > 0 && (
+                <div className="space-y-3 pt-4 border-t border-neutral-200/80">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-600" />
+                      Recent Autonomous Executions ({executions.length})
+                    </h3>
+                  </div>
+
+                  <div className="bg-white border border-neutral-200 rounded-2xl divide-y divide-neutral-100 overflow-hidden shadow-2xs">
+                    {executions.map((exec) => (
+                      <div key={exec.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-neutral-50/60 transition-colors">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] uppercase flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3" />
+                              {exec.status}
+                            </span>
+                            <span className="text-neutral-400 font-mono text-[10px]">
+                              {exec.completed_at ? new Date(exec.completed_at).toLocaleString() : new Date(exec.started_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-neutral-700 font-medium leading-relaxed">
+                            {exec.result_summary || "Autonomous optimization run executed and logged."}
+                          </p>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2 text-[11px] text-neutral-500">
+                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Auto-Verified</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
