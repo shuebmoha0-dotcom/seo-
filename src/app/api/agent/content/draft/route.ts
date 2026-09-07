@@ -370,6 +370,26 @@ export async function POST(request: Request) {
       }
     }
 
+    // 0. Anti-Duplication Guard: Prevent creating duplicate articles or cannibalizing keywords
+    if (!revision_notes && !body.force_duplicate) {
+      const { DuplicateArticleChecker } = await import('@/lib/agent/duplicateChecker');
+      const dupCheck = await DuplicateArticleChecker.check({
+        website_id: targetWebsiteId,
+        primary_keyword,
+        working_title,
+      });
+
+      if (dupCheck.isDuplicate) {
+        console.warn(`[Content Draft] Duplicate article prevented: ${dupCheck.reason}`);
+        return NextResponse.json({
+          error: 'DUPLICATE_ARTICLE_PREVENTED',
+          message: dupCheck.reason,
+          matched_article: dupCheck.matchedArticle,
+          is_duplicate: true,
+        }, { status: 409 });
+      }
+    }
+
     // Determine execution mode (sync for guest/demo, async for registered users)
     if (!website_id) {
       // SYNCHRONOUS EXECUTION

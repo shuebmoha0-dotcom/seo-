@@ -576,8 +576,20 @@ After closing the </reflection> block, write the full article. Start directly wi
       throw new Error(`Missing required inputs: ${validation.missing.join(', ')}`);
     }
 
-    // Always crawl and hydrate latest Custom Instructions and Autonomous Memory
-    await this.hydrateMemoryAndInstructions(input);
+    // Anti-duplication check: prevent writing duplicate articles or cannibalizing keywords
+    if (!revisionNotes) {
+      const { DuplicateArticleChecker } = await import('./duplicateChecker');
+      const dupCheck = await DuplicateArticleChecker.check({
+        website_id: input.website_id,
+        primary_keyword: input.primary_keyword,
+        working_title: input.working_title,
+      });
+
+      if (dupCheck.isDuplicate) {
+        console.warn(`[ContentAgent] Duplicate article prevented: ${dupCheck.reason}`);
+        throw new Error(`Duplicate article prevented: ${dupCheck.reason}`);
+      }
+    }
 
     const brief = await this.generateBrief(input);
 

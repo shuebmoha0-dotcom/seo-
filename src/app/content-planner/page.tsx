@@ -2,7 +2,7 @@
 
 import { Sidebar } from "@/components/Sidebar";
 import {
-  Sparkles, FileText, Check, X, Edit2, Send, RefreshCw, AlertTriangle,
+  Sparkles, FileText, Check, X, Edit2, Send, RefreshCw, AlertTriangle, ShieldAlert,
   Loader2, Clock, BookOpen, Image as ImageIcon, Link as LinkIcon, ChevronDown, ChevronRight,
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
@@ -606,15 +606,30 @@ export default function ContentPlannerPage() {
             </div>
           )}
 
-          {/* ERROR BANNER */}
+          {/* ERROR / DUPLICATE PREVENTION BANNER */}
           {generationError && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-xs text-red-800">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                <span>{generationError}</span>
+            <div className={`p-4 rounded-2xl flex items-center justify-between text-xs border ${
+              generationError.toLowerCase().includes('duplicate')
+                ? "bg-amber-50 border-amber-200 text-amber-900"
+                : "bg-red-50 border-red-200 text-red-800"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                {generationError.toLowerCase().includes('duplicate') ? (
+                  <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                )}
+                <div>
+                  {generationError.toLowerCase().includes('duplicate') && (
+                    <span className="font-bold block text-[11px] uppercase tracking-wider text-amber-700 mb-0.5">
+                      SEO Safety Guard: Duplicate Prevented
+                    </span>
+                  )}
+                  <span className="leading-relaxed">{generationError}</span>
+                </div>
               </div>
-              <button onClick={() => setGenerationError(null)} className="text-red-500 hover:text-red-700">
-                <X className="w-3.5 h-3.5" />
+              <button onClick={() => setGenerationError(null)} className="text-neutral-400 hover:text-neutral-700 ml-4 p-1">
+                <X className="w-4 h-4" />
               </button>
             </div>
           )}
