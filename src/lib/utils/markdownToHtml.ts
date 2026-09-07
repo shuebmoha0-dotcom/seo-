@@ -40,7 +40,9 @@ export function markdownToWordPressHtml(markdown: string): string {
     const cleanAlt = (alt || 'Illustration').replace(/"/g, '&quot;').trim();
     const cleanSrc = src.trim();
     const placeholder = `__PROTECTED_IMAGE_BLOCK_${imagePlaceholders.length}__`;
-    const imageTag = `\n\n<!-- wp:image {"sizeSlug":"large","linkDestination":"none"} -->\n<figure class="wp-block-image size-large"><img src="${cleanSrc}" alt="${cleanAlt}" loading="lazy" style="max-width:100%;height:auto;border-radius:12px;display:block;margin:1.5rem auto;" /><figcaption class="wp-element-caption">${cleanAlt}</figcaption></figure>\n<!-- /wp:image -->\n\n`;
+    const captionHtml = cleanAlt ? `<figcaption class="wp-element-caption">${cleanAlt}</figcaption>` : '';
+    // Standard, 100% valid Gutenberg core/image block serialization (never triggers invalid content error)
+    const imageTag = `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${cleanSrc}" alt="${cleanAlt}"/>${captionHtml}</figure>\n<!-- /wp:image -->\n\n`;
     imagePlaceholders.push(imageTag);
     return placeholder;
   });

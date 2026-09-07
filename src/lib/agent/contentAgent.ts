@@ -614,7 +614,7 @@ After closing the </reflection> block, write the full article. Start directly wi
               target_keyword: input.primary_keyword,
               purpose: req.purpose,
               style: visualStyle,
-              dimensions: '1024x1024',
+              dimensions: '1792x1008', // Always 16:9 widescreen landscape for article visuals
               image_placement: req.placement_context,
               desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,

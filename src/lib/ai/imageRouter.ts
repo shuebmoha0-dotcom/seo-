@@ -10,7 +10,7 @@ export interface ImageGenerationRequest {
   topic: string;
   purpose: string;
   style: string;
-  dimensions?: '1024x1024' | '1024x1792' | '1792x1024' | '1200x630';
+  dimensions?: '1792x1008' | '1200x675' | '1792x1024' | '1024x1024' | '1024x1792' | '1200x630' | string;
   brand_instructions?: string;
   target_keyword?: string;
   article_content?: string;
@@ -57,12 +57,14 @@ CREATIVE DIRECTION:
 - Produce a modern, visually captivating conceptual illustration, 3D isometric render, or sleek infographic artwork that visually explains or represents the topic.
 - Use a sophisticated modern color palette: rich indigo, deep slate, warm amber, emerald accents, subtle soft gradients, and balanced negative space.
 - Composition: High-end editorial quality, clean geometry, cohesive elements (such as stylized dashboard cards, floating conceptual nodes, isometric pathways, or creative visual metaphors).
+- ASPECT RATIO & ORIENTATION: MUST ALWAYS be composed for 16:9 widescreen landscape format. Wide horizontal editorial layout with cinematic perspective and balanced negative space on the left and right.
 
 STRICT NEGATIVE RULES (ABSOLUTELY FORBIDDEN):
 - NO generic realistic stock photography of people sitting at laptops or drinking coffee.
 - NO cheesy corporate clip art, NO childish cartoons, NO low-effort isolated icons.
 - NO blurry or deformed anatomy.
 - NO unreadable or garbled pseudo-text in the image.
+- NO square or portrait framing; must always be wide 16:9 horizontal.
 
 Output ONLY the final image generation prompt (under 75 words).`;
 
@@ -79,10 +81,11 @@ Output ONLY the final image generation prompt (under 75 words).`;
 
 /**
  * 2. Gemini Image Provider (Google AI Studio)
+ * Default aspect ratio: 16:9 widescreen landscape
  */
 export const GeminiImageProvider: ImageProvider = {
   name: 'gemini',
-  async generateImage(prompt: string, dimensions = '1024x1024'): Promise<{ url: string; base64?: string }> {
+  async generateImage(prompt: string, dimensions = '1792x1008'): Promise<{ url: string; base64?: string }> {
     const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('GOOGLE_AI_API_KEY is not configured.');
@@ -100,9 +103,12 @@ export const GeminiImageProvider: ImageProvider = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `Generate an image: ${prompt}` }] }],
+          contents: [{ parts: [{ text: `${prompt}. 16:9 widescreen landscape format, wide horizontal editorial composition.` }] }],
           generationConfig: {
             responseModalities: ['IMAGE', 'TEXT'],
+            imageConfig: {
+              aspectRatio: '16:9',
+            },
           },
         }),
         signal: AbortSignal.timeout(AI_CONFIG.REQUEST_TIMEOUT_MS),
@@ -154,23 +160,16 @@ export const GeminiImageProvider: ImageProvider = {
     // Imagen format
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${apiKey}`;
 
-    let aspectRatio = '1:1';
-    if (dimensions.includes('1792') || dimensions.includes('1200x630') || dimensions.includes('16:9')) {
-      aspectRatio = '16:9';
-    } else if (dimensions.includes('1024x1792')) {
-      aspectRatio = '9:16';
-    }
-
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        instances: [{ prompt }],
+        instances: [{ prompt: `${prompt}. 16:9 widescreen landscape orientation.` }],
         parameters: {
           sampleCount: 1,
-          aspectRatio,
+          aspectRatio: '16:9',
           outputMimeType: 'image/jpeg',
         },
       }),
@@ -204,15 +203,15 @@ export const GeminiImageProvider: ImageProvider = {
  */
 export const LeonardoImageProvider: ImageProvider = {
   name: 'leonardo',
-  async generateImage(prompt: string, dimensions = '1024x1024'): Promise<{ url: string; base64?: string }> {
+  async generateImage(prompt: string, dimensions = '1344x768'): Promise<{ url: string; base64?: string }> {
     const apiKey = process.env.LEONARDO_API_KEY;
     if (!apiKey) {
       throw new Error('LEONARDO_API_KEY is not configured.');
     }
 
-    const [widthStr, heightStr] = dimensions.split('x');
-    const width = parseInt(widthStr, 10) || 1024;
-    const height = parseInt(heightStr, 10) || 1024;
+    // Default to 16:9 widescreen landscape (1344x768)
+    const width = 1344;
+    const height = 768;
 
     // Step 1: Create generation job
     const createRes = await fetch('https://cloud.leonardo.ai/api/rest/v1/generations', {
@@ -223,7 +222,7 @@ export const LeonardoImageProvider: ImageProvider = {
         'Accept': 'application/json',
       },
       body: JSON.stringify({
-        prompt,
+        prompt: `${prompt}. 16:9 widescreen horizontal format.`,
         width,
         height,
         num_images: 1,
@@ -272,6 +271,7 @@ export const LeonardoImageProvider: ImageProvider = {
 
 /**
  * 4. Image Provider Router with Failover & Usage Logging
+ * Always defaults to 16:9 widescreen landscape
  */
 export const ImageRouter = {
   async generate(request: ImageGenerationRequest, context?: UsageContext): Promise<ImageGenerationResult> {
@@ -279,6 +279,9 @@ export const ImageRouter = {
 
     // 1. Generate prompt using GPT-5.6 Luna
     const prompt = await generateImagePrompt(request, context);
+
+    // Enforce 16:9 dimensions
+    const dimensions = request.dimensions || '1792x1008';
 
     // 2. Primary: Gemini via Google AI Studio
     let attempt = 0;
@@ -289,7 +292,7 @@ export const ImageRouter = {
       const primaryStart = Date.now();
 
       try {
-        const result = await GeminiImageProvider.generateImage(prompt, request.dimensions);
+        const result = await GeminiImageProvider.generateImage(prompt, dimensions);
         recordProviderSuccess('gemini_image');
 
         await recordImageUsage({
@@ -333,7 +336,7 @@ export const ImageRouter = {
     const fallbackStart = Date.now();
 
     try {
-      const result = await LeonardoImageProvider.generateImage(prompt, request.dimensions);
+      const result = await LeonardoImageProvider.generateImage(prompt, dimensions);
       recordProviderSuccess('leonardo_image');
 
       await recordImageUsage({
@@ -358,53 +361,47 @@ export const ImageRouter = {
           timestamp: new Date().toISOString(),
         },
       };
-    } catch (leonardoError: any) {
-      recordProviderFailure('leonardo_image', leonardoError.message);
-      console.error(`[Image Router] Both Gemini and Leonardo image generation failed.`);
-      throw new Error(`Image generation failed on both providers. Gemini: ${geminiError?.message} | Leonardo: ${leonardoError.message}`);
+    } catch (fallbackError: any) {
+      recordProviderFailure('leonardo_image', fallbackError.message || 'Leonardo image generation failed');
+      throw new Error(`All image generation providers failed. Gemini: ${geminiError?.message || 'failed'}. Leonardo: ${fallbackError.message}`);
     }
   },
 };
 
 /**
- * Helper to record image generation events in Supabase
+ * Helper to record image generation usage metrics in Supabase
  */
-async function recordImageUsage(params: {
+async function recordImageUsage(data: {
   provider: 'gemini' | 'leonardo';
   model: string;
-  status: 'success' | 'fallback' | 'failed';
+  status: 'success' | 'failed' | 'fallback';
   fallbackUsed: boolean;
   durationMs: number;
   context?: UsageContext;
 }) {
-  const estCost = IMAGE_PRICING_ESTIMATES[params.model] || 0.03;
-
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
 
-    if (supabaseUrl && !supabaseUrl.includes('placeholder') && supabaseKey) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    const estimatedCost = IMAGE_PRICING_ESTIMATES[data.model] || 0.03;
 
-      await supabase.from('usage_events').insert({
-        user_id: params.context?.user_id || null,
-        project_id: params.context?.project_id || null,
-        task_id: params.context?.task_id || null,
-        task_execution_id: params.context?.task_execution_id || null,
-        agent_execution_id: params.context?.agent_execution_id || null,
-        provider: params.provider,
-        model: params.model,
-        api_type: 'image',
-        agent_type: 'ImageAgent',
-        input_tokens: 0,
-        output_tokens: 0,
-        api_calls: 1,
-        estimated_cost: estCost,
-        currency: 'USD',
-      });
-    }
-  } catch (err) {
-    console.warn('[Image Router] Failed to record image usage:', err);
+    await supabase.from('ai_usage_logs').insert({
+      provider: data.provider,
+      model: data.model,
+      task_type: 'image_generation',
+      status: data.status,
+      fallback_used: data.fallbackUsed,
+      duration_ms: data.durationMs,
+      estimated_cost_usd: estimatedCost,
+      user_id: data.context?.user_id,
+      project_id: data.context?.project_id,
+      website_id: data.context?.website_id,
+      task_id: data.context?.task_id,
+      task_execution_id: data.context?.task_execution_id,
+      agent_execution_id: data.context?.agent_execution_id,
+      metadata: { dimensions: '16:9' },
+    });
+  } catch (err: any) {
+    console.warn('[Image Router] Failed to record usage to database:', err.message);
   }
 }
