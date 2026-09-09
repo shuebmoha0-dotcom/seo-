@@ -23,11 +23,11 @@ export function normalizeAnthropicModel(rawName?: string): string {
 
 export const AI_CONFIG = {
   // ── Text Models ─────────────────────────────────────────────────────────────
-  // GPT-5.6 Luna: Default for fast, routine, cost-sensitive tasks
+  // GPT-5.6 Luna / GPT-4o-mini: Default for fast, routine, cost-sensitive tasks
   LUNA_MODEL: process.env.LUNA_MODEL || 'gpt-5.6-luna',
   
-  // Claude Sonnet 5: For deep reasoning, complex analysis, and long-form writing
-  SONNET_MODEL: normalizeAnthropicModel(process.env.SONNET_MODEL || 'claude-sonnet-5'),
+  // Claude Sonnet 5: Permanently locked primary writer model for deep reasoning, complex analysis, and long-form writing
+  SONNET_MODEL: 'claude-sonnet-5' as const,
 
   // ── Image Models ────────────────────────────────────────────────────────────
   // Gemini Image Generation via Google AI Studio (Primary Image Provider)
@@ -48,8 +48,8 @@ export const PRICING_RATES: Record<string, ModelPricing> = {
   'gpt-4o-mini': { in: 0.00015, out: 0.0006 },
   'gpt-4o': { in: 0.005, out: 0.015 },
   [AI_CONFIG.SONNET_MODEL]: { in: 0.003, out: 0.015 },
-  'claude-sonnet-5': { in: 0.003, out: 0.015 },
   'claude-5-sonnet': { in: 0.003, out: 0.015 },
+  'claude-haiku-4-5-20251001': { in: 0.00025, out: 0.00125 },
   'claude-3-5-sonnet-20241022': { in: 0.003, out: 0.015 },
   'claude-3-5-sonnet-20240620': { in: 0.003, out: 0.015 },
   'claude-3-haiku-20240307': { in: 0.00025, out: 0.00125 },

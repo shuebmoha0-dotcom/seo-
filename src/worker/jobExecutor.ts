@@ -379,13 +379,14 @@ export class JobExecutor {
 
     WorkerLogger.info(`Executing background crawl for [${targetUrl}] (max: ${maxPages} pages)`);
 
-    const crawlResult = await CrawlService.runCrawlJob({
+    const crawlService = new CrawlService();
+    const crawlResult = await crawlService.getOrAnalyzeWebsite({
       websiteId,
-      startUrl: targetUrl,
+      targetUrl,
       maxPages,
     });
 
-    const summary = `Crawl finished: ${crawlResult.pagesCrawled || 0} pages indexed, ${crawlResult.issuesFound || 0} issues detected.`;
+    const summary = `Crawl finished: ${crawlResult.result?.summary?.total_urls_crawled || 0} pages indexed.`;
     await this.queueManager.completeJob(job.id, summary);
   }
 }

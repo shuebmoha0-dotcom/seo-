@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
     if (!provider) return NextResponse.json({ error: 'provider is required' }, { status: 400 });
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Upsert integration
     const { data, error } = await supabase

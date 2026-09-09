@@ -1,10 +1,18 @@
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
-/* eslint-disable prefer-const, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import { NextResponse } from 'next/server';
-import { after } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
 import { createAdminClient } from '@/lib/supabase/admin';
+
+function safeBackground(fn: () => Promise<void>) {
+  setImmediate(async () => {
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error('[Content Draft Background Error]:', err?.message || err);
+    }
+  });
+}
 
 export async function GET(request: Request) {
   try {
@@ -72,7 +80,7 @@ export async function GET(request: Request) {
     );
 
     if (stuckDrafts.length > 0) {
-      after(async () => {
+      safeBackground(async () => {
         for (const stuck of stuckDrafts) {
           try {
             console.log(`[Watchdog] Auto-healing stuck draft ${stuck.id} for "${stuck.primary_keyword}"...`);
@@ -460,7 +468,7 @@ export async function POST(request: Request) {
     if (draftErr) {
       throw new Error(draftErr.message || 'Failed to create placeholder draft');
     }
-    const savedDraft = { id: draftId, ...placeholderDraft };
+    const savedDraft = { ...placeholderDraft };
 
     // Enqueue job for the Render 24/7 Background Worker
     try {
@@ -539,8 +547,8 @@ export async function POST(request: Request) {
       console.warn('[Content Draft] Queue enqueue notice:', qErr);
     }
 
-    // Double-Redundancy Fallback: Execute via after() in background runtime
-    after(async () => {
+    // Double-Redundancy Fallback: Execute via safeBackground() in background runtime
+    safeBackground(async () => {
       try {
         console.log(`[Content Draft] Running fallback parallel generation for draft ${draftId}...`);
         const fallbackAgent = new ContentAgent();

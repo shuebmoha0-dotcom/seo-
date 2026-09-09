@@ -312,6 +312,7 @@ ${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
 
 WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
 - 🚫 ZERO META TAGS IN BODY: DO NOT output "Meta title:", "**Meta title:**", "Meta description:", or "**Meta description:**" anywhere in the article text. Start directly with the H1.
+- 🚫 ZERO RAW TABLE OF CONTENTS IN PROSE: DO NOT generate a "Table of Contents", "## Table of Contents", or bullet lists of anchor tags in the text body. The CMS automatically generates navigation blocks dynamically. Flow directly from the H1 and introduction into your first H2 topic.
 - 👤 MANDATORY AUTHOR PERSONA (ALEX MERCER):
   - Embody Alex Mercer writing 100% in first-person ("I", "in my outbound work", "in my campaigns").
   - Target Audience: Write for everyone looking for "${brief.primary_keyword}" (sales professionals, founders, marketers, SDRs, agency owners, and consultants).
@@ -322,7 +323,7 @@ WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
 - 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, power words, and structure rules with 100% precision.
 - 🔗 MANDATORY INTERNAL LINKING REQUIREMENT (MINIMUM 3 REAL LIVE URLS):
   - You MUST embed AT LEAST 3 internal links into the article body using standard markdown syntax: [anchor text](EXACT_URL).
-  - Use the exact live URLs provided in the candidate list below. Embed them seamlessly mid-sentence (e.g. "As I explained when analyzing [cold email examples](https://bizaigenius.com/cold-email-examples-that-get-replies/), keeping your ask low-friction is essential." or "Check our breakdown on [daily sending limits](https://bizaigenius.com/how-many-emails-per-day-per-domain/) before scaling outreach.").
+  - Use the exact live URLs provided in the candidate list below. Embed them seamlessly mid-sentence (e.g. "As we covered in our guide on [topic guide](https://example.com/relevant-post/), keeping your ask low-friction is essential.").
   - Anchor text MUST be concise (2 to 4 words), natural, and relevant. Never use generic anchors like "click here", "read more", or raw URLs.
 - 📏 STRICT LENGTH TARGET (${rules.word_count_min}–${rules.word_count_max} WORDS TOTAL):
   - The human explicitly requested a ${rules.word_count_min}–${rules.word_count_max} word article.
@@ -356,18 +357,10 @@ ${brief.internal_links.map(l => `- ${l}`).join('\n')}
 
 CTA: ${brief.cta}
 
-${projectMemory ? `\n==================================================\n🧠 PROJECT MEMORY & KNOWLEDGE BANK (WEAVE DIRECTLY INTO EXAMPLES & FRAMEWORKS):\n${projectMemory}\n==================================================\n` : ''}
-${projectInstructions ? `\n==================================================\n📋 MANDATORY HUMAN CUSTOM INSTRUCTIONS (FOLLOW 100%):\n${projectInstructions}\n==================================================\n` : ''}
-
-Before writing the article, you MUST open a <reflection> block. Inside it:
-1. Confirm that you are writing in first-person as Alex Mercer for the broad target audience (${brief.target_audience || 'everyone interested in ' + brief.primary_keyword}).
-2. List the EXACT 3+ live URLs you will embed mid-sentence along with their short anchor text and target section.
-3. Confirm how you will stay strictly within ${rules.word_count_min}–${rules.word_count_max} words without bloating.
-After closing the </reflection> block, write the full article. Start directly with the H1 (# Title). DO NOT write Meta title or Meta description lines. Place image markers where indicated.`,
+Instructions: Write the full article now starting directly with the H1 (# Title). DO NOT output any reflection tags, thinking blocks, Table of Contents, or Meta title/description lines. Place image markers exactly where indicated.`,
       });
 
-      // Strip the reflection block to ensure clean markdown
-      let finalArticle = text.replace(/<reflection>[\s\S]*?<\/reflection>/i, '').trim();
+      let finalArticle = text.trim();
 
       // Clean all meta lines from the markdown article body so they NEVER appear in the preview or database
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Meta\s+(?:title|description|keywords|intent|slug)(?:\*\*|\*)?\s*:.*$/gmi, '');
@@ -375,7 +368,12 @@ After closing the </reflection> block, write the full article. Start directly wi
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Target\s+(?:keyword|audience)(?:\*\*|\*)?\s*:.*$/gmi, '');
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Primary\s+(?:keyword)(?:\*\*|\*)?\s*:.*$/gmi, '');
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Secondary\s+(?:keywords)(?:\*\*|\*)?\s*:.*$/gmi, '');
-      finalArticle = finalArticle.replace(/^\s+/, '');
+
+      // Clean any raw Table of Contents sections and Gutenberg comments
+      finalArticle = finalArticle.replace(/^#*\s*Table of Contents\s*\n+((?:[-*]\s+\[.*?\]\(.*?\)\s*\n*)+)/gmi, '');
+      finalArticle = finalArticle.replace(/<!--\s*wp:rank-math\/toc-block[\s\S]*?<!--\s*\/wp:rank-math\/toc-block\s*-->/gi, '');
+      finalArticle = finalArticle.replace(/<!--[\s\S]*?-->/g, '');
+      finalArticle = finalArticle.replace(/\n{3,}/g, '\n\n').trim();
 
       return finalArticle;
     } catch (err: any) {
@@ -467,7 +465,11 @@ After closing the </reflection> block, write the full article. Start directly wi
     meta_description: string;
     url_slug: string;
   } {
-    const slug = brief.primary_keyword
+    const cleanKw = brief.primary_keyword
+      .replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '')
+      .trim();
+
+    const slug = (cleanKw || brief.primary_keyword)
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
@@ -481,12 +483,26 @@ After closing the </reflection> block, write the full article. Start directly wi
       .trim();
 
     const firstParagraph = cleanBodyForMeta.split(/\n\s*\n/).find(p => p.trim().length > 50) || '';
-    const meta = firstParagraph.replace(/\s+/g, ' ').slice(0, 155).trim() + (firstParagraph.length > 155 ? '...' : '');
+    
+    // Ensure Meta Description explicitly includes the Focus Keyword
+    let meta = '';
+    if (firstParagraph.toLowerCase().includes(cleanKw.toLowerCase())) {
+      meta = firstParagraph.replace(/\s+/g, ' ').slice(0, 155).trim();
+    } else {
+      meta = `Discover ${cleanKw} with actionable strategies, expert tips, and best practices to maximize results and performance.`.slice(0, 155);
+    }
+
+    // Ensure SEO Title contains Focus Keyword near the beginning (under 60 chars)
+    let seoTitle = brief.working_title;
+    if (!seoTitle.toLowerCase().includes(cleanKw.toLowerCase())) {
+      seoTitle = `${cleanKw}: ${brief.working_title}`;
+    }
+    if (seoTitle.length > 60) {
+      seoTitle = brief.working_title.length <= 60 ? brief.working_title : `${brief.working_title.slice(0, 57)}...`;
+    }
 
     return {
-      seo_title: brief.working_title.length <= 60
-        ? brief.working_title
-        : `${brief.working_title.slice(0, 57)}...`,
+      seo_title: seoTitle,
       meta_description: meta,
       url_slug: slug,
     };
@@ -682,7 +698,7 @@ After closing the </reflection> block, write the full article. Start directly wi
         const isOversizedDataUri = img.image_url.startsWith('data:image/') && img.image_url.length > 50000;
         const imageMarkdown = isOversizedDataUri
           ? `\n\n> 📸 **[Visual Illustration: ${img.alt_text}]**\n\n`
-          : `\n\n![${img.alt_text}](${img.image_url})\n*${img.alt_text}*\n\n`;
+          : `\n\n![${img.alt_text}](${img.image_url})\n\n`;
 
         if (content.match(/\[IMAGE:[^\]]+\]/)) {
           content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);

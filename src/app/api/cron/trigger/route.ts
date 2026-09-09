@@ -44,7 +44,7 @@ async function handleCronExecution(request: Request) {
           // Resolve website from project
           const website = task.projects?.websites?.[0] || null;
           let websiteId = website?.id;
-          let domain = website?.domain || 'bizaigenius.com';
+          let domain = website?.domain || '';
 
           if (!websiteId) {
             const { data: fallbackSite } = await supabase

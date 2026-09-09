@@ -149,6 +149,19 @@ export async function POST(request: Request) {
         if (wpSite) {
           const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
 
+          const cleanKw = (updatedDraft.primary_keyword || '')
+            .replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '')
+            .trim();
+
+          // Extract featured image from draft or first image in markdown
+          let featuredImageUrl = updatedDraft.featured_image_url || '';
+          if (!featuredImageUrl && updatedDraft.content_body) {
+            const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+            if (imgMatch) {
+              featuredImageUrl = imgMatch[1];
+            }
+          }
+
           await supabase.from('wordpress_jobs').insert({
             site_id: wpSite.id,
             website_id: updatedDraft.website_id,
@@ -161,6 +174,9 @@ export async function POST(request: Request) {
               seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
               meta_description: cleanMetaString(updatedDraft.meta_description || ''),
               canonical_url: `${wpSite.site_url.replace(/\/$/, '')}/${updatedDraft.url_slug}/`,
+              focus_keyword: cleanKw,
+              primary_keyword: cleanKw,
+              featured_image_url: featuredImageUrl || undefined,
             },
             idempotency_key: `create_post_draft_${updatedDraft.id}_${Date.now()}`,
             status: 'pending',

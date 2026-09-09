@@ -52,16 +52,16 @@ export function evaluateTaskComplexity(options: RouterOptions): TaskComplexity {
 
   const agent = options.agent.toLowerCase();
   const taskType = (options.taskType || '').toLowerCase();
-  const prompt = options.prompt || '';
 
+  // ONLY actual long-form prose drafting requires complex tier
   if (
     agent.includes('content') &&
-    (taskType.includes('long_form') || taskType.includes('draft') || prompt.length > 2500 || prompt.includes('article') || prompt.includes('word'))
+    (taskType === 'long_form_article' || taskType === 'draft_writing' || taskType === 'article_body')
   ) {
     return 'complex';
   }
 
-  if (agent.includes('strategy') && (taskType.includes('roadmap') || taskType.includes('audit') || taskType.includes('strategic'))) {
+  if (agent.includes('strategy') && (taskType.includes('roadmap') || taskType.includes('audit'))) {
     return 'complex';
   }
 
@@ -168,12 +168,16 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
   }
 }
 
-function extractTokenCounts(usage: any): { prompt: number; completion: number; total: number } {
-  if (!usage) return { prompt: 0, completion: 0, total: 0 };
+function extractTokenCounts(usage: any): { prompt: number; completion: number; total: number; reasoning: number } {
+  if (!usage) return { prompt: 0, completion: 0, total: 0, reasoning: 0 };
   const prompt = usage.promptTokens ?? usage.inputTokens ?? 0;
   const completion = usage.completionTokens ?? usage.outputTokens ?? 0;
+  const reasoning = usage.reasoningTokens ?? usage.thinkingTokens ?? 0;
   const total = usage.totalTokens ?? (prompt + completion);
-  return { prompt, completion, total };
+  if (reasoning > 0) {
+    console.error(`[CRITICAL TOKEN ALERT] Detected ${reasoning} reasoning tokens! Anthropic thinking must stay disabled.`);
+  }
+  return { prompt, completion, total, reasoning };
 }
 
 /**
@@ -183,13 +187,16 @@ export const TextRouter = {
   async generateObject<T = any>(options: RouterOptions): Promise<{ object: T; usage: any; model: string; provider: string }> {
     const complexity = evaluateTaskComplexity(options);
 
+    // Claude Sonnet 5 is permanently locked as the primary complex model
+    const chosenComplexModel = AI_CONFIG.SONNET_MODEL;
+
     const primary = complexity === 'complex'
-      ? { provider: 'anthropic' as const, modelName: AI_CONFIG.SONNET_MODEL, healthKey: 'sonnet' as const }
+      ? { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const }
       : { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const };
 
     const fallback = complexity === 'complex'
       ? { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const }
-      : { provider: 'anthropic' as const, modelName: AI_CONFIG.SONNET_MODEL, healthKey: 'sonnet' as const };
+      : { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const };
 
     let attempt = 0;
     let lastError: any = null;
@@ -200,9 +207,16 @@ export const TextRouter = {
 
       try {
         const model = resolveModel(primary.provider, primary.modelName);
+        // Strict guardrail: ALWAYS disable Anthropic thinking tokens to prevent token eating
+        const providerOptions = {
+          ...((options as any).providerOptions || {}),
+          ...(primary.provider === 'anthropic' ? { anthropic: { thinking: { type: 'disabled' } } } : {}),
+        };
+
         const result = await aiGenerateObject({
           ...(options as any),
           model,
+          providerOptions,
         });
 
         recordProviderSuccess(primary.healthKey);
@@ -253,9 +267,15 @@ export const TextRouter = {
 
     try {
       const fallbackModel = resolveModel(fallback.provider, fallback.modelName);
+      const fallbackProviderOptions = {
+        ...((options as any).providerOptions || {}),
+        ...(fallback.provider === 'anthropic' ? { anthropic: { thinking: { type: 'disabled' } } } : {}),
+      };
+
       const fallbackResult = await aiGenerateObject({
         ...(options as any),
         model: fallbackModel,
+        providerOptions: fallbackProviderOptions,
       });
 
       recordProviderSuccess(fallback.healthKey);
@@ -289,13 +309,16 @@ export const TextRouter = {
   async generateText(options: RouterOptions): Promise<{ text: string; usage: any; model: string; provider: string }> {
     const complexity = evaluateTaskComplexity(options);
 
+    // Claude Sonnet 5 is permanently locked as the primary complex model
+    const chosenComplexModel = AI_CONFIG.SONNET_MODEL;
+
     const primary = complexity === 'complex'
-      ? { provider: 'anthropic' as const, modelName: AI_CONFIG.SONNET_MODEL, healthKey: 'sonnet' as const }
+      ? { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const }
       : { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const };
 
     const fallback = complexity === 'complex'
       ? { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const }
-      : { provider: 'anthropic' as const, modelName: AI_CONFIG.SONNET_MODEL, healthKey: 'sonnet' as const };
+      : { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const };
 
     let attempt = 0;
     let lastError: any = null;
@@ -306,9 +329,16 @@ export const TextRouter = {
 
       try {
         const model = resolveModel(primary.provider, primary.modelName);
+        // Strict guardrail: ALWAYS disable Anthropic thinking tokens to prevent token eating
+        const providerOptions = {
+          ...((options as any).providerOptions || {}),
+          ...(primary.provider === 'anthropic' ? { anthropic: { thinking: { type: 'disabled' } } } : {}),
+        };
+
         const result = await aiGenerateText({
           ...(options as any),
           model,
+          providerOptions,
         });
 
         recordProviderSuccess(primary.healthKey);
@@ -359,9 +389,15 @@ export const TextRouter = {
 
     try {
       const fallbackModel = resolveModel(fallback.provider, fallback.modelName);
+      const fallbackProviderOptions = {
+        ...((options as any).providerOptions || {}),
+        ...(fallback.provider === 'anthropic' ? { anthropic: { thinking: { type: 'disabled' } } } : {}),
+      };
+
       const fallbackResult = await aiGenerateText({
         ...(options as any),
         model: fallbackModel,
+        providerOptions: fallbackProviderOptions,
       });
 
       recordProviderSuccess(fallback.healthKey);

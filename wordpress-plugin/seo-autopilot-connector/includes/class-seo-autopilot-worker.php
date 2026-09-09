@@ -35,6 +35,8 @@ class SEO_Autopilot_Worker {
                 return self::op_update_metadata($job['payload'] ?? array());
             case 'add_internal_link':
                 return self::op_add_internal_link($job['payload'] ?? array());
+            case 'set_featured_image':
+                return self::op_set_featured_image($job['payload'] ?? array());
             default:
                 throw new Exception("Unknown job_type: {$job['job_type']}");
         }
@@ -47,24 +49,152 @@ class SEO_Autopilot_Worker {
 
         $seo_title = sanitize_text_field($payload['seo_title'] ?? '');
         $meta_desc = sanitize_textarea_field($payload['meta_description'] ?? '');
+        $focus_kw  = sanitize_text_field($payload['focus_keyword'] ?? $payload['primary_keyword'] ?? '');
+        $canonical = esc_url_raw($payload['canonical_url'] ?? '');
 
-        // Yoast SEO
-        if (defined('WPSEO_VERSION') || (function_exists('is_plugin_active') && is_plugin_active('wordpress-seo/wp-seo.php'))) {
-            if ($seo_title) update_post_meta($post_id, '_yoast_wpseo_title', $seo_title);
-            if ($meta_desc) update_post_meta($post_id, '_yoast_wpseo_metadesc', $meta_desc);
+        // Unconditional persistence ensures Rank Math / Yoast / AIOSEO find it immediately
+        if ($focus_kw) {
+            update_post_meta($post_id, 'rank_math_focus_keyword', $focus_kw);
+            update_post_meta($post_id, '_yoast_wpseo_focuskw', $focus_kw);
+            update_post_meta($post_id, '_aioseo_keywords', $focus_kw);
+        }
+        if ($seo_title) {
+            update_post_meta($post_id, 'rank_math_title', $seo_title);
+            update_post_meta($post_id, '_yoast_wpseo_title', $seo_title);
+            update_post_meta($post_id, '_aioseo_title', $seo_title);
+        }
+        if ($meta_desc) {
+            update_post_meta($post_id, 'rank_math_description', $meta_desc);
+            update_post_meta($post_id, '_yoast_wpseo_metadesc', $meta_desc);
+            update_post_meta($post_id, '_aioseo_description', $meta_desc);
+        }
+        if ($canonical) {
+            update_post_meta($post_id, 'rank_math_canonical_url', $canonical);
+            update_post_meta($post_id, '_yoast_wpseo_canonical', $canonical);
+        }
+    }
+
+    /**
+     * Automatically sets the featured image for a post.
+     * Sideloads remote URLs into WordPress media library if needed, or converts base64 data URIs.
+     * Checks if image already exists to prevent duplicate media library uploads.
+     */
+    public static function auto_set_featured_image($post_id, $payload, $content = '') {
+        if (!$post_id) return 0;
+
+        // If post already has a featured image and overwrite is not requested, keep it
+        if (has_post_thumbnail($post_id) && empty($payload['force_featured_image'])) {
+            return (int)get_post_thumbnail_id($post_id);
         }
 
-        // Rank Math
-        if (defined('RANK_MATH_VERSION') || class_exists('RankMath') || (function_exists('is_plugin_active') && is_plugin_active('seo-by-rank-math/rank-math.php'))) {
-            if ($seo_title) update_post_meta($post_id, 'rank_math_title', $seo_title);
-            if ($meta_desc) update_post_meta($post_id, 'rank_math_description', $meta_desc);
+        // 1. Direct attachment ID passed
+        if (!empty($payload['featured_media'])) {
+            $media_id = (int)$payload['featured_media'];
+            if ($media_id > 0) {
+                set_post_thumbnail($post_id, $media_id);
+                return $media_id;
+            }
         }
 
-        // All in One SEO
-        if (defined('AIOSEO_VERSION') || (function_exists('is_plugin_active') && is_plugin_active('all-in-one-seo-pack/all_in_one_seo_pack.php'))) {
-            if ($seo_title) update_post_meta($post_id, '_aioseo_title', $seo_title);
-            if ($meta_desc) update_post_meta($post_id, '_aioseo_description', $meta_desc);
+        // 2. Direct image URL passed in payload
+        $img_url = $payload['featured_image_url'] ?? $payload['image_url'] ?? $payload['featured_image'] ?? '';
+
+        // 3. Fallback: Extract first image from content
+        if (empty($img_url) && !empty($content)) {
+            if (preg_match('/<img[^>]+src=["\']([^"\']+)["\']/i', $content, $m)) {
+                $img_url = $m[1];
+            } elseif (preg_match('/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i', $content, $m)) {
+                $img_url = $m[1];
+            }
         }
+
+        if (empty($img_url)) {
+            return 0;
+        }
+
+        $title = sanitize_text_field($payload['title'] ?? get_the_title($post_id) ?? 'Featured Image');
+        $alt   = sanitize_text_field($payload['focus_keyword'] ?? $payload['primary_keyword'] ?? $title);
+
+        // Case A: Base64 data URI
+        if (strpos($img_url, 'data:image/') === 0) {
+            $semicolon = strpos($img_url, ';base64,');
+            if ($semicolon !== false) {
+                $ext = substr($img_url, 11, $semicolon - 11);
+                $base64 = substr($img_url, $semicolon + 8);
+                $decoded = base64_decode($base64);
+                if ($decoded) {
+                    $filename = 'featured-' . $post_id . '-' . substr(md5(uniqid()), 0, 6) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+                    $upload = wp_upload_bits($filename, null, $decoded);
+                    if (empty($upload['error']) && !empty($upload['file'])) {
+                        $wp_filetype = wp_check_filetype($filename, null);
+                        $attachment = array(
+                            'post_mime_type' => $wp_filetype['type'],
+                            'post_title'     => sanitize_file_name($title),
+                            'post_content'   => '',
+                            'post_status'    => 'inherit'
+                        );
+                        $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
+                        if (!function_exists('wp_generate_attachment_metadata')) {
+                            require_once ABSPATH . 'wp-admin/includes/image.php';
+                        }
+                        if ($attach_id && !is_wp_error($attach_id)) {
+                            $attach_data = wp_generate_attachment_metadata($attach_id, $upload['file']);
+                            wp_update_attachment_metadata($attach_id, $attach_data);
+                            update_post_meta($attach_id, '_wp_attachment_image_alt', $alt);
+                            set_post_thumbnail($post_id, $attach_id);
+                            return (int)$attach_id;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Case B: Remote HTTP/HTTPS URL
+        if (filter_var($img_url, FILTER_VALIDATE_URL)) {
+            global $wpdb;
+            $existing_id = $wpdb->get_var($wpdb->prepare("SELECT ID FROM $wpdb->posts WHERE guid = %s AND post_type = 'attachment' LIMIT 1", $img_url));
+            if ($existing_id) {
+                set_post_thumbnail($post_id, (int)$existing_id);
+                return (int)$existing_id;
+            }
+
+            if (!function_exists('media_sideload_image')) {
+                require_once ABSPATH . 'wp-admin/includes/media.php';
+                require_once ABSPATH . 'wp-admin/includes/file.php';
+                require_once ABSPATH . 'wp-admin/includes/image.php';
+            }
+
+            $attach_id = media_sideload_image($img_url, $post_id, $title, 'id');
+            if (!is_wp_error($attach_id) && is_numeric($attach_id)) {
+                $attach_id = (int)$attach_id;
+                update_post_meta($attach_id, '_wp_attachment_image_alt', $alt);
+                set_post_thumbnail($post_id, $attach_id);
+                return $attach_id;
+            }
+        }
+
+        return 0;
+    }
+
+    private static function op_set_featured_image($payload) {
+        $post_id = (int)($payload['post_id'] ?? $payload['id'] ?? 0);
+        if (!$post_id || !get_post($post_id)) {
+            throw new Exception("Post #{$post_id} not found.");
+        }
+        $post = get_post($post_id);
+        $attach_id = self::auto_set_featured_image(
+            $post_id,
+            array_merge($payload, array('force_featured_image' => true)),
+            $post->post_content
+        );
+        if (!$attach_id) {
+            throw new Exception("Failed to set featured image for post #{$post_id}.");
+        }
+        return array(
+            'post_id'        => $post_id,
+            'featured_media' => $attach_id,
+            'thumbnail_url'  => get_the_post_thumbnail_url($post_id, 'full')
+        );
     }
 
     private static function upload_base64_safely($base64_data, $ext) {
@@ -99,7 +229,10 @@ class SEO_Autopilot_Worker {
     public static function format_content_for_wp($content) {
         if (empty($content)) return $content;
 
-        // 1. Process HTML image tags safely without crashing PCRE
+        // If content is already formatted as Gutenberg blocks, return directly
+        if (strpos($content, '<!-- wp:') !== false) {
+            return $content;
+        }
         $offset = 0;
         while (($pos = strpos($content, 'src="data:image/', $offset)) !== false) {
             $end_pos = strpos($content, '"', $pos + 16);
@@ -278,9 +411,8 @@ class SEO_Autopilot_Worker {
             throw new Exception($post_id->get_error_message());
         }
 
-        if (!empty($payload['featured_media'])) {
-            set_post_thumbnail($post_id, (int)$payload['featured_media']);
-        }
+        // Automatically attach/set featured image from payload or content
+        self::auto_set_featured_image($post_id, $payload, $raw_content);
 
         self::save_seo_meta($post_id, $payload);
 
@@ -334,6 +466,8 @@ class SEO_Autopilot_Worker {
             } else {
                 set_post_thumbnail($post_id, (int)$payload['featured_media']);
             }
+        } elseif (!empty($payload['featured_image_url']) || !empty($payload['image_url']) || !has_post_thumbnail($post_id)) {
+            self::auto_set_featured_image($post_id, $payload, $payload['content'] ?? '');
         }
 
         self::save_seo_meta($post_id, $payload);

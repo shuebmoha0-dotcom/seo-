@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const { website_id, property_url, service_account_json, client_email, private_key } = body;
 
     if (!property_url) {
-      return NextResponse.json({ success: false, error: 'Property URL or Domain (e.g. https://bizaigenius.com or sc-domain:bizaigenius.com) is required.' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Property URL or Domain (e.g. https://example.com or sc-domain:example.com) is required.' }, { status: 400 });
     }
 
     let parsedEmail = client_email;

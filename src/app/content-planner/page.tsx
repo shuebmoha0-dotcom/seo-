@@ -211,7 +211,28 @@ export default function ContentPlannerPage() {
   const renderFormattedArticle = (content: string) => {
     if (!content) return <p className="text-xs text-neutral-500">No content body generated.</p>;
 
-    const blocks = content.split(/\n\s*\n/);
+    // Pre-clean content: strip out raw Gutenberg comment markers and stray TOC anchors
+    const cleanContent = content
+      .replace(/<!--\s*\/?wp:[^>]*-->/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '');
+
+    const rawBlocks = cleanContent.split(/\n\s*\n/);
+
+    // Expand blocks where headings were immediately followed by content without empty lines
+    const blocks: string[] = [];
+    for (const b of rawBlocks) {
+      const trimmed = b.trim();
+      if (!trimmed) continue;
+
+      if (/^(#{1,6}\s+)/.test(trimmed) && trimmed.includes('\n')) {
+        const lines = trimmed.split('\n');
+        blocks.push(lines[0]);
+        const rest = lines.slice(1).join('\n').trim();
+        if (rest) blocks.push(rest);
+      } else {
+        blocks.push(trimmed);
+      }
+    }
 
     return (
       <div className="space-y-4">
@@ -223,8 +244,7 @@ export default function ContentPlannerPage() {
           const isTOC =
             trimmed.includes('wp-block-rank-math-toc-block') ||
             trimmed.includes('rank-math/toc-block') ||
-            trimmed.toLowerCase().startsWith('## table of contents') ||
-            trimmed.toLowerCase().startsWith('# table of contents');
+            /^#*\s*table of contents/i.test(trimmed);
 
           if (isTOC) {
             const links: { href: string; text: string }[] = [];
@@ -279,6 +299,9 @@ export default function ContentPlannerPage() {
                 </div>
               );
             }
+
+            // If it's a TOC block but has no links or is empty, drop it cleanly instead of leaking as an H2
+            return null;
           }
 
           // 2. Strip any standalone or remaining HTML comments
