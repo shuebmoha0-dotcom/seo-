@@ -80,7 +80,6 @@ export async function POST(request: Request) {
     const savedUrls = await persistCrawlResults(supabase, website.id, liveCrawl);
 
     return NextResponse.json({
-      success: true,
       message: `Fresh scan completed for ${website.domain}. Analyzed ${savedUrls.length} live pages.`,
       ...formatCrawlData(website.domain, savedUrls),
     });

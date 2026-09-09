@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Sidebar } from '@/components/Sidebar';
 import { 
   Bot, Play, Pause, Trash2, Clock, Calendar, CheckCircle2, 
@@ -14,12 +15,20 @@ export default function AutopilotPage() {
   const { currentWebsite, openAddModal } = useWebsite();
   const [prompt, setPrompt] = useState('');
   const [frequencyOverride, setFrequencyOverride] = useState('auto');
+  const [executionMode, setExecutionMode] = useState<'auto' | 'immediate' | 'recurring'>('auto');
   const [isParsing, setIsParsing] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [executions, setExecutions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<{ message: string; ok: boolean } | null>(null);
+  const [lastAction, setLastAction] = useState<{
+    intent_type: string;
+    action_type: string;
+    summary: string;
+    link_url?: string;
+    link_label?: string;
+  } | null>(null);
 
   const fetchTasks = async (silent = false) => {
     if (!currentWebsite) {
@@ -66,6 +75,7 @@ export default function AutopilotPage() {
     
     setIsParsing(true);
     setStatusFeedback(null);
+    setLastAction(null);
     try {
       const response = await fetch('/api/autopilot/tasks', {
         method: 'POST',
@@ -74,23 +84,39 @@ export default function AutopilotPage() {
           website_id: currentWebsite.id,
           prompt: prompt.trim(),
           frequency_override: frequencyOverride,
+          mode_override: executionMode,
         })
       });
       
       const data = await response.json();
       if (response.ok && data.success) {
         setPrompt('');
-        setStatusFeedback({ 
-          message: 'Task scheduled successfully! Initial autonomous optimization cycle has started in the background.', 
-          ok: true 
-        });
+        if (data.intent_type === 'immediate_action') {
+          setLastAction({
+            intent_type: data.intent_type,
+            action_type: data.action_type,
+            summary: data.summary,
+            link_url: data.link_url,
+            link_label: data.link_label,
+          });
+          setStatusFeedback({ 
+            message: data.summary, 
+            ok: true 
+          });
+        } else {
+          setLastAction(null);
+          setStatusFeedback({ 
+            message: data.summary || 'Task scheduled successfully! Initial autonomous cycle is running in the background.', 
+            ok: true 
+          });
+        }
         await fetchTasks(false);
       } else {
-        setStatusFeedback({ message: data.error || 'Failed to create task.', ok: false });
+        setStatusFeedback({ message: data.error || 'Failed to process instruction.', ok: false });
       }
     } catch (err: any) {
       console.error(err);
-      setStatusFeedback({ message: 'Network error while scheduling task.', ok: false });
+      setStatusFeedback({ message: 'Network error while processing instruction.', ok: false });
     } finally {
       setIsParsing(false);
     }
@@ -157,9 +183,10 @@ export default function AutopilotPage() {
   };
 
   const PRESET_IDEAS = [
-    `Research high-intent SEO keywords weekly for ${currentWebsite?.domain || 'my site'}`,
-    `Audit technical SEO, titles, and meta descriptions daily`,
-    `Find competitor ranking gaps and draft content monthly`,
+    { label: "✍️ Write an article on AI workflows", text: `Write an in-depth article about AI workflows and automation for ${currentWebsite?.domain || 'my site'}` },
+    { label: "🔍 Discover high-intent keywords", text: `Discover high-converting topical keyword clusters for ${currentWebsite?.domain || 'my site'}` },
+    { label: "🛠️ Audit technical SEO & crawl", text: `Audit technical SEO, indexability, and crawl errors` },
+    { label: "🕒 Schedule weekly article", text: `Every Monday at 09:00 publish an SEO article for ${currentWebsite?.domain || 'my site'}` },
   ];
 
   return (
@@ -233,11 +260,64 @@ export default function AutopilotPage() {
             </div>
           ) : (
             <>
+              {/* Last Action Executed Banner */}
+              {lastAction && (
+                <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-5 shadow-sm space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-indigo-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        {lastAction.intent_type === 'immediate_action' ? '⚡ Immediate Action Launched' : '🕒 Schedule Created'}
+                      </span>
+                      <span className="text-xs font-bold text-neutral-900 capitalize">
+                        {lastAction.action_type?.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <button onClick={() => setLastAction(null)} className="text-neutral-400 hover:text-neutral-600 text-xs font-bold">✕</button>
+                  </div>
+                  <p className="text-xs text-neutral-700 leading-relaxed font-medium">{lastAction.summary}</p>
+                  {lastAction.link_url && (
+                    <div className="pt-1">
+                      <Link
+                        href={lastAction.link_url}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors bg-white px-3 py-1.5 rounded-lg border border-indigo-200 shadow-2xs"
+                      >
+                        <span>{lastAction.link_label || 'View Generated Output'}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Natural Language Task Input */}
               <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>Give Autopilot an SEO Instruction</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-bold text-neutral-900">
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    <span>Give Autopilot a Natural Language Instruction</span>
+                  </div>
+
+                  {/* Mode Selector */}
+                  <div className="flex items-center gap-1 bg-white border border-neutral-200 rounded-xl p-1 text-[11px] font-semibold shadow-2xs">
+                    {[
+                      { id: 'auto', label: '⚡ Auto-Detect' },
+                      { id: 'immediate', label: '🚀 Run Once Now' },
+                      { id: 'recurring', label: '🕒 Schedule' },
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setExecutionMode(m.id as any)}
+                        className={`px-2.5 py-1 rounded-lg transition-all ${
+                          executionMode === m.id
+                            ? "bg-indigo-600 text-white shadow-2xs"
+                            : "text-neutral-600 hover:text-neutral-900"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <form onSubmit={handleCreateTask} className="space-y-3">
@@ -246,7 +326,13 @@ export default function AutopilotPage() {
                       type="text"
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value)}
-                      placeholder={`e.g. "Research high-intent keywords every Monday and analyze ranking gaps for ${currentWebsite.domain}"`}
+                      placeholder={
+                        executionMode === 'immediate'
+                          ? `e.g. "Write an article about 7 best email warm-up strategies for ${currentWebsite.domain}"`
+                          : executionMode === 'recurring'
+                          ? `e.g. "Every Monday at 09:00 publish an article and check keywords"`
+                          : `e.g. "Write an article about AI workflows" OR "Every Monday at 9am audit my site"`
+                      }
                       className="w-full bg-white border border-neutral-200 rounded-xl px-4 py-3.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
                     />
                   </div>
@@ -254,31 +340,35 @@ export default function AutopilotPage() {
                   {/* Preset Quick Chips */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <span className="text-[11px] font-semibold text-neutral-500">Quick ideas:</span>
-                    {PRESET_IDEAS.map((idea) => (
+                    {PRESET_IDEAS.map((idea, idx) => (
                       <button
-                        key={idea}
+                        key={idx}
                         type="button"
-                        onClick={() => setPrompt(idea)}
-                        className="text-[11px] bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-700 px-2.5 py-1 rounded-lg transition-colors"
+                        onClick={() => setPrompt(idea.text)}
+                        className="text-[11px] bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-700 px-2.5 py-1 rounded-lg transition-colors shadow-2xs"
                       >
-                        + {idea}
+                        {idea.label}
                       </button>
                     ))}
                   </div>
 
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-neutral-600">Frequency:</span>
-                      <select
-                        value={frequencyOverride}
-                        onChange={(e) => setFrequencyOverride(e.target.value)}
-                        className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
-                      >
-                        <option value="auto">Auto-detect from prompt</option>
-                        <option value="daily">Every Day</option>
-                        <option value="weekly">Every Week</option>
-                        <option value="monthly">Every Month</option>
-                      </select>
+                      {executionMode !== 'immediate' && (
+                        <>
+                          <span className="font-semibold text-neutral-600">Frequency:</span>
+                          <select
+                            value={frequencyOverride}
+                            onChange={(e) => setFrequencyOverride(e.target.value)}
+                            className="bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                          >
+                            <option value="auto">Auto-detect from prompt</option>
+                            <option value="daily">Every Day</option>
+                            <option value="weekly">Every Week</option>
+                            <option value="monthly">Every Month</option>
+                          </select>
+                        </>
+                      )}
                     </div>
 
                     <button
@@ -286,8 +376,16 @@ export default function AutopilotPage() {
                       disabled={isParsing || !prompt.trim()}
                       className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-xs"
                     >
-                      {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      <span>{isParsing ? "Scheduling & Starting Run..." : "Schedule Autopilot Task"}</span>
+                      {isParsing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>
+                        {isParsing
+                          ? "Processing with AI..."
+                          : executionMode === 'immediate'
+                          ? "Execute Action Now"
+                          : executionMode === 'recurring'
+                          ? "Schedule Recurring Task"
+                          : "Run / Schedule with AI"}
+                      </span>
                     </button>
                   </div>
                 </form>

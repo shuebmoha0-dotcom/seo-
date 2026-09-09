@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       .eq('website_id', website_id)
       .limit(10);
 
-    let seedKeywords: string[] = (existingKeywords || []).map(k => k.term);
+    let seedKeywords: string[] = (existingKeywords || []).map((k: any) => k.term);
     if (seedKeywords.length === 0) {
       // Extract seed phrases from domain
       const cleanName = website.domain.split('.')[0].replace(/[-_]/g, ' ');

@@ -64,10 +64,15 @@ export default function KeywordsPage() {
     fetchKeywordData();
   }, [currentWebsite?.id]);
 
-  const handleDiscover = async () => {
+  const handleDiscover = async (seedOverride?: string) => {
     if (!currentWebsite) {
       openAddModal();
       return;
+    }
+
+    const effectiveSeed = (seedOverride !== undefined ? seedOverride : seedTopic).trim();
+    if (seedOverride !== undefined) {
+      setSeedTopic(seedOverride);
     }
 
     setDiscovering(true);
@@ -77,11 +82,18 @@ export default function KeywordsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           website_id: currentWebsite.id,
-          seed_topic: seedTopic.trim() || undefined,
+          seed_topic: effectiveSeed || undefined,
           mode: siteMode,
         }),
       });
       if (res.ok) {
+        const data = await res.json();
+        if (data.clusters && data.clusters.length > 0) {
+          setClusters(data.clusters);
+        }
+        if (data.opportunities && data.opportunities.length > 0) {
+          setOpportunities(data.opportunities);
+        }
         await fetchKeywordData();
       }
     } catch (e) {
@@ -174,7 +186,7 @@ export default function KeywordsPage() {
             </div>
 
             <button
-              onClick={handleDiscover}
+              onClick={() => handleDiscover()}
               disabled={discovering || !currentWebsite}
               className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
             >
@@ -235,12 +247,50 @@ export default function KeywordsPage() {
             {activeTab === "clusters" && (
               <div className="space-y-4">
                 {clusters.length === 0 && !loading ? (
-                  <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-lg mx-auto">
-                    <Target className="w-8 h-8 text-neutral-400 mx-auto" />
-                    <h3 className="text-base font-bold text-neutral-900">No Keyword Clusters Discovered Yet</h3>
-                    <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                      Click &ldquo;Discover Keywords&rdquo; above to run topical clustering and find target search intents for {currentWebsite.domain}.
-                    </p>
+                  <div className="p-10 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-5 max-w-xl mx-auto my-6 shadow-sm">
+                    <div className="w-14 h-14 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
+                      <Target className="w-7 h-7" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h3 className="text-base font-bold text-neutral-900">No Keyword Clusters Discovered Yet</h3>
+                      <p className="text-xs text-neutral-500 max-w-md mx-auto leading-relaxed">
+                        Topical cluster discovery has not been run for <span className="font-semibold text-neutral-800">{currentWebsite.domain}</span> yet. Run AI Discovery now to find high-intent search queries, pillar targets, and supporting article clusters.
+                      </p>
+                    </div>
+
+                    {/* Prominent 1-Click CTA */}
+                    <div className="pt-2 flex flex-col items-center gap-3">
+                      <button
+                        onClick={() => handleDiscover()}
+                        disabled={discovering}
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-6 py-3 rounded-xl transition-all inline-flex items-center gap-2 shadow-md hover:shadow-lg"
+                      >
+                        {discovering ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        <span>{discovering ? "Discovering High-Intent Clusters..." : `Discover Keywords for ${currentWebsite.domain}`}</span>
+                      </button>
+
+                      {/* Seed suggestion chips */}
+                      <div className="space-y-1.5 pt-2">
+                        <span className="text-[11px] text-neutral-400 font-medium">Or start with a tailored seed topic:</span>
+                        <div className="flex flex-wrap justify-center gap-1.5">
+                          {[
+                            "AI Automation & Workflows",
+                            "B2B Lead Generation",
+                            "SaaS Growth Tools",
+                            "Productivity Systems"
+                          ].map((chip, chipIdx) => (
+                            <button
+                              key={chipIdx}
+                              disabled={discovering}
+                              onClick={() => handleDiscover(chip)}
+                              className="text-[11px] bg-white hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-300 text-neutral-600 border border-neutral-200 rounded-lg px-2.5 py-1 font-medium transition-all shadow-2xs"
+                            >
+                              + {chip}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -305,12 +355,20 @@ export default function KeywordsPage() {
             {activeTab === "all_keywords" && (
               <div className="space-y-4">
                 {rawKeywords.length === 0 && !loading ? (
-                  <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-lg mx-auto">
+                  <div className="p-10 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-4 max-w-lg mx-auto my-6 shadow-sm">
                     <Search className="w-8 h-8 text-neutral-400 mx-auto" />
                     <h3 className="text-base font-bold text-neutral-900">No Tracked Keywords</h3>
                     <p className="text-xs text-neutral-500 max-w-sm mx-auto">
                       Run keyword discovery to populate your database with high-intent target queries for {currentWebsite.domain}.
                     </p>
+                    <button
+                      onClick={() => handleDiscover()}
+                      disabled={discovering}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 shadow-sm"
+                    >
+                      {discovering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>{discovering ? "Discovering..." : "Discover Keywords Now"}</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm">

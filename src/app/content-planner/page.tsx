@@ -89,6 +89,7 @@ const DEFAULT_RULES = {
 const STATUS_CONFIG: Record<DraftStatus, { label: string; color: string; dot: string }> = {
   brief_pending: { label: "Draft (Brief)", color: "bg-neutral-100 text-neutral-600 border-neutral-200", dot: "bg-neutral-400" },
   writing: { label: "Writing…", color: "bg-blue-50 text-blue-600 border-blue-200", dot: "bg-blue-500 animate-pulse" },
+  generating: { label: "Generating…", color: "bg-blue-50 text-blue-600 border-blue-200", dot: "bg-blue-500 animate-pulse" },
   qa_pending: { label: "QA Pending", color: "bg-amber-50 text-amber-600 border-amber-200", dot: "bg-amber-500" },
   needs_revision: { label: "Needs Revision", color: "bg-red-50 text-red-600 border-red-200", dot: "bg-red-500" },
   ready_for_approval: { label: "🟡 Draft (Ready for Review)", color: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500 animate-pulse" },
@@ -145,18 +146,146 @@ export default function ContentPlannerPage() {
   const [activeView, setActiveView] = useState<"preview" | "qa" | "meta" | "images">("preview");
   const [previewMode, setPreviewMode] = useState<"formatted" | "raw">("formatted");
 
+  const renderInlineText = (text: string): React.ReactNode => {
+    if (!text) return null;
+    // Strip any HTML comments that might be inside a paragraph
+    const clean = text.replace(/<!--[\s\S]*?-->/g, '');
+    if (!clean) return null;
+
+    // Parse links [text](url), bold **text**, italic *text*, inline code `code`
+    const tokenRegex = /(\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+    const elements: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = tokenRegex.exec(clean)) !== null) {
+      if (match.index > lastIdx) {
+        elements.push(clean.substring(lastIdx, match.index));
+      }
+
+      if (match[2] && match[3]) {
+        // Link [text](url)
+        elements.push(
+          <a
+            key={match.index}
+            href={match[3]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-indigo-600 hover:text-indigo-800 hover:underline font-medium inline-flex items-center gap-0.5"
+          >
+            <span>{match[2]}</span>
+          </a>
+        );
+      } else if (match[4]) {
+        // Bold **text**
+        elements.push(
+          <strong key={match.index} className="font-bold text-neutral-900">
+            {match[4]}
+          </strong>
+        );
+      } else if (match[5]) {
+        // Italic *text*
+        elements.push(
+          <em key={match.index} className="italic text-neutral-800">
+            {match[5]}
+          </em>
+        );
+      } else if (match[6]) {
+        // Code `code`
+        elements.push(
+          <code key={match.index} className="px-1.5 py-0.5 rounded bg-neutral-100 text-neutral-800 font-mono text-[11px]">
+            {match[6]}
+          </code>
+        );
+      }
+      lastIdx = tokenRegex.lastIndex;
+    }
+
+    if (lastIdx < clean.length) {
+      elements.push(clean.substring(lastIdx));
+    }
+
+    return elements.length > 0 ? elements : clean;
+  };
+
   const renderFormattedArticle = (content: string) => {
     if (!content) return <p className="text-xs text-neutral-500">No content body generated.</p>;
 
-    const blocks = content.split('\n\n');
+    const blocks = content.split(/\n\s*\n/);
 
     return (
       <div className="space-y-4">
         {blocks.map((block, bIdx) => {
-          const trimmed = block.trim();
+          let trimmed = block.trim();
           if (!trimmed) return null;
 
-          // Check for Image Markdown ![alt](url)
+          // 1. Check for Table of Contents (both Gutenberg HTML and Markdown format)
+          const isTOC =
+            trimmed.includes('wp-block-rank-math-toc-block') ||
+            trimmed.includes('rank-math/toc-block') ||
+            trimmed.toLowerCase().startsWith('## table of contents') ||
+            trimmed.toLowerCase().startsWith('# table of contents');
+
+          if (isTOC) {
+            const links: { href: string; text: string }[] = [];
+
+            // Extract from HTML <a> tags if present
+            const htmlLinkRegex = /<a\s+href="([^"]+)">([\s\S]*?)<\/a>/gi;
+            let hlMatch;
+            while ((hlMatch = htmlLinkRegex.exec(trimmed)) !== null) {
+              links.push({
+                href: hlMatch[1],
+                text: hlMatch[2].replace(/<[^>]+>/g, '').trim(),
+              });
+            }
+
+            // Extract from Markdown links if present
+            if (links.length === 0) {
+              const lines = trimmed.split('\n');
+              lines.forEach(line => {
+                const mdMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
+                if (mdMatch) {
+                  links.push({ href: mdMatch[2], text: mdMatch[1].trim() });
+                }
+              });
+            }
+
+            if (links.length > 0) {
+              return (
+                <div key={bIdx} className="my-6 p-5 rounded-2xl bg-neutral-50 border border-neutral-200 shadow-2xs">
+                  <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-neutral-200/80">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-200/70 flex items-center justify-center text-indigo-600">
+                        <BookOpen className="w-3.5 h-3.5" />
+                      </div>
+                      <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">Table of Contents</h3>
+                    </div>
+                    <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2.5 py-0.5 rounded-full">
+                      {links.length} Sections
+                    </span>
+                  </div>
+                  <nav className="space-y-1.5 pt-1">
+                    {links.map((link, lIdx) => (
+                      <a
+                        key={lIdx}
+                        href={link.href}
+                        className="group flex items-start gap-2 text-xs text-neutral-700 hover:text-indigo-600 transition-colors py-0.5"
+                      >
+                        <span className="text-[10px] text-neutral-400 font-mono mt-0.5 w-4 shrink-0 text-right">{lIdx + 1}.</span>
+                        <span className="font-medium underline-offset-2 group-hover:underline leading-relaxed">{link.text}</span>
+                      </a>
+                    ))}
+                  </nav>
+                </div>
+              );
+            }
+          }
+
+          // 2. Strip any standalone or remaining HTML comments
+          trimmed = trimmed.replace(/<!--[\s\S]*?-->/g, '').trim();
+          if (!trimmed) return null;
+
+          // 3. Check for Image Markdown ![alt](url)
           const imgMatch = trimmed.match(/!\[([^\]]*)\]\(([^)]+)\)/);
           if (imgMatch) {
             const alt = imgMatch[1];
@@ -178,58 +307,58 @@ export default function ContentPlannerPage() {
                 </figure>
                 {remainingText && (
                   <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
-                    {remainingText}
+                    {renderInlineText(remainingText)}
                   </p>
                 )}
               </div>
             );
           }
 
-          // Check for H1 #
+          // 4. Check for H1 #
           if (trimmed.startsWith('# ')) {
             return (
               <h1 key={bIdx} className="text-xl md:text-2xl font-bold text-neutral-900 tracking-tight mt-4 mb-2 pb-2 border-b border-neutral-200">
-                {trimmed.replace(/^#\s+/, '')}
+                {renderInlineText(trimmed.replace(/^#\s+/, ''))}
               </h1>
             );
           }
 
-          // Check for H2 ##
+          // 5. Check for H2 ##
           if (trimmed.startsWith('## ')) {
             return (
               <h2 key={bIdx} className="text-base md:text-lg font-bold text-neutral-900 tracking-tight mt-6 mb-2">
-                {trimmed.replace(/^##\s+/, '')}
+                {renderInlineText(trimmed.replace(/^##\s+/, ''))}
               </h2>
             );
           }
 
-          // Check for H3 ###
+          // 6. Check for H3 ###
           if (trimmed.startsWith('### ')) {
             return (
               <h3 key={bIdx} className="text-sm md:text-base font-bold text-neutral-800 tracking-tight mt-4 mb-1">
-                {trimmed.replace(/^###\s+/, '')}
+                {renderInlineText(trimmed.replace(/^###\s+/, ''))}
               </h3>
             );
           }
 
-          // Check for bullet list
+          // 7. Check for bullet list
           if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
             const items = trimmed.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
             return (
               <ul key={bIdx} className="space-y-1.5 my-3 pl-5 list-disc text-xs text-neutral-700 leading-relaxed">
                 {items.map((item, iIdx) => (
                   <li key={iIdx}>
-                    {item.replace(/^[-*]\s+/, '')}
+                    {renderInlineText(item.replace(/^[-*]\s+/, ''))}
                   </li>
                 ))}
               </ul>
             );
           }
 
-          // Standard paragraph
+          // 8. Standard paragraph
           return (
             <p key={bIdx} className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
-              {trimmed}
+              {renderInlineText(trimmed)}
             </p>
           );
         })}

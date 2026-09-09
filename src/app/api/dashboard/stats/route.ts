@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       .order('date', { ascending: true })
       .limit(30);
 
-    const chartData = (gscRows || []).map(r => ({
+    const chartData = (gscRows || []).map((r: any) => ({
       date: r.date,
       traffic: r.clicks || 0,
       impressions: r.impressions || 0,

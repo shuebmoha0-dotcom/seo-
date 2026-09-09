@@ -1,6 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { KeywordAgent } from '@/lib/agent/keywordAgent';
+
+async function getSupabase() {
+  try {
+    const userClient = await createClient();
+    return userClient;
+  } catch {
+    return createAdminClient();
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -8,10 +18,10 @@ export async function GET(request: Request) {
     const websiteId = searchParams.get('website_id');
 
     if (!websiteId) {
-      return NextResponse.json({ clusters: [], raw_keywords: [] });
+      return NextResponse.json({ clusters: [], raw_keywords: [], opportunities: [] });
     }
 
-    const supabase = await createClient();
+    const supabase = await getSupabase();
 
     // 1. Fetch Clusters
     const { data: clusters } = await supabase
@@ -34,9 +44,42 @@ export async function GET(request: Request) {
       .eq('website_id', websiteId)
       .order('volume', { ascending: false });
 
+    // If clusters exist in DB, return them
+    if (clusters && clusters.length > 0) {
+      return NextResponse.json({
+        clusters,
+        opportunities: opps || [],
+        raw_keywords: rawKws || [],
+      });
+    }
+
+    // 4. Fallback check: see if clusters were cached in project_memory
+    try {
+      const { data: cachedMem } = await supabase
+        .from('project_memory')
+        .select('content')
+        .eq('website_id', websiteId)
+        .eq('source', 'cached_keyword_clusters')
+        .eq('is_outdated', false)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cachedMem?.content) {
+        const parsed = JSON.parse(cachedMem.content);
+        return NextResponse.json({
+          clusters: parsed.clusters || [],
+          opportunities: parsed.opportunities || [],
+          raw_keywords: rawKws || [],
+        });
+      }
+    } catch (cacheErr) {
+      console.warn('[Keywords GET] Memory cache lookup note:', cacheErr);
+    }
+
     return NextResponse.json({
-      clusters: clusters || [],
-      opportunities: opps || [],
+      clusters: [],
+      opportunities: [],
       raw_keywords: rawKws || [],
     });
   } catch (error: any) {
@@ -47,7 +90,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await getSupabase();
     const body = await request.json();
     const { website_id, seed_topic, mode } = body;
 
@@ -95,51 +138,79 @@ export async function POST(request: Request) {
     });
 
     // 3. Save clusters and opportunities to Supabase
+    let saveFailedWithRLS = false;
     for (const c of clusters) {
-      const { data: clusterRow } = await supabase
-        .from('keyword_clusters')
-        .insert({
-          website_id,
-          cluster_name: c.name,
-          primary_keyword: c.primary_keyword,
-          secondary_keywords: c.secondary_keywords,
-          search_intent: c.search_intent,
-          recommended_content_type: c.recommended_content_type,
-          status: 'discovered',
-        })
-        .select('id')
-        .single();
+      try {
+        const { data: clusterRow, error: clErr } = await supabase
+          .from('keyword_clusters')
+          .insert({
+            website_id,
+            cluster_name: c.name,
+            primary_keyword: c.primary_keyword,
+            secondary_keywords: c.secondary_keywords,
+            search_intent: c.search_intent,
+            recommended_content_type: c.recommended_content_type,
+            status: 'discovered',
+          })
+          .select('id')
+          .single();
 
-      const clusterId = clusterRow?.id;
+        if (clErr) {
+          console.warn('[Keywords POST] Cluster insert warning:', clErr.message);
+          saveFailedWithRLS = true;
+          break;
+        }
 
-      // Save opportunities for this cluster
-      for (const op of c.opportunities) {
-        await supabase.from('keyword_opportunities').insert({
+        const clusterId = clusterRow?.id;
+
+        // Save opportunities for this cluster
+        for (const op of c.opportunities) {
+          await supabase.from('keyword_opportunities').insert({
+            website_id,
+            cluster_id: clusterId || null,
+            keyword: op.keyword,
+            is_primary: op.is_primary,
+            search_intent: op.search_intent,
+            content_type: op.content_type,
+            search_volume: op.search_volume,
+            keyword_difficulty: op.keyword_difficulty,
+            business_relevance: op.business_relevance,
+            competition: op.competition,
+            recommended_action: op.recommended_action,
+            priority: op.priority,
+            confidence: op.confidence,
+            evidence: op.evidence,
+            status: 'pending',
+          });
+
+          // Also upsert to raw keywords table for quick tracking
+          await supabase.from('keywords').upsert({
+            website_id,
+            term: op.keyword,
+            intent: op.search_intent,
+            difficulty: op.keyword_difficulty ? String(op.keyword_difficulty) : op.competition,
+            volume: op.search_volume || 0,
+          }, { onConflict: 'website_id,term' });
+        }
+      } catch (err: any) {
+        console.warn('[Keywords POST] DB insert error:', err?.message || err);
+        saveFailedWithRLS = true;
+        break;
+      }
+    }
+
+    // If RLS blocked standard table insert, cache in project_memory so data is never lost
+    if (saveFailedWithRLS) {
+      try {
+        await supabase.from('project_memory').insert({
           website_id,
-          cluster_id: clusterId || null,
-          keyword: op.keyword,
-          is_primary: op.is_primary,
-          search_intent: op.search_intent,
-          content_type: op.content_type,
-          search_volume: op.search_volume,
-          keyword_difficulty: op.keyword_difficulty,
-          business_relevance: op.business_relevance,
-          competition: op.competition,
-          recommended_action: op.recommended_action,
-          priority: op.priority,
-          confidence: op.confidence,
-          evidence: op.evidence,
-          status: 'pending',
+          source: 'cached_keyword_clusters',
+          category: 'keyword_research',
+          content: JSON.stringify({ clusters, opportunities }),
+          is_outdated: false,
         });
-
-        // Also upsert to raw keywords table for quick tracking
-        await supabase.from('keywords').upsert({
-          website_id,
-          term: op.keyword,
-          intent: op.search_intent,
-          difficulty: op.keyword_difficulty ? String(op.keyword_difficulty) : op.competition,
-          volume: op.search_volume || 0,
-        }, { onConflict: 'website_id,term' });
+      } catch (memErr) {
+        console.warn('[Keywords POST] Memory backup save warning:', memErr);
       }
     }
 

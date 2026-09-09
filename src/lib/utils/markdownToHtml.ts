@@ -35,9 +35,10 @@ export function markdownToWordPressHtml(markdown: string): string {
   html = html.replace(/^\s+/, '');
 
   // 3. Convert Markdown Images safely by protecting URLs with placeholders
+  // Match ![alt](url) and any immediately following italic caption (*alt* or _alt_) so duplicate captions are never generated
   const imagePlaceholders: string[] = [];
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
-    const cleanAlt = (alt || 'Illustration').replace(/"/g, '&quot;').trim();
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)(?:\s*\n+\*+([^*\n]+)\*+)?/g, (match, alt, src, trailingItalic) => {
+    const cleanAlt = (alt || trailingItalic || 'Illustration').replace(/"/g, '&quot;').trim();
     const cleanSrc = src.trim();
     const placeholder = `__PROTECTED_IMAGE_BLOCK_${imagePlaceholders.length}__`;
     const captionHtml = cleanAlt ? `<figcaption class="wp-element-caption">${cleanAlt}</figcaption>` : '';
@@ -47,7 +48,22 @@ export function markdownToWordPressHtml(markdown: string): string {
     return placeholder;
   });
 
-  // 4. Convert Headings: ### H3, ## H2, # H1
+  // 4. Convert Markdown Table of Contents into Rank Math Gutenberg TOC block for WordPress
+  html = html.replace(/##\s+Table of Contents\s*\n+((?:[-*]\s+\[.*?\]\(.*?\)\s*\n*)+)/i, (match, list) => {
+    const items = list
+      .trim()
+      .split('\n')
+      .map((l: string) => {
+        const m = l.match(/\[(.*?)\]\((.*?)\)/);
+        return m ? `<li><a href="${m[2]}">${m[1]}</a></li>` : '';
+      })
+      .filter(Boolean)
+      .join('');
+
+    return `\n\n<!-- wp:rank-math/toc-block {"title":"Table of Contents","heading":"h2"} -->\n<div class="wp-block-rank-math-toc-block" id="rank-math-toc"><h2>Table of Contents</h2><nav><ul>${items}</ul></nav></div>\n<!-- /wp:rank-math/toc-block -->\n\n`;
+  });
+
+  // 5. Convert Headings: ### H3, ## H2, # H1
   html = html.replace(/^###\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":3} -->\n<h3 class="wp-block-heading">$1</h3>\n<!-- /wp:heading -->\n\n');
   html = html.replace(/^##\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":2} -->\n<h2 class="wp-block-heading">$1</h2>\n<!-- /wp:heading -->\n\n');
   html = html.replace(/^#\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":1} -->\n<h1 class="wp-block-heading">$1</h1>\n<!-- /wp:heading -->\n\n');
@@ -71,7 +87,7 @@ export function markdownToWordPressHtml(markdown: string): string {
   // 7. Convert Blockquotes: > quote
   html = html.replace(/^>\s+(.+)$/gm, '\n\n<!-- wp:quote -->\n<blockquote class="wp-block-quote"><p>$1</p></blockquote>\n<!-- /wp:quote -->\n\n');
 
-  // 7. Convert Lists: Unordered (- or *)
+  // 8. Convert Lists: Unordered (- or *)
   html = html.replace(/((?:^(?:-|\*)\s+.+\n?)+)/gm, (match) => {
     const items = match
       .trim()
@@ -83,7 +99,7 @@ export function markdownToWordPressHtml(markdown: string): string {
     return `\n\n<!-- wp:list -->\n<ul class="wp-block-list">\n${items}\n</ul>\n<!-- /wp:list -->\n\n`;
   });
 
-  // 8. Convert Lists: Ordered (1. 2. 3.)
+  // 9. Convert Lists: Ordered (1. 2. 3.)
   html = html.replace(/((?:^\d+\.\s+.+\n?)+)/gm, (match) => {
     const items = match
       .trim()
@@ -95,7 +111,7 @@ export function markdownToWordPressHtml(markdown: string): string {
     return `\n\n<!-- wp:list {"ordered":true} -->\n<ol class="wp-block-list">\n${items}\n</ol>\n<!-- /wp:list -->\n\n`;
   });
 
-  // 9. Convert Paragraphs
+  // 10. Convert Paragraphs
   const blocks = html.split(/\n\s*\n/);
   const formattedBlocks = blocks.map(block => {
     const trimmed = block.trim();
@@ -106,5 +122,23 @@ export function markdownToWordPressHtml(markdown: string): string {
     return `<!-- wp:paragraph -->\n<p>${trimmed.replace(/\n/g, '<br/>')}</p>\n<!-- /wp:paragraph -->`;
   });
 
-  return formattedBlocks.filter(Boolean).join('\n\n');
+  let result = formattedBlocks.filter(Boolean).join('\n\n');
+
+  // 11. Universal Deduplication Pass: Ensure no <p><em>...</em></p> repeating an image's caption remains immediately after </figure>
+  result = result.replace(
+    /(<!-- \/wp:image -->\s*)(?:<!-- wp:paragraph -->\s*)?<p><em>([\s\S]*?)<\/em><\/p>(?:\s*<!-- \/wp:paragraph -->)?/gi,
+    (fullMatch, imageCloseTag, pText) => {
+      const prevIdx = result.indexOf(fullMatch);
+      if (prevIdx !== -1) {
+        const precedingChunk = result.substring(Math.max(0, prevIdx - 600), prevIdx);
+        const cleanP = pText.replace(/<[^>]+>/g, '').trim().toLowerCase();
+        if (precedingChunk.toLowerCase().includes(cleanP) || (cleanP.length > 10 && precedingChunk.toLowerCase().includes(cleanP.substring(0, 20)))) {
+          return imageCloseTag;
+        }
+      }
+      return fullMatch;
+    }
+  );
+
+  return result;
 }

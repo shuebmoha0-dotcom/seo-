@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
-import { after } from 'next/server';
 import { TaskParser } from '@/lib/agent/taskParser';
+import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
+import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
 import { createAdminClient } from '@/lib/supabase/admin';
+
+function safeBackground(fn: () => Promise<void>) {
+  setImmediate(async () => {
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error('[Autopilot Background Error]:', err?.message || err);
+    }
+  });
+}
 
 export async function GET(request: Request) {
   try {
@@ -61,7 +72,7 @@ export async function GET(request: Request) {
     // Self-healing watchdog: auto-run any task that has never run yet
     const unexecuted = (tasks || []).filter((t: any) => t.status === 'active' && !t.last_run_at);
     if (unexecuted.length > 0) {
-      after(async () => {
+      safeBackground(async () => {
         for (const t of unexecuted) {
           try {
             console.log(`[Watchdog] Auto-executing unrun task [${t.id}] for "${t.name}"...`);
@@ -149,7 +160,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { website_id, prompt, frequency_override } = await request.json();
+    const { website_id, prompt, frequency_override, mode_override } = await request.json();
 
     if (!website_id || !prompt?.trim()) {
       return NextResponse.json({ error: 'website_id and prompt are required' }, { status: 400 });
@@ -171,15 +182,60 @@ export async function POST(request: Request) {
     // 2. Resolve a valid user_id (fall back to website's owner)
     const userId = website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5';
 
-    // 3. Parse task natural language instruction safely
-    const parser = new TaskParser();
-    const parsed = await parser.parseTaskRequest(prompt.trim(), website.project_id, userId);
+    // 3. Intelligently parse natural language instruction
+    const nlParser = new AutopilotNLParser();
+    const parsed = await nlParser.parseInstruction({
+      prompt: prompt.trim(),
+      domain: website.domain,
+      modeOverride: mode_override || 'auto',
+      frequencyOverride: frequency_override,
+    });
 
-    if (frequency_override && frequency_override !== 'auto') {
-      parsed.schedule.frequency = frequency_override as any;
+    // 4. IF IMMEDIATE ACTION: Execute directly through AutopilotExecutor!
+    if (parsed.intent_type === 'immediate_action') {
+      const executor = new AutopilotExecutor();
+      const execResult = await executor.executeImmediateAction({
+        instruction: parsed,
+        website_id: website.id,
+        website_domain: website.domain,
+        website_url: website.url || `https://${website.domain}`,
+        project_id: website.project_id,
+        user_id: userId,
+      });
+
+      // Record an entry in task_executions
+      try {
+        await supabase.from('task_executions').insert({
+          project_id: website.project_id,
+          status: execResult.success ? 'completed' : 'failed',
+          result_summary: execResult.summary,
+          started_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        });
+      } catch (execLogErr) {
+        console.warn('[Autopilot Tasks POST] task_executions log warning:', execLogErr);
+      }
+
+      return NextResponse.json({
+        success: execResult.success,
+        intent_type: 'immediate_action',
+        action_type: parsed.action_type,
+        goal: parsed.goal,
+        summary: execResult.summary,
+        link_url: execResult.link_url,
+        link_label: execResult.link_label,
+        data: execResult.data,
+      });
     }
 
-    // 4. Insert into tasks table with admin client (bypasses RLS)
+    // 5. IF RECURRING SCHEDULE: Insert into tasks and schedule config
+    const scheduleConfig = parsed.schedule || {
+      frequency: (frequency_override && frequency_override !== 'auto') ? frequency_override : 'daily',
+      time: '09:00',
+      timezone: 'UTC',
+    };
+
+    // Insert into tasks table with admin client (bypasses RLS)
     const { data: newTask, error: insertErr } = await supabase
       .from('tasks')
       .insert({
@@ -188,9 +244,9 @@ export async function POST(request: Request) {
         name: parsed.goal,
         natural_language_instruction: prompt.trim(),
         status: 'active',
-        schedule_type: parsed.schedule?.frequency || 'daily',
-        schedule_config: parsed.schedule,
-        timezone: parsed.schedule?.timezone || 'UTC',
+        schedule_type: scheduleConfig.frequency,
+        schedule_config: scheduleConfig,
+        timezone: scheduleConfig.timezone || 'UTC',
         next_run_at: parsed.next_run_at || new Date(Date.now() + 86400000).toISOString(),
       })
       .select()
@@ -201,12 +257,12 @@ export async function POST(request: Request) {
       throw insertErr;
     }
 
-    // 5. Upsert scheduled_agent_configs for cron synchronization
+    // Upsert scheduled_agent_configs for cron synchronization
     try {
       await supabase.from('scheduled_agent_configs').upsert({
         website_id,
-        frequency: parsed.schedule?.frequency || 'daily',
-        schedule_time: parsed.schedule?.time || '09:00',
+        frequency: scheduleConfig.frequency,
+        schedule_time: scheduleConfig.time || '09:00',
         status: 'active',
         next_run_at: parsed.next_run_at || new Date(Date.now() + 86400000).toISOString(),
       }, { onConflict: 'website_id' });
@@ -215,7 +271,7 @@ export async function POST(request: Request) {
     }
 
     // 6. Automatically trigger initial execution in the background immediately
-    after(async () => {
+    safeBackground(async () => {
       try {
         console.log(`[Autopilot Tasks POST] Auto-triggering initial run for task [${newTask.id}]...`);
         const { ScheduleAgent } = await import('@/lib/agent/scheduleAgent');

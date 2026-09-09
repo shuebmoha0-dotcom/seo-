@@ -46,9 +46,9 @@ export async function GET(request: Request) {
 
     // Calculate aggregated KPIs from actual stored database records
     const trackedCount = competitors?.length || 0;
-    const totalOverlapKeywords = (competitors || []).reduce((acc, c) => acc + (c.overlap_keywords || 0), 0);
+    const totalOverlapKeywords = (competitors || []).reduce((acc: number, c: any) => acc + (c.overlap_keywords || 0), 0);
     const gapsCount = gaps?.length || 0;
-    const threatsCount = threats?.filter(t => t.status === 'active')?.length || 0;
+    const threatsCount = threats?.filter((t: any) => t.status === 'active')?.length || 0;
 
     return NextResponse.json({
       competitors: competitors || [],

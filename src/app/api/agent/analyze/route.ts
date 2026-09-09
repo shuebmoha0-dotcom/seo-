@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     // Analyze each crawled page
     if (pages && pages.length > 0) {
       for (const page of pages) {
-        const pageGsc = (gscData || []).filter(g => g.page_id === page.id);
+        const pageGsc = (gscData || []).filter((g: any) => g.page_id === page.id);
         const opportunities = await reasoning.analyzePageAndMetrics(
           {
             url: page.path,

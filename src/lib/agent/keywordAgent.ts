@@ -165,8 +165,8 @@ For each cluster:
       });
 
       const allOpps: KeywordOpportunity[] = [];
-      const clusters: KeywordCluster[] = object.clusters.map(c => {
-        const clusterOpps: KeywordOpportunity[] = c.opportunities.map(op => ({
+      const clusters: KeywordCluster[] = object.clusters.map((c: any) => {
+        const clusterOpps: KeywordOpportunity[] = c.opportunities.map((op: any) => ({
           ...op,
           cluster: c.name,
           current_position: null,
@@ -243,6 +243,88 @@ For each cluster:
         evidence: 'Strong audience relevance and steady search volume.',
         cannibalization_warning: false,
       }
+    ];
+  }
+
+  // Generate low-competition quick-win opportunities for new sites
+  generateNewSiteOpportunities(siteType: SiteType, description: string): KeywordOpportunity[] {
+    const topic = description
+      ? description.split(' ').slice(0, 3).join(' ')
+      : siteType === 'saas' ? 'software' : 'business';
+
+    return [
+      {
+        keyword: `best ${topic} for beginners`,
+        cluster: `${topic} Guides`,
+        is_primary: true,
+        search_intent: 'commercial_investigation',
+        content_type: 'blog_article',
+        search_volume: 1200,
+        keyword_difficulty: 18,
+        business_relevance: 95,
+        competition: 'low',
+        current_position: null,
+        existing_url: null,
+        recommended_action: 'create_new_page',
+        priority: 'high',
+        confidence: 'high',
+        evidence: 'Low-difficulty long-tail keyword ideal for early organic traction and domain authority building.',
+        cannibalization_warning: false,
+      },
+      {
+        keyword: `how to choose ${topic}`,
+        cluster: `${topic} Guides`,
+        is_primary: false,
+        search_intent: 'informational',
+        content_type: 'guide',
+        search_volume: 850,
+        keyword_difficulty: 15,
+        business_relevance: 90,
+        competition: 'low',
+        current_position: null,
+        existing_url: null,
+        recommended_action: 'create_new_page',
+        priority: 'high',
+        confidence: 'high',
+        evidence: 'High-intent problem-solution query addressing user evaluation criteria.',
+        cannibalization_warning: false,
+      },
+      {
+        keyword: `${topic} checklist`,
+        cluster: `${topic} Resources`,
+        is_primary: true,
+        search_intent: 'informational',
+        content_type: 'blog_article',
+        search_volume: 950,
+        keyword_difficulty: 20,
+        business_relevance: 85,
+        competition: 'low',
+        current_position: null,
+        existing_url: null,
+        recommended_action: 'create_new_page',
+        priority: 'medium',
+        confidence: 'high',
+        evidence: 'Actionable lead-magnet asset query with strong search intent.',
+        cannibalization_warning: false,
+      },
+      {
+        keyword: `${topic} vs alternatives`,
+        cluster: `${topic} Comparison`,
+        is_primary: true,
+        search_intent: 'comparison',
+        content_type: 'comparison_page',
+        search_volume: 600,
+        keyword_difficulty: 22,
+        business_relevance: 95,
+        competition: 'low',
+        current_position: null,
+        existing_url: null,
+        recommended_action: 'create_new_page',
+        priority: 'high',
+        confidence: 'high',
+        evidence: 'Bottom-of-funnel comparison query for evaluating prospective solutions.',
+        cannibalization_warning: false,
+      },
     ];
   }
 
