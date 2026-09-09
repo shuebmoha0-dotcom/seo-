@@ -48,20 +48,9 @@ export function markdownToWordPressHtml(markdown: string): string {
     return placeholder;
   });
 
-  // 4. Convert Markdown Table of Contents into Rank Math Gutenberg TOC block for WordPress
-  html = html.replace(/##\s+Table of Contents\s*\n+((?:[-*]\s+\[.*?\]\(.*?\)\s*\n*)+)/i, (match, list) => {
-    const items = list
-      .trim()
-      .split('\n')
-      .map((l: string) => {
-        const m = l.match(/\[(.*?)\]\((.*?)\)/);
-        return m ? `<li><a href="${m[2]}">${m[1]}</a></li>` : '';
-      })
-      .filter(Boolean)
-      .join('');
-
-    return `\n\n<!-- wp:rank-math/toc-block {"title":"Table of Contents","heading":"h2"} -->\n<div class="wp-block-rank-math-toc-block" id="rank-math-toc"><h2>Table of Contents</h2><nav><ul>${items}</ul></nav></div>\n<!-- /wp:rank-math/toc-block -->\n\n`;
-  });
+  // 4. Strip any Markdown or Gutenberg Table of Contents completely (Zero TOC mandate)
+  html = html.replace(/##?\s+Table of Contents\s*\n+((?:[-*]\s+\[.*?\]\(.*?\)\s*\n*)+)/gi, '');
+  html = html.replace(/<!--\s*wp:rank-math\/toc-block[\s\S]*?<!--\s*\/wp:rank-math\/toc-block\s*-->/gi, '');
 
   // 5. Convert Headings: ### H3, ## H2, # H1
   html = html.replace(/^###\s+(.+)$/gm, '\n\n<!-- wp:heading {"level":3} -->\n<h3 class="wp-block-heading">$1</h3>\n<!-- /wp:heading -->\n\n');

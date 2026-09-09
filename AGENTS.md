@@ -20,3 +20,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Zero Discarded Reflection Blocks**: Never ask the model to generate intermediate `<reflection>` or scratchpad blocks before drafting. The model must write directly to the output.
 - **Word Count Discipline**: Articles must strictly adhere to the requested word count (1,200–1,600 words) without filler or fluff.
 
+## 3. ZERO TABLE OF CONTENTS (STRICTLY PROHIBITED)
+- **MANDATE**: Never generate or render a "Table of Contents", "## Table of Contents", or bullet lists of anchor links.
+- **PROHIBITION**: No Table of Contents blocks, widgets, or components anywhere in the articles. Flow immediately from the H1 and introduction into the first H2 topic.
+
+

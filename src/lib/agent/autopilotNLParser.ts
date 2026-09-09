@@ -9,6 +9,7 @@ export type AutopilotActionType =
   | 'technical_audit'
   | 'internal_linking'
   | 'on_page_seo'
+  | 'run_scheduled_tasks'
   | 'general_optimization';
 
 export interface AutopilotSchedule {
@@ -44,6 +45,16 @@ export class AutopilotNLParser {
     const rawPrompt = params.prompt.trim();
     const modeOverride = params.modeOverride || 'auto';
 
+    // Direct check for "run" / "execute" trigger
+    if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(rawPrompt) || /^run\b/i.test(rawPrompt)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'run_scheduled_tasks',
+        goal: rawPrompt,
+        summary: `Execute active scheduled tasks for ${params.domain}`,
+      };
+    }
+
     // 1. Try LLM-driven deep understanding
     try {
       const { object } = await LLMProvider.generateObject({
@@ -58,6 +69,7 @@ export class AutopilotNLParser {
             'technical_audit',
             'internal_linking',
             'on_page_seo',
+            'run_scheduled_tasks',
             'general_optimization'
           ]),
           goal: z.string().describe("Clear, concise goal statement (e.g. 'Draft SEO article: 7 Best Email Warmup Strategies')"),
@@ -72,6 +84,7 @@ export class AutopilotNLParser {
         system: `You are an advanced Natural Language Task Parser for an Autonomous SEO AI system.
 Understand the user's natural language input for domain "${params.domain}".
 CRITICAL:
+- If the user asks to "run", "run task", "execute", or "start", classify as 'immediate_action' with action_type 'run_scheduled_tasks'.
 - If the user asks to write an article, draft a post, research keywords, or audit the site WITHOUT a recurring word (every/daily/weekly/monthly), classify as 'immediate_action'.
 - Do NOT force one-time actions into a recurring schedule.
 - If the user specifies recurrence (e.g. "every Monday at 9am", "daily audit"), classify as 'recurring_schedule'.`,
@@ -165,7 +178,9 @@ CRITICAL:
 
     // 2. Determine action type
     let action_type: AutopilotActionType = 'general_optimization';
-    if (lower.includes('article') || lower.includes('write') || lower.includes('blog') || lower.includes('post') || lower.includes('draft') || lower.includes('content')) {
+    if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(lower) || /^run\b/i.test(lower)) {
+      action_type = 'run_scheduled_tasks';
+    } else if (lower.includes('article') || lower.includes('write') || lower.includes('blog') || lower.includes('post') || lower.includes('draft') || lower.includes('content')) {
       action_type = 'write_article';
     } else if (lower.includes('keyword') || lower.includes('cluster') || lower.includes('search volume') || lower.includes('intent')) {
       action_type = 'keyword_research';

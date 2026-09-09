@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { ScheduleAgent } from '@/lib/agent/scheduleAgent';
+import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
+import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       task = t;
     }
 
-    const goal = task?.name || task?.natural_language_instruction || `Autonomous SEO Audit for ${website.domain}`;
+    const goal = task?.natural_language_instruction || task?.name || `Autonomous SEO Audit for ${website.domain}`;
     const startTime = new Date();
 
     // 3. Create initial queued/running execution record
@@ -49,53 +50,33 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    // 4. Execute Real Autonomous Run via ScheduleAgent
-    const agent = new ScheduleAgent();
-    const siteUrl = website.url || `https://${website.domain}`;
+    // 4. Parse instruction and execute via AutopilotExecutor
+    const nlParser = new AutopilotNLParser();
+    const parsed = await nlParser.parseInstruction({
+      prompt: goal,
+      domain: website.domain,
+      modeOverride: 'immediate',
+    });
 
-    let summaryText = '';
-    let runStatus: 'completed' | 'failed' = 'completed';
-
-    try {
-      const runResult = await agent.executeRun({
-        website_id: website.id,
-        website_url: siteUrl,
-        trigger_type: 'manual_run_now',
-        config: {
-          website_id: website.id,
-          frequency: (task?.schedule_type as any) || 'daily',
-          schedule_time: '09:00',
-          timezone: 'UTC',
-          status: 'active',
-          daily_budget_usd: 10,
-          monthly_budget_usd: 100,
-          current_daily_spend_usd: 0,
-          current_monthly_spend_usd: 0,
-          max_tasks_per_run: 5,
-          max_crawl_urls: 20,
-          notify_on_run_complete: true,
-          notify_on_opportunity: true,
-          notify_on_approval_required: true,
-          notify_on_technical_error: false,
-          notify_on_failure: true,
-        },
-        project_instructions: goal,
-      });
-
-      summaryText = runResult.summary || `Autonomous operation successfully analyzed ${website.domain}. Identified high-value opportunities.`;
-    } catch (runErr: any) {
-      console.warn('[Autopilot Task Run] Agent run completed with fallback summary:', runErr?.message);
-      summaryText = `Autonomous optimization cycle completed for ${website.domain}. Crawled pages and evaluated SEO opportunities.`;
-    }
+    const executor = new AutopilotExecutor();
+    const execResult = await executor.executeImmediateAction({
+      instruction: parsed,
+      website_id: website.id,
+      website_domain: website.domain,
+      website_url: website.url || `https://${website.domain}`,
+      project_id: website.project_id,
+      user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+    });
 
     const endTime = new Date();
+    const summaryText = execResult.summary || `Autonomous operation completed for ${website.domain}.`;
 
     // 5. Update task_executions record
     if (execution?.id) {
       await supabase
         .from('task_executions')
         .update({
-          status: 'completed',
+          status: execResult.success ? 'completed' : 'failed',
           completed_at: endTime.toISOString(),
           result_summary: summaryText,
         })
@@ -114,12 +95,16 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: execResult.success,
       execution_id: execution?.id,
       task_id: task?.id,
-      status: 'completed',
+      status: execResult.success ? 'completed' : 'failed',
+      action_type: parsed.action_type,
       summary: summaryText,
+      link_url: execResult.link_url,
+      link_label: execResult.link_label,
       executed_at: endTime.toLocaleString(),
+      data: execResult.data,
     });
   } catch (error: any) {
     console.error('[Autopilot Run POST] Error:', error);

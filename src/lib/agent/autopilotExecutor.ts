@@ -93,7 +93,7 @@ export class AutopilotExecutor {
                 tone: 'Authoritative, practical, practitioner-first',
                 audience: `Readers and searchers exploring ${primaryKeyword}`,
                 author_style: 'Experienced technical consultant and industry specialist',
-                structure_rules: 'Use H2 and H3 headings. Clean table of contents.',
+                structure_rules: 'Use H2 and H3 headings. High information density. Do not include raw table of contents in text.',
                 paragraph_style: 'Clear, concise, scannable paragraphs.',
                 image_rules: 'Include relevant visual diagram or hero image.',
                 source_rules: 'Verify factual claims.',
@@ -272,6 +272,49 @@ export class AutopilotExecutor {
           link_label: 'View Technical SEO Health',
           data: { target_url: targetUrl }
         };
+      }
+
+      // ── ACTION: RUN SCHEDULED TASKS ───────────────────────────────────
+      if (instruction.action_type === 'run_scheduled_tasks') {
+        const { data: activeTasks } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('project_id', params.project_id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false });
+
+        if (activeTasks && activeTasks.length > 0) {
+          const targetTask = activeTasks[0];
+          const taskGoal = targetTask.natural_language_instruction || targetTask.name;
+          const { AutopilotNLParser } = await import('./autopilotNLParser');
+          const nlParser = new AutopilotNLParser();
+          const parsedTask = await nlParser.parseInstruction({
+            prompt: taskGoal,
+            domain: website_domain,
+            modeOverride: 'immediate',
+          });
+
+          if (parsedTask.action_type !== 'run_scheduled_tasks') {
+            const subResult = await this.executeImmediateAction({
+              instruction: parsedTask,
+              website_id,
+              website_domain,
+              website_url: params.website_url,
+              project_id: params.project_id,
+              user_id: params.user_id,
+            });
+
+            await supabase
+              .from('tasks')
+              .update({ last_run_at: new Date().toISOString() })
+              .eq('id', targetTask.id);
+
+            return {
+              ...subResult,
+              summary: `Executed task "${targetTask.name}": ${subResult.summary}`,
+            };
+          }
+        }
       }
 
       // ── ACTION: GENERAL OPTIMIZATION / RUN ALL ────────────────────────

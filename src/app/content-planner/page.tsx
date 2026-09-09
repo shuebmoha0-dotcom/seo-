@@ -240,67 +240,13 @@ export default function ContentPlannerPage() {
           let trimmed = block.trim();
           if (!trimmed) return null;
 
-          // 1. Check for Table of Contents (both Gutenberg HTML and Markdown format)
+          // 1. Drop any Table of Contents completely (user requested: zero Table of Contents)
           const isTOC =
             trimmed.includes('wp-block-rank-math-toc-block') ||
             trimmed.includes('rank-math/toc-block') ||
             /^#*\s*table of contents/i.test(trimmed);
 
           if (isTOC) {
-            const links: { href: string; text: string }[] = [];
-
-            // Extract from HTML <a> tags if present
-            const htmlLinkRegex = /<a\s+href="([^"]+)">([\s\S]*?)<\/a>/gi;
-            let hlMatch;
-            while ((hlMatch = htmlLinkRegex.exec(trimmed)) !== null) {
-              links.push({
-                href: hlMatch[1],
-                text: hlMatch[2].replace(/<[^>]+>/g, '').trim(),
-              });
-            }
-
-            // Extract from Markdown links if present
-            if (links.length === 0) {
-              const lines = trimmed.split('\n');
-              lines.forEach(line => {
-                const mdMatch = line.match(/\[([^\]]+)\]\(([^)]+)\)/);
-                if (mdMatch) {
-                  links.push({ href: mdMatch[2], text: mdMatch[1].trim() });
-                }
-              });
-            }
-
-            if (links.length > 0) {
-              return (
-                <div key={bIdx} className="my-6 p-5 rounded-2xl bg-neutral-50 border border-neutral-200 shadow-2xs">
-                  <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-neutral-200/80">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-200/70 flex items-center justify-center text-indigo-600">
-                        <BookOpen className="w-3.5 h-3.5" />
-                      </div>
-                      <h3 className="text-xs font-bold text-neutral-900 uppercase tracking-wider">Table of Contents</h3>
-                    </div>
-                    <span className="text-[10px] font-semibold text-neutral-500 bg-white border border-neutral-200 px-2.5 py-0.5 rounded-full">
-                      {links.length} Sections
-                    </span>
-                  </div>
-                  <nav className="space-y-1.5 pt-1">
-                    {links.map((link, lIdx) => (
-                      <a
-                        key={lIdx}
-                        href={link.href}
-                        className="group flex items-start gap-2 text-xs text-neutral-700 hover:text-indigo-600 transition-colors py-0.5"
-                      >
-                        <span className="text-[10px] text-neutral-400 font-mono mt-0.5 w-4 shrink-0 text-right">{lIdx + 1}.</span>
-                        <span className="font-medium underline-offset-2 group-hover:underline leading-relaxed">{link.text}</span>
-                      </a>
-                    ))}
-                  </nav>
-                </div>
-              );
-            }
-
-            // If it's a TOC block but has no links or is empty, drop it cleanly instead of leaking as an H2
             return null;
           }
 

@@ -122,6 +122,28 @@ export default function AutopilotPage() {
     }
   };
 
+  const [approving, setApproving] = useState(false);
+
+  const handleApproveExecution = async (executionId?: string) => {
+    if (!currentWebsite) return;
+    setApproving(true);
+    try {
+      const res = await fetch('/api/autopilot/tasks/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ execution_id: executionId, website_id: currentWebsite.id })
+      });
+      if (res.ok) {
+        setStatusFeedback({ message: 'All pending action items approved and queued for deployment!', ok: true });
+        await fetchTasks(false);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setApproving(false);
+    }
+  };
+
   const handleRunTaskNow = async (taskId: string) => {
     if (!currentWebsite) return;
     setRunningTaskId(taskId);
@@ -136,6 +158,15 @@ export default function AutopilotPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
+        if (data.link_url) {
+          setLastAction({
+            intent_type: 'immediate_action',
+            action_type: data.action_type || 'task_run',
+            summary: data.summary,
+            link_url: data.link_url,
+            link_label: data.link_label,
+          });
+        }
         setStatusFeedback({ 
           message: data.summary || 'Task executed successfully!', 
           ok: true 
@@ -286,6 +317,44 @@ export default function AutopilotPage() {
                       </Link>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Action Package Awaiting Approval Banner */}
+              {executions.some(e => e.status === 'waiting_for_approval') && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-sm space-y-3 animate-fadeIn">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-amber-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        Human Approval Needed
+                      </span>
+                      <span className="text-xs font-bold text-amber-950">
+                        Autonomous Action Package Proposed
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => handleApproveExecution()}
+                      disabled={approving}
+                      className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5 shadow-xs shrink-0 self-start sm:self-auto"
+                    >
+                      {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <span>Approve & Apply All Actions</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed font-medium">
+                    The autonomous audit identified high-value opportunities and technical fixes that require your approval before automated execution.
+                  </p>
+                  <div className="pt-1 flex items-center gap-4">
+                    <Link
+                      href="/opportunities"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 hover:text-amber-950 underline underline-offset-2"
+                    >
+                      <span>Review Details in Opportunities Hub</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                 </div>
               )}
 
@@ -513,10 +582,22 @@ export default function AutopilotPage() {
                       <div key={exec.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-neutral-50/60 transition-colors">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] uppercase flex items-center gap-1">
-                              <CheckCircle className="w-3 h-3" />
-                              {exec.status}
-                            </span>
+                            {exec.status === 'waiting_for_approval' ? (
+                              <span className="font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md text-[10px] uppercase flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                Awaiting Approval
+                              </span>
+                            ) : exec.status === 'running' ? (
+                              <span className="font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md text-[10px] uppercase flex items-center gap-1">
+                                <Loader2 className="w-3 h-3 text-blue-600 animate-spin" />
+                                Running
+                              </span>
+                            ) : (
+                              <span className="font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[10px] uppercase flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                {exec.status}
+                              </span>
+                            )}
                             <span className="text-neutral-400 font-mono text-[10px]">
                               {exec.completed_at ? new Date(exec.completed_at).toLocaleString() : new Date(exec.started_at).toLocaleString()}
                             </span>
@@ -525,9 +606,22 @@ export default function AutopilotPage() {
                             {exec.result_summary || "Autonomous optimization run executed and logged."}
                           </p>
                         </div>
-                        <div className="shrink-0 flex items-center gap-2 text-[11px] text-neutral-500">
-                          <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-                          <span>Auto-Verified</span>
+                        <div className="shrink-0 flex items-center gap-2 text-[11px]">
+                          {exec.status === 'waiting_for_approval' ? (
+                            <button
+                              onClick={() => handleApproveExecution(exec.id)}
+                              disabled={approving}
+                              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                            >
+                              {approving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              <span>Approve</span>
+                            </button>
+                          ) : (
+                            <div className="flex items-center gap-1 text-neutral-500">
+                              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Auto-Verified</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
