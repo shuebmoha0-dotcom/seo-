@@ -98,6 +98,16 @@ export async function POST(request: Request) {
       } catch (err: any) {
         console.warn('[Competitor Scan] LLM classification fallback:', err.message);
       }
+    } else {
+      // DataForSEO not configured: run autonomous AI competitor discovery
+      try {
+        discoveredCompetitors = await competitorAgent.discoverCompetitorsDirect(
+          website.domain,
+          seedKeywords
+        );
+      } catch (err: any) {
+        console.warn('[Competitor Scan] Direct discovery error:', err.message);
+      }
     }
 
     // Fallback classification if LLM is throttled

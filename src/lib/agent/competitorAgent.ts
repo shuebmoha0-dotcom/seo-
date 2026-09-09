@@ -43,6 +43,44 @@ export class CompetitorAgent {
   }
 
   /**
+   * Discovers and classifies real SEO and industry competitors autonomously
+   * without requiring third-party DataForSEO API keys.
+   */
+  async discoverCompetitorsDirect(
+    customerDomain: string,
+    targetKeywords: string[],
+    siteDescription?: string
+  ) {
+    console.log('[CompetitorAgent] Discovering competitors autonomously via AI intelligence...');
+
+    const { object } = await LLMProvider.generateObject({
+      agent: 'CompetitorAgent',
+      schema: z.object({
+        competitors: z.array(z.object({
+          domain: z.string(),
+          classification: z.enum(['direct', 'serp', 'content', 'commercial']),
+          reason: z.string(),
+          relevance_score: z.number().min(1).max(100),
+          overlap_keywords: z.array(z.string())
+        }))
+      }),
+      prompt: `
+        You are an expert SEO Competitor Intelligence Agent.
+        Discover and analyze the top real competitors for:
+        Target Domain: "${customerDomain}"
+        Target Keywords: ${JSON.stringify(targetKeywords)}
+        ${siteDescription ? `Site Description: "${siteDescription}"` : ''}
+
+        Identify 5 to 8 real competitor domains that directly or organically compete in this exact space.
+        Include direct product competitors, SERP competitors, and authoritative content competitors.
+        Provide concrete reasons, relevance scores (65-98), and 3 to 5 overlapping keywords.
+      `
+    });
+
+    return object.competitors.sort((a: any, b: any) => b.relevance_score - a.relevance_score);
+  }
+
+  /**
    * Analyzes keyword gaps between the customer and a competitor.
    * Identifies long-tail opportunities and high-intent gaps.
    */

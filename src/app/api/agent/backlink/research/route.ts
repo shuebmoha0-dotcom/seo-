@@ -34,33 +34,53 @@ export async function POST(request: Request) {
 
     const ownDomain = website.domain.toLowerCase().replace(/^www\./, '');
 
-    for (const item of items) {
-      const itemDomain = (item.domain || '').toLowerCase().replace(/^www\./, '');
-      const itemUrl = item.url;
+    if (items.length > 0) {
+      for (const item of items) {
+        const itemDomain = (item.domain || '').toLowerCase().replace(/^www\./, '');
+        const itemUrl = item.url;
 
-      if (!itemDomain || itemDomain === ownDomain) continue;
-      if (itemDomain.includes('google.') || itemDomain.includes('youtube.') || itemDomain.includes('wikipedia.')) continue;
+        if (!itemDomain || itemDomain === ownDomain) continue;
+        if (itemDomain.includes('google.') || itemDomain.includes('youtube.') || itemDomain.includes('wikipedia.')) continue;
 
-      const prospect = agent.evaluateProspect(
-        itemUrl || `https://${itemDomain}/resources`,
-        itemDomain,
-        'resource_page'
-      );
+        const prospect = agent.evaluateProspect(
+          itemUrl || `https://${itemDomain}/resources`,
+          itemDomain,
+          'resource_page'
+        );
 
-      evaluatedProspects.push(prospect);
+        evaluatedProspects.push(prospect);
 
-      await supabase.from('backlink_prospects').upsert({
-        website_id,
-        prospect_url: prospect.url,
-        domain: prospect.domain,
-        category: prospect.category,
-        relevance_score: prospect.relevance_score,
-        quality_score: prospect.quality_score,
-        opportunity_score: prospect.opportunity_score,
-        risk_score: prospect.risk_score,
-        outreach_priority: prospect.outreach_priority,
-        contact_page: prospect.contact_page,
-      }, { onConflict: 'website_id,prospect_url' });
+        await supabase.from('backlink_prospects').upsert({
+          website_id,
+          prospect_url: prospect.url,
+          domain: prospect.domain,
+          category: prospect.category,
+          relevance_score: prospect.relevance_score,
+          quality_score: prospect.quality_score,
+          opportunity_score: prospect.opportunity_score,
+          risk_score: prospect.risk_score,
+          outreach_priority: prospect.outreach_priority,
+          contact_page: prospect.contact_page,
+        }, { onConflict: 'website_id,prospect_url' });
+      }
+    } else {
+      // Autonomous AI Link Prospecting fallback when DataForSEO is not configured
+      const directProspects = await agent.discoverProspectsDirect(ownDomain, topic);
+      for (const p of directProspects) {
+        evaluatedProspects.push(p);
+        await supabase.from('backlink_prospects').upsert({
+          website_id,
+          prospect_url: p.url,
+          domain: p.domain,
+          category: p.category,
+          relevance_score: p.relevance_score,
+          quality_score: p.quality_score,
+          opportunity_score: p.opportunity_score,
+          risk_score: p.risk_score,
+          outreach_priority: p.outreach_priority,
+          contact_page: p.contact_page || `https://${p.domain}/contact`,
+        }, { onConflict: 'website_id,prospect_url' });
+      }
     }
 
     return NextResponse.json({ success: true, prospects: evaluatedProspects });
