@@ -55,7 +55,17 @@ export function PlatformLogo({ provider, className = 'w-7 h-7', size = 28 }: Pla
     );
   }
 
-  // 5. Custom Website API / Webhook (REST API Vector)
+  // 5. Telegram Mobile Controller (Official Telegram Logo)
+  if (norm.includes('telegram')) {
+    return (
+      <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="12" fill="#2AABEE" />
+        <path d="M17.5 7.5L5.5 12.1L9.2 13.5L14.7 9.8L10.3 14.5L10.1 17.5L12.4 15.4L15.3 17.5L17.5 7.5Z" fill="#FFFFFF" />
+      </svg>
+    );
+  }
+
+  // 6. Custom Website API / Webhook (REST API Vector)
   return (
     <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

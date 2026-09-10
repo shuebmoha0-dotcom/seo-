@@ -88,6 +88,18 @@ export async function GET(request: Request) {
       ];
     }
 
+    // Map custom telegram integration for clean frontend rendering
+    data = (data || []).map((i: any) => {
+      if (i.provider === 'custom' && i.config?.type === 'telegram') {
+        return {
+          ...i,
+          provider: 'telegram',
+          display_name: 'Telegram Mobile Control',
+        };
+      }
+      return i;
+    });
+
     return NextResponse.json({ integrations: data || [] });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

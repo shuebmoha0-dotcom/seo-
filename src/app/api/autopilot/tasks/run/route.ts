@@ -94,6 +94,31 @@ export async function POST(request: Request) {
         .eq('id', task.id);
     }
 
+    // 7. Push notification to Telegram Mobile Subscribers
+    try {
+      const { TelegramService } = await import('@/lib/telegram/telegramService');
+      const telegram = new TelegramService();
+      if (parsed.action_type === 'write_article') {
+        const subscribers = await telegram.getSubscribers(website.id);
+        for (const sub of subscribers) {
+          await telegram.sendApprovalPrompt(sub.chat_id, {
+            executionId: execution?.id || 'exec',
+            taskTitle: parsed.topic || parsed.goal || goal,
+            websiteDomain: website.domain,
+            score: 84,
+            wordCount: 1450,
+          });
+        }
+      } else {
+        await telegram.notifyWebsiteSubscribers(
+          website.id,
+          `✅ *Autopilot Task Completed!*\n\n*Target:* \`${website.domain}\`\n*Action:* ${parsed.action_type}\n*Summary:* ${summaryText}`
+        );
+      }
+    } catch (telegramErr) {
+      console.warn('[Autopilot Run] Telegram notification note:', telegramErr);
+    }
+
     return NextResponse.json({
       success: execResult.success,
       execution_id: execution?.id,

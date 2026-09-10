@@ -5,7 +5,7 @@ import {
   Globe, Search, BarChart2, Layers, GitBranch, FileCode, CheckCircle2,
   AlertCircle, ShieldAlert, RefreshCw, Loader2, ArrowRight, Shield, Zap,
   DollarSign, CheckSquare, XCircle, Info, ExternalLink, Cpu, Key, HelpCircle,
-  Code2, Check, Settings2, Download
+  Code2, Check, Settings2, Download, Smartphone, Send
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -82,6 +82,17 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     status: "disconnected",
     status_message: "Not configured",
     capabilities: ["READ_CONTENT", "CREATE_DRAFT", "UPDATE_CONTENT", "UPLOAD_MEDIA", "PUBLISH_CONTENT"],
+    config: {},
+  },
+  {
+    id: "int-telegram",
+    provider: "telegram",
+    display_name: "Telegram Mobile Controller",
+    icon: "📱",
+    description: "Control your SEO Agent from your phone. Send tasks via chat, receive draft alerts, and approve with 1 tap.",
+    status: "disconnected",
+    status_message: "Not linked to mobile",
+    capabilities: ["MOBILE_CONTROL", "COMMAND_DISPATCH", "INSTANT_ALERTS", "ONE_TAP_APPROVAL"],
     config: {},
   },
 ];
@@ -210,6 +221,80 @@ export default function IntegrationsPage() {
 
   const [analysisStarted, setAnalysisStarted] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
+
+  // Telegram Modal State
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [telegramData, setTelegramData] = useState<{
+    configured: boolean;
+    bot_username: string;
+    pairing_url: string;
+    subscribers: any[];
+  } | null>(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [telegramTesting, setTelegramTesting] = useState(false);
+  const [telegramMsg, setTelegramMsg] = useState<{ ok?: boolean; text?: string } | null>(null);
+
+  const openTelegramModal = async () => {
+    setShowTelegramModal(true);
+    setTelegramLoading(true);
+    setTelegramMsg(null);
+    try {
+      const siteId = currentWebsite?.id || "";
+      const res = await fetch(`/api/telegram/setup?website_id=${siteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTelegramData(data);
+      }
+    } catch (err) {
+      console.error("Failed to load Telegram info:", err);
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
+  const handleTestTelegramPing = async () => {
+    if (!currentWebsite?.id) return;
+    setTelegramTesting(true);
+    setTelegramMsg(null);
+    try {
+      const res = await fetch("/api/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test_ping", website_id: currentWebsite.id }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTelegramMsg({ ok: true, text: `Test message sent successfully to ${data.count} phone(s)! Check your Telegram.` });
+      } else {
+        setTelegramMsg({ ok: false, text: data.error || "Failed to send test message." });
+      }
+    } catch (err: any) {
+      setTelegramMsg({ ok: false, text: err.message || "Failed to reach server." });
+    } finally {
+      setTelegramTesting(false);
+    }
+  };
+
+  const handleDisconnectTelegram = async (chatId?: string) => {
+    if (!currentWebsite?.id) return;
+    try {
+      const res = await fetch("/api/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect", website_id: currentWebsite.id, chat_id: chatId }),
+      });
+      if (res.ok) {
+        setIntegrations(prev => prev.map(i => i.provider === "telegram" ? {
+          ...i,
+          status: "disconnected",
+          status_message: "No mobile devices connected",
+        } : i));
+        openTelegramModal();
+      }
+    } catch (err) {
+      console.error("Failed to disconnect Telegram:", err);
+    }
+  };
 
   const initiateOAuth = (provider: string) => {
     setOauthError(null);
@@ -744,19 +829,26 @@ export default function IntegrationsPage() {
                                 else if (item.provider === "github") openGithubRepoSelector(item.id);
                                 else if (item.provider === "wordpress") setShowWpModal(true);
                                 else if (item.provider === "custom_api") setShowCustomApiModal(true);
+                                else if (item.provider === "telegram") openTelegramModal();
                               }}
                               className="text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1">
                               <Settings2 className="w-3 h-3" /> Configure
                             </button>
                             <button
-                              onClick={() => handleVerify(item.id)}
-                              disabled={item.is_testing}
+                              onClick={() => {
+                                if (item.provider === "telegram") handleTestTelegramPing();
+                                else handleVerify(item.id);
+                              }}
+                              disabled={item.is_testing || (item.provider === "telegram" && telegramTesting)}
                               className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[11px] font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
-                              {item.is_testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                              {(item.is_testing || (item.provider === "telegram" && telegramTesting)) ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
                               Verify
                             </button>
                             <button
-                              onClick={() => handleDisconnect(item.id)}
+                              onClick={() => {
+                                if (item.provider === "telegram") handleDisconnectTelegram();
+                                else handleDisconnect(item.id);
+                              }}
                               className="text-neutral-400 hover:text-red-600 text-[11px] font-medium px-2 py-1 transition-colors">
                               Disconnect
                             </button>
@@ -772,12 +864,16 @@ export default function IntegrationsPage() {
                                 else if (item.provider === "github") setShowGithubModal(true);
                                 else if (item.provider === "wordpress") { setShowWpModal(true); setWpFeedback(null); }
                                 else if (item.provider === "custom_api") { setShowCustomApiModal(true); setCustomFeedback(null); }
+                                else if (item.provider === "telegram") openTelegramModal();
                               }}
                               className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors shadow-sm">
                               <RefreshCw className="w-3 h-3" /> Reconnect Now
                             </button>
                             <button
-                              onClick={() => handleDisconnect(item.id)}
+                              onClick={() => {
+                                if (item.provider === "telegram") handleDisconnectTelegram();
+                                else handleDisconnect(item.id);
+                              }}
                               className="text-neutral-400 hover:text-red-600 text-[11px] font-medium px-2 py-1 transition-colors">
                               Disconnect
                             </button>
@@ -792,6 +888,7 @@ export default function IntegrationsPage() {
                               else if (item.provider === "github") setShowGithubModal(true);
                               else if (item.provider === "wordpress") { setShowWpModal(true); setWpFeedback(null); }
                               else if (item.provider === "custom_api") { setShowCustomApiModal(true); setCustomFeedback(null); }
+                              else if (item.provider === "telegram") openTelegramModal();
                             }}
                             className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm flex items-center gap-1">
                             <Key className="w-3 h-3" /> Connect {item.display_name.split(" ")[0]}
@@ -1419,6 +1516,150 @@ export default function IntegrationsPage() {
                 Understood
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 7. Telegram Mobile Controller Modal ── */}
+      {showTelegramModal && (
+        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#2AABEE]/10 flex items-center justify-center text-[#2AABEE]">
+                  <PlatformLogo provider="telegram" className="w-6 h-6" size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-neutral-900 text-base">Telegram Mobile Controller</h3>
+                  <p className="text-[11px] text-neutral-500">Control your SEO Agent & approve drafts from your phone</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowTelegramModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+            </div>
+
+            {telegramLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-neutral-500 text-xs">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                <p>Loading Telegram connection...</p>
+              </div>
+            ) : (
+              <div className="space-y-4 text-xs">
+                {!telegramData?.configured && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" /> Bot Token Setup Required
+                    </p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      To activate Telegram, create a free bot on Telegram via <strong className="font-mono">@BotFather</strong>, then add your token to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">.env.local</code> as:
+                    </p>
+                    <div className="bg-amber-100/70 p-2 rounded-lg font-mono text-[10px] text-amber-900 select-all">
+                      TELEGRAM_BOT_TOKEN="your-bot-token-from-botfather"
+                    </div>
+                  </div>
+                )}
+
+                {/* Pairing Steps */}
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-neutral-900 text-xs flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-indigo-600" /> Link Your Phone
+                    </span>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      Target: {currentWebsite?.domain || "Your Site"}
+                    </span>
+                  </div>
+
+                  <p className="text-neutral-600 text-[11px] leading-relaxed">
+                    Open the bot in Telegram on your phone and tap <strong>START</strong>. Your phone will be instantly paired with this dashboard.
+                  </p>
+
+                  <a
+                    href={telegramData?.pairing_url || `https://t.me/${telegramData?.bot_username || 'MySeoAgentBot'}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full bg-[#2AABEE] hover:bg-[#229ED9] text-white font-bold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm text-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" /> Open in Telegram App
+                    <ExternalLink className="w-3 h-3 opacity-70" />
+                  </a>
+
+                  {telegramData?.pairing_url && (
+                    <div className="text-[10px] text-neutral-500 flex items-center justify-between bg-white border border-neutral-200 p-2 rounded-lg font-mono">
+                      <span className="truncate">{telegramData.pairing_url}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Paired Devices */}
+                <div className="border border-neutral-200 rounded-xl p-4 space-y-2">
+                  <h4 className="font-bold text-neutral-900 text-xs flex items-center justify-between">
+                    <span>Connected Mobile Devices</span>
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      {telegramData?.subscribers?.length || 0} active
+                    </span>
+                  </h4>
+
+                  {telegramData?.subscribers && telegramData.subscribers.length > 0 ? (
+                    <div className="space-y-1.5 pt-1">
+                      {telegramData.subscribers.map((sub: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span className="font-semibold text-neutral-800">
+                              {sub.first_name || sub.username || "Telegram User"}
+                            </span>
+                            {sub.username && (
+                              <span className="text-[10px] text-neutral-400 font-mono">@{sub.username}</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectTelegram(sub.chat_id)}
+                            className="text-neutral-400 hover:text-red-600 text-[10px] font-medium"
+                          >
+                            Unlink
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-neutral-400 italic pt-1">
+                      No phones linked yet. Click the button above to pair your Telegram.
+                    </p>
+                  )}
+                </div>
+
+                {/* Test & Actions */}
+                {telegramMsg && (
+                  <div className={`p-3 rounded-xl text-xs flex items-start gap-2 border ${
+                    telegramMsg.ok ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"
+                  }`}>
+                    {telegramMsg.ok ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />}
+                    <p>{telegramMsg.text}</p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-neutral-100">
+                  <button
+                    type="button"
+                    onClick={handleTestTelegramPing}
+                    disabled={telegramTesting || !telegramData?.subscribers?.length}
+                    className="bg-neutral-100 hover:bg-neutral-200 disabled:opacity-40 text-neutral-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors flex items-center gap-1.5"
+                  >
+                    {telegramTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-[#2AABEE]" />}
+                    Send Test Ping to Phone
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowTelegramModal(false)}
+                    className="bg-neutral-900 hover:bg-neutral-800 text-white font-bold px-4 py-2 rounded-xl text-xs transition-colors"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
