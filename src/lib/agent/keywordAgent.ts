@@ -150,18 +150,29 @@ export class KeywordAgent {
 Domain: "${params.domain}"
 Core Topic / Niche: "${topic}"
 ${params.siteDescription ? `Site Description: ${params.siteDescription}` : ''}
-Mode: ${params.mode === 'established' ? 'Established site (optimize & scale)' : 'New site (low-competition long-tail & problem-solution high-converting targets)'}
+Mode: ${params.mode === 'established' ? 'Established site (optimize & scale)' : 'New site (low-competition long-tail & fast-win high-converting targets)'}
 
 ${params.projectMemory ? `\n🧠 PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY:\n${params.projectMemory}\n` : ''}
 ${params.projectInstructions ? `\n📋 PROJECT CUSTOM INSTRUCTIONS:\n${params.projectInstructions}\n` : ''}
+
+${params.mode !== 'established' ? `
+CRITICAL MANDATE FOR NEW / LOW-AUTHORITY SITES:
+1. STRICT KEYWORD DIFFICULTY CAP: All keyword difficulties MUST be between 8 and 30 (KD <= 30). NEVER recommend hard or medium-high keywords (KD > 35) because a new site will not rank against established giants.
+2. LONG-TAIL SPECIFICITY: Target specific 3 to 6 word search phrases (e.g. "how to automate cold email warmup with ai", "best make alternative for agency workflows").
+3. REAL TRAFFIC SWEET SPOT: Focus on keywords with realistic, focused monthly search volume (150 to 1,500 searches/mo). These are active buyer queries where top search results are weak, outdated, or forum discussions.
+4. FAST-WIN INTENT: Every keyword must represent an immediate opportunity where a well-structured article can realistically achieve Page 1 Google rankings in 2 to 4 weeks.
+` : `
+MANDATE FOR ESTABLISHED SITES:
+Balance high-volume competitive pillar terms (KD 40-70, volume 2,000-15,000) with supporting long-tail clusters to expand market share.
+`}
 
 Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS specifically aligned with this domain and topic.
 For each cluster:
 1. Provide a clear cluster name (e.g. "Cold Sales Email Templates", "Email Deliverability & Warmup", "B2B Lead Generation Tactics").
 2. Provide a high-intent primary keyword (Pillar).
 3. Provide 3 to 5 long-tail secondary keywords (Supporting articles).
-4. Provide realistic estimated search volumes (e.g., 250 to 8,500), keyword difficulties (e.g., 15 to 65), business relevance scores (80-100), and specific tactical evidence explaining the search intent and revenue potential.`,
-        system: 'You are a world-class SEO strategist and keyword intelligence architect who designs high-converting topical authority maps.'
+4. Provide realistic estimated search volumes, keyword difficulties strictly respecting the site maturity rules above, business relevance scores (80-100), and specific tactical evidence explaining the search intent and revenue potential.`,
+        system: 'You are an elite SEO strategist and growth intelligence architect who identifies fast-win, low-competition, high-converting keyword opportunities.'
       });
 
       const allOpps: KeywordOpportunity[] = [];
