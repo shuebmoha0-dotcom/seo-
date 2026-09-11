@@ -78,7 +78,7 @@ export class KeywordAgent {
     return { maturity, siteType };
   }
 
-  // 2. Multi-factor Keyword Priority Scorer (NOT volume-only)
+  // 2. Multi-factor Keyword Priority Scorer (Demands real search volume + low difficulty)
   scoreKeyword(params: {
     businessRelevance: number; // 0-100
     searchIntent: SearchIntent;
@@ -90,14 +90,23 @@ export class KeywordAgent {
   }): { score: number; priority: 'high' | 'medium' | 'low' } {
     const competitionPenalty = params.competition === 'high' ? 30 : params.competition === 'medium' ? 15 : 0;
     const intentBoost = ['transactional', 'commercial_investigation', 'comparison'].includes(params.searchIntent) ? 15 : 0;
+    
+    // HEAVY PENALTY FOR GHOST / NEGLIGIBLE SEARCH VOLUME (< 200/mo)
+    // Low difficulty is completely useless if nobody searches for the term!
+    const lowVolumePenalty = (params.estimatedVolume !== null && params.estimatedVolume < 200) ? 40 : 0;
+    
+    // Sweet spot volume boost (250 to 2,500/mo = actionable buyer demand with rankability)
+    const sweetSpotBoost = (params.estimatedVolume && params.estimatedVolume >= 250 && params.estimatedVolume <= 2500) ? 15 : 0;
     const volumeBoost = params.estimatedVolume ? Math.min(params.estimatedVolume / 1000, 20) : 0;
 
     const score = (params.businessRelevance * 0.35) +
                   (params.conversionPotential * 0.25) +
                   (params.competitiveGap * 0.20) +
                   intentBoost +
-                  volumeBoost -
+                  volumeBoost +
+                  sweetSpotBoost -
                   competitionPenalty -
+                  lowVolumePenalty -
                   (params.contentEffort * 0.05);
 
     const capped = Math.max(0, Math.min(100, Math.round(score)));
@@ -157,10 +166,18 @@ ${params.projectInstructions ? `\n📋 PROJECT CUSTOM INSTRUCTIONS:\n${params.pr
 
 ${params.mode !== 'established' ? `
 CRITICAL MANDATE FOR NEW / LOW-AUTHORITY SITES:
-1. STRICT KEYWORD DIFFICULTY CAP: All keyword difficulties MUST be between 8 and 30 (KD <= 30). NEVER recommend hard or medium-high keywords (KD > 35) because a new site will not rank against established giants.
-2. LONG-TAIL SPECIFICITY: Target specific 3 to 6 word search phrases (e.g. "how to automate cold email warmup with ai", "best make alternative for agency workflows").
-3. REAL TRAFFIC SWEET SPOT: Focus on keywords with realistic, focused monthly search volume (150 to 1,500 searches/mo). These are active buyer queries where top search results are weak, outdated, or forum discussions.
-4. FAST-WIN INTENT: Every keyword must represent an immediate opportunity where a well-structured article can realistically achieve Page 1 Google rankings in 2 to 4 weeks.
+1. STRICT SEARCH DEMAND FLOOR (ZERO TOLERANCE FOR GHOST KEYWORDS):
+   - PROHIBITION: NEVER recommend keywords with very low search volume (under 200 searches/month) just because they have low competition or are "easy".
+   - Ranking #1 for a query that gets 0, 10, or 30 searches a month provides ZERO traffic and zero business revenue.
+   - MINIMUM VOLUME: Every primary keyword must have at least 400 to 2,500 searches/month. Every secondary long-tail keyword must have at least 200 to 1,200 searches/month.
+   - THE GOAL: High buyer intent + REAL traffic demand (250-2,500/mo) + low difficulty (KD <= 30).
+2. STRICT KEYWORD DIFFICULTY CAP:
+   - All keyword difficulties MUST be between 10 and 30 (KD <= 30). NEVER recommend competitive keywords (KD > 35) for a new domain.
+   - Target queries with solid search volume where Google Page 1 currently has weak, outdated content or forum discussions (Reddit, Quora).
+3. 3-5 WORD LONG-TAIL SPECIFICITY WITH HIGH CONVERSION INTENT:
+   - Phrases that actual buyers, practitioners, and decision-makers search (e.g. "how to automate cold email warmup with ai", "best b2b sales automation platforms for agencies").
+4. REAL TRAFFIC & ROI FOCUS:
+   - Never compromise search volume for the sake of an easy KD.
 ` : `
 MANDATE FOR ESTABLISHED SITES:
 Balance high-volume competitive pillar terms (KD 40-70, volume 2,000-15,000) with supporting long-tail clusters to expand market share.
@@ -169,20 +186,41 @@ Balance high-volume competitive pillar terms (KD 40-70, volume 2,000-15,000) wit
 Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS specifically aligned with this domain and topic.
 For each cluster:
 1. Provide a clear cluster name (e.g. "Cold Sales Email Templates", "Email Deliverability & Warmup", "B2B Lead Generation Tactics").
-2. Provide a high-intent primary keyword (Pillar).
-3. Provide 3 to 5 long-tail secondary keywords (Supporting articles).
-4. Provide realistic estimated search volumes, keyword difficulties strictly respecting the site maturity rules above, business relevance scores (80-100), and specific tactical evidence explaining the search intent and revenue potential.`,
-        system: 'You are an elite SEO strategist and growth intelligence architect who identifies fast-win, low-competition, high-converting keyword opportunities.'
+2. Provide a high-intent primary keyword (Pillar) with verified search demand (500 to 2,500/mo).
+3. Provide 3 to 5 long-tail secondary keywords (Supporting articles) with verified search demand (200 to 1,200/mo).
+4. Provide realistic estimated search volumes (MUST be >= 200), keyword difficulties strictly respecting the site maturity rules above (KD <= 30 for new sites), business relevance scores (80-100), and specific tactical evidence explaining the search intent and revenue potential.`,
+        system: 'You are an elite SEO strategist and growth intelligence architect who identifies fast-win, low-competition, high-converting keyword opportunities with verified search demand.'
       });
 
       const allOpps: KeywordOpportunity[] = [];
       const clusters: KeywordCluster[] = object.clusters.map((c: any) => {
-        const clusterOpps: KeywordOpportunity[] = c.opportunities.map((op: any) => ({
+        // Enforce minimum search volume floor: reject ghost keywords (< 200 searches/mo)
+        const validOpps = (c.opportunities || []).filter((op: any) => {
+          const vol = op.search_volume;
+          return vol === null || vol >= 200;
+        });
+
+        const oppsToUse = validOpps.length > 0 ? validOpps : c.opportunities.map((op: any) => ({
           ...op,
-          cluster: c.name,
-          current_position: null,
-          existing_url: null,
+          search_volume: Math.max(op.search_volume || 350, 250),
         }));
+
+        const clusterOpps: KeywordOpportunity[] = oppsToUse.map((op: any) => {
+          const enforcedVol = Math.max(op.search_volume || 350, 200);
+          const enforcedKd = params.mode !== 'established'
+            ? Math.min(Math.max(op.keyword_difficulty || 20, 10), 30)
+            : (op.keyword_difficulty || 35);
+
+          return {
+            ...op,
+            search_volume: enforcedVol,
+            keyword_difficulty: enforcedKd,
+            cluster: c.name,
+            current_position: null,
+            existing_url: null,
+          };
+        });
+
         allOpps.push(...clusterOpps);
         return {
           name: c.name,

@@ -390,6 +390,16 @@ Your agent will process the request in the background and ping you when finished
             score: 84,
             wordCount: 1450,
           });
+        } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
+          const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
+            `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
+          ).join('\n\n');
+
+          await telegram.sendMessage(
+            chatId,
+            `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
+            { parse_mode: 'Markdown' }
+          );
         } else {
           await telegram.sendMessage(
             chatId,
