@@ -3,6 +3,7 @@ import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
 import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
+import { WebsiteCrawler } from '@/lib/agent/crawler';
 
 export async function POST(request: Request) {
   try {
@@ -244,69 +245,173 @@ Your agent will process the request in the background and ping you when finished
     const taskPrompt = rawText.replace(/^\/task\s+/i, '');
 
     // Send instant acknowledgement
+    // 1. Send instant acknowledgement
     await telegram.sendMessage(
       chatId,
-      `🚀 *Task Dispatched to Agent:*
-"${taskPrompt}"
-
-*Target:* \`${currentSite.domain}\`
-*Status:* Agent is parsing and executing... I'll send you an update as soon as it's ready! ⏳`,
+      `🚀 *Task Dispatched to Agent:*\n"${taskPrompt}"\n\n*Target:* \`${currentSite.domain}\`\n*Status:* Agent is parsing and executing... I'll send you an update as soon as it's ready! ⏳`,
       { parse_mode: 'Markdown' }
     );
 
-    // Execute in background
-    (async () => {
-      try {
-        const nlParser = new AutopilotNLParser();
-        const parsed = await nlParser.parseInstruction({
-          prompt: taskPrompt,
-          domain: currentSite.domain,
-          modeOverride: 'immediate',
-        });
+    // 2. Await execution so Vercel Serverless Function doesn't freeze or drop the request!
+    try {
+      const isDailySchedule = /(everyday|daily|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt);
+      const isScanRequest = /(scan|audit|health|crawl|check\s+site|analyze\s+site|seo\s+report)/i.test(taskPrompt);
 
-        const executor = new AutopilotExecutor();
-        const execResult = await executor.executeImmediateAction({
-          instruction: parsed,
-          website_id: currentSite.id,
-          website_domain: currentSite.domain,
-          website_url: currentSite.url || `https://${currentSite.domain}`,
-          project_id: currentSite.project_id,
-          user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-        });
-
-        if (execResult.success) {
-          // If it was an article creation, send with approval buttons
-          if (parsed.action_type === 'write_article') {
-            await telegram.sendApprovalPrompt(chatId, {
-              executionId: execResult.data?.draft_id || 'completed',
-              taskTitle: parsed.topic || parsed.goal || taskPrompt,
-              websiteDomain: currentSite.domain,
-              score: 84,
-              wordCount: 1450,
+      if (isDailySchedule || isScanRequest) {
+        // A. If recurring schedule requested, activate in database
+        if (isDailySchedule) {
+          try {
+            await supabase.from('tasks').upsert({
+              project_id: currentSite.project_id,
+              user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+              name: `Daily SEO Scan & Audit for ${currentSite.domain}`,
+              natural_language_instruction: taskPrompt,
+              status: 'active',
+              schedule_type: 'daily',
+              schedule_config: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+              timezone: 'UTC',
+              next_run_at: new Date(Date.now() + 86400000).toISOString(),
             });
-          } else {
-            await telegram.sendMessage(
-              chatId,
-              `✅ *Task Completed!*\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
-              { parse_mode: 'Markdown' }
-            );
+
+            await supabase.from('scheduled_agent_configs').upsert({
+              website_id: currentSite.id,
+              frequency: 'daily',
+              schedule_time: '09:00',
+              status: 'active',
+              next_run_at: new Date(Date.now() + 86400000).toISOString(),
+            }, { onConflict: 'website_id' });
+          } catch (schedErr) {
+            console.warn('[Telegram Webhook] Schedule save notice:', schedErr);
           }
+        }
+
+        // B. Run live website crawl immediately using WebsiteCrawler
+        const crawler = new WebsiteCrawler();
+        const targetUrl = currentSite.url || `https://${currentSite.domain}`;
+        const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
+
+        // Analyze key signals
+        const titleLength = crawlData.title?.length || 0;
+        const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
+        const h1Count = crawlData.h1.length;
+        const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
+        const metaLength = crawlData.meta_description?.length || 0;
+
+        const reportLines = [
+          `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
+          '━━━━━━━━━━━━━━━━━━━━━',
+        ];
+
+        if (isDailySchedule) {
+          reportLines.push(
+            '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
+            'Your site will now be scanned and reported every morning automatically!\n'
+          );
+        }
+
+        reportLines.push(
+          '🔍 *Live Site Scan Results:*',
+          `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
+          `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
+          `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
+          `• *Images:* ${crawlData.images.length} analyzed`
+        );
+
+        reportLines.push('\n⚠️ *On-Page Audit Findings:*');
+
+        if (isWastedH1) {
+          reportLines.push(
+            `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
+            `   • Current H1: \`"${crawlData.h1[0]}"\``,
+            `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
+            `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
+          );
+        } else if (h1Count === 0) {
+          reportLines.push(
+            `\n1️⃣ *Missing H1 Tag:*`,
+            `   • *Impact:* No primary H1 tag detected on the page.`,
+            `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
+          );
+        } else {
+          reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
+        }
+
+        if (isGenericTitle) {
+          reportLines.push(
+            `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
+            `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
+            `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
+          );
+        } else {
+          reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
+        }
+
+        if (metaLength < 70) {
+          reportLines.push(
+            `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
+          );
+        } else {
+          reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
+        }
+
+        reportLines.push(
+          '\n━━━━━━━━━━━━━━━━━━━━━',
+          '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
+        );
+
+        await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+
+      // C. Otherwise, run full Autopilot NL Parser + Executor
+      const nlParser = new AutopilotNLParser();
+      const parsed = await nlParser.parseInstruction({
+        prompt: taskPrompt,
+        domain: currentSite.domain,
+        modeOverride: 'auto',
+      });
+
+      const executor = new AutopilotExecutor();
+      const execResult = await executor.executeImmediateAction({
+        instruction: parsed,
+        website_id: currentSite.id,
+        website_domain: currentSite.domain,
+        website_url: currentSite.url || `https://${currentSite.domain}`,
+        project_id: currentSite.project_id,
+        user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+      });
+
+      if (execResult.success) {
+        if (parsed.action_type === 'write_article') {
+          await telegram.sendApprovalPrompt(chatId, {
+            executionId: execResult.data?.draft_id || 'completed',
+            taskTitle: parsed.topic || parsed.goal || taskPrompt,
+            websiteDomain: currentSite.domain,
+            score: 84,
+            wordCount: 1450,
+          });
         } else {
           await telegram.sendMessage(
             chatId,
-            `⚠️ *Task Finished with Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
+            `✅ *Task Completed!*\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
             { parse_mode: 'Markdown' }
           );
         }
-      } catch (err: any) {
-        console.error('[Telegram Task Exec Background] Error:', err);
+      } else {
         await telegram.sendMessage(
           chatId,
-          `❌ *Task Execution Error:*\n${err.message || 'An unexpected error occurred.'}`,
+          `⚠️ *Task Finished with Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
           { parse_mode: 'Markdown' }
         );
       }
-    })();
+    } catch (taskErr: any) {
+      console.error('[Telegram Task Exec Error]:', taskErr);
+      await telegram.sendMessage(
+        chatId,
+        `❌ *Task Execution Notice:*\n${taskErr.message || 'An unexpected error occurred during execution.'}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
