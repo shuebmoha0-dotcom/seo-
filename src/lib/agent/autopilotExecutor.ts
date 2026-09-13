@@ -17,14 +17,26 @@ export interface AutopilotExecutionResult {
   error?: string;
 }
 
+import { after } from 'next/server';
+
 function safeBackground(fn: () => Promise<void>) {
-  setImmediate(async () => {
-    try {
-      await fn();
-    } catch (err: any) {
-      console.error('[Autopilot Executor Background Error]:', err?.message || err);
-    }
-  });
+  try {
+    after(async () => {
+      try {
+        await fn();
+      } catch (err: any) {
+        console.error('[Autopilot Executor Background Error]:', err?.message || err);
+      }
+    });
+  } catch (e) {
+    setImmediate(async () => {
+      try {
+        await fn();
+      } catch (err: any) {
+        console.error('[Autopilot Executor Background Error]:', err?.message || err);
+      }
+    });
+  }
 }
 
 export class AutopilotExecutor {
@@ -48,11 +60,90 @@ export class AutopilotExecutor {
     }
 
     try {
+      // 0. Fetch Project Memory & Content Rules for Niche/Brand Context
+      let projectInstructions = '';
+      let projectMemory = '';
+      let websiteAudience = `Audience interested in ${website_domain}`;
+      let contentRules = {
+        word_count_min: 1200,
+        word_count_max: 1600,
+        language: 'U.S. English',
+        tone: 'Authoritative, practical, practitioner-first',
+        audience: websiteAudience,
+        author_style: 'Experienced technical consultant and industry specialist',
+        structure_rules: 'Use H2 and H3 headings. High information density. Do not include raw table of contents in text.',
+        paragraph_style: 'Clear, concise, scannable paragraphs.',
+        image_rules: 'Include relevant visual diagram or hero image.',
+        source_rules: 'Verify factual claims.',
+        brand_rules: 'Do not make unsupported marketing claims.',
+        cta_rules: 'Include one clear contextual next step.',
+        avoid_rules: 'No keyword stuffing. No fluff or repetitive filler.',
+        custom_rules: '',
+      };
+
+      try {
+        const { data: memoryRows } = await supabase
+          .from('project_memory')
+          .select('*')
+          .or(`website_id.eq.${website_id},website_id.is.null`)
+          .eq('is_outdated', false)
+          .order('is_important', { ascending: false });
+
+        if (memoryRows && memoryRows.length > 0) {
+          const customInstrRow = memoryRows.find((m: any) => m.source === 'project_custom_instructions');
+          const knowledgeBankRow = memoryRows.find((m: any) => m.source === 'project_knowledge_bank');
+          const standardFacts = memoryRows.filter((m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank');
+
+          if (customInstrRow?.content) projectInstructions = customInstrRow.content;
+          if (knowledgeBankRow?.content) projectMemory = knowledgeBankRow.content;
+
+          if (standardFacts.length > 0) {
+            const uniqueFacts = new Set<string>();
+            const factBlocks: string[] = [];
+            for (const f of standardFacts) {
+              const text = f.content?.trim();
+              if (text && !uniqueFacts.has(text)) {
+                uniqueFacts.add(text);
+                factBlocks.push(`[${f.category?.toUpperCase() || 'FACT'}] ${text}`);
+              }
+            }
+            if (factBlocks.length > 0) {
+              projectMemory = projectMemory ? `${projectMemory}\n\n${factBlocks.join('\n\n')}` : factBlocks.join('\n\n');
+            }
+          }
+        }
+
+        const { data: websiteRules } = await supabase
+          .from('content_rules')
+          .select('custom_rules, word_count_min, word_count_max, tone, audience, author_style')
+          .eq('website_id', website_id)
+          .maybeSingle();
+
+        if (websiteRules) {
+          if (websiteRules.custom_rules) projectInstructions = websiteRules.custom_rules;
+          if (websiteRules.word_count_min) contentRules.word_count_min = websiteRules.word_count_min;
+          if (websiteRules.word_count_max) contentRules.word_count_max = websiteRules.word_count_max;
+          if (websiteRules.tone) contentRules.tone = websiteRules.tone;
+          if (websiteRules.audience) {
+            contentRules.audience = websiteRules.audience;
+            websiteAudience = websiteRules.audience;
+          }
+          if (websiteRules.author_style) contentRules.author_style = websiteRules.author_style;
+        }
+        if (projectInstructions) {
+          contentRules.custom_rules = projectInstructions;
+        }
+      } catch (memErr) {
+        console.warn('[AutopilotExecutor] Failed to load memory context:', memErr);
+      }
+
       // ── ACTION: WRITE ARTICLE ─────────────────────────────────────────
       if (instruction.action_type === 'write_article') {
         const topic = instruction.topic || instruction.goal.replace(/^(write|draft|create|generate)\s+(an?\s+)?(article|post|blog|content)\s*(about|on)?\s*/i, '').trim();
         const primaryKeyword = topic || `${website_domain.split('.')[0]} strategy`;
         const workingTitle = topic.length > 5 ? topic : `Guide to ${primaryKeyword}`;
+
+        contentRules.audience = websiteAudience === `Audience interested in ${website_domain}` ? `Readers looking for actionable ${primaryKeyword}` : websiteAudience;
 
         // 1. Create a draft record in Supabase immediately
         const { data: newDraft } = await supabase
@@ -64,7 +155,7 @@ export class AutopilotExecutor {
             secondary_keywords: [],
             search_intent: 'informational',
             content_type: 'blog_article',
-            target_audience: `Audience interested in ${primaryKeyword}`,
+            target_audience: websiteAudience,
             status: 'writing',
             current_version: 1,
           })
@@ -84,23 +175,11 @@ export class AutopilotExecutor {
               secondary_keywords: [],
               search_intent: 'informational',
               content_type: 'blog_article',
-              target_audience: `Readers looking for actionable ${primaryKeyword}`,
+              target_audience: websiteAudience,
               working_title: workingTitle,
-              rules: {
-                word_count_min: 1200,
-                word_count_max: 1600,
-                language: 'U.S. English',
-                tone: 'Authoritative, practical, practitioner-first',
-                audience: `Readers and searchers exploring ${primaryKeyword}`,
-                author_style: 'Experienced technical consultant and industry specialist',
-                structure_rules: 'Use H2 and H3 headings. High information density. Do not include raw table of contents in text.',
-                paragraph_style: 'Clear, concise, scannable paragraphs.',
-                image_rules: 'Include relevant visual diagram or hero image.',
-                source_rules: 'Verify factual claims.',
-                brand_rules: 'Do not make unsupported marketing claims.',
-                cta_rules: 'Include one clear contextual next step.',
-                avoid_rules: 'No keyword stuffing. No fluff or repetitive filler.',
-              }
+              rules: contentRules,
+              project_instructions: projectInstructions,
+              project_memory: projectMemory
             });
 
             if (draftId) {
@@ -133,6 +212,24 @@ export class AutopilotExecutor {
             }
 
             console.log(`[AutopilotExecutor] Draft generated successfully for "${workingTitle}"!`);
+
+            try {
+              const { TelegramService } = await import('../telegram/telegramService');
+              const telegram = new TelegramService();
+              const subscribers = await telegram.getSubscribers(website_id);
+              for (const sub of subscribers) {
+                await telegram.sendApprovalPrompt(sub.chat_id, {
+                  executionId: draftId || 'completed',
+                  taskTitle: output.working_title || workingTitle,
+                  websiteDomain: website_domain,
+                  score: output.qa?.overall_status === 'pass' ? 95 : 75,
+                  wordCount: output.word_count || 1200,
+                });
+              }
+            } catch (tErr) {
+              console.warn('[AutopilotExecutor] Failed to send Telegram approval prompt:', tErr);
+            }
+
           } catch (err: any) {
             console.error('[AutopilotExecutor] Draft generation failed:', err?.message || err);
             if (draftId) {
@@ -164,6 +261,8 @@ export class AutopilotExecutor {
         const { clusters, opportunities } = await keywordAgent.discoverOpportunities({
           domain: website_domain,
           seedTopic,
+          projectMemory,
+          projectInstructions,
           mode: 'new'
         });
 
@@ -264,7 +363,7 @@ export class AutopilotExecutor {
 
         safeBackground(async () => {
           try {
-            await crawlService.getOrAnalyzeWebsite({
+            const analysis = await crawlService.getOrAnalyzeWebsite({
               websiteId: website_id,
               projectId: params.project_id,
               targetUrl,
@@ -273,6 +372,19 @@ export class AutopilotExecutor {
               maxDepth: 3,
               forceFresh: true,
             });
+
+            try {
+              const pagesAnalyzed = analysis?.result?.pages?.length || 0;
+              const issuesCount = analysis?.result?.deterministic_issues?.length || 0;
+              const { TelegramService } = await import('../telegram/telegramService');
+              const telegram = new TelegramService();
+              await telegram.notifyWebsiteSubscribers(
+                website_id,
+                `✅ *Technical Audit Completed!*\n\n*Target:* \`${website_domain}\`\n*Pages Crawled:* ${pagesAnalyzed}\n*Issues Found:* ${issuesCount}\n\n[View Technical Report](/technical-seo)`
+              );
+            } catch (tErr) {
+              console.warn('[AutopilotExecutor] Tech crawl telegram notify warning:', tErr);
+            }
           } catch (crawlErr) {
             console.warn('[AutopilotExecutor] Tech crawl warning:', crawlErr);
           }
@@ -336,27 +448,45 @@ export class AutopilotExecutor {
       const scheduleAgent = new ScheduleAgent();
       const targetUrl = instruction.target_url || params.website_url || `https://${website_domain}`;
 
-      const runResult = await scheduleAgent.executeRun({
-        website_id,
-        website_url: targetUrl,
-        trigger_type: 'manual_run_now',
-        config: {
-          website_id,
-          frequency: 'daily',
-          schedule_time: '09:00',
-          timezone: 'UTC',
-          status: 'active',
-          daily_budget_usd: 10,
-          monthly_budget_usd: 100,
-          current_daily_spend_usd: 0,
-          current_monthly_spend_usd: 0,
-          max_tasks_per_run: 5,
-          max_crawl_urls: 20,
-          notify_on_run_complete: true,
-          notify_on_opportunity: true,
-          notify_on_approval_required: true,
-          notify_on_technical_error: false,
-          notify_on_failure: true,
+      safeBackground(async () => {
+        try {
+          const runResult = await scheduleAgent.executeRun({
+            website_id,
+            website_url: targetUrl,
+            trigger_type: 'manual_run_now',
+            config: {
+              website_id,
+              frequency: 'daily',
+              schedule_time: '09:00',
+              timezone: 'UTC',
+              status: 'active',
+              daily_budget_usd: 10,
+              monthly_budget_usd: 100,
+              current_daily_spend_usd: 0,
+              current_monthly_spend_usd: 0,
+              max_tasks_per_run: 5,
+              max_crawl_urls: 20,
+              notify_on_run_complete: true,
+              notify_on_opportunity: true,
+              notify_on_approval_required: true,
+              notify_on_technical_error: false,
+              notify_on_failure: true,
+            }
+          });
+
+          // Notify Telegram
+          try {
+            const { TelegramService } = await import('../telegram/telegramService');
+            const telegram = new TelegramService();
+            await telegram.notifyWebsiteSubscribers(
+              website_id,
+              `✅ *Autopilot Task Completed!*\n\n*Target:* \`${website_domain}\`\n*Action:* general_optimization\n*Summary:* ${runResult.summary}`
+            );
+          } catch (tErr) {
+            console.warn('[AutopilotExecutor] Telegram notification failed:', tErr);
+          }
+        } catch (err) {
+          console.error('[AutopilotExecutor] General optimization error:', err);
         }
       });
 
@@ -364,10 +494,10 @@ export class AutopilotExecutor {
         success: true,
         intent_type: 'immediate_action',
         action_type: 'general_optimization',
-        summary: runResult.summary || `Autonomous optimization completed for ${website_domain}.`,
+        summary: `Autonomous optimization started for ${website_domain}. The agent is running in the background.`,
         link_url: '/dashboard',
         link_label: 'View Dashboard Stats',
-        data: runResult
+        data: {}
       };
 
     } catch (err: any) {

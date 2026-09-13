@@ -101,13 +101,11 @@ export async function POST(request: Request) {
       if (parsed.action_type === 'write_article') {
         const subscribers = await telegram.getSubscribers(website.id);
         for (const sub of subscribers) {
-          await telegram.sendApprovalPrompt(sub.chat_id, {
-            executionId: execution?.id || 'exec',
-            taskTitle: parsed.topic || parsed.goal || goal,
-            websiteDomain: website.domain,
-            score: 84,
-            wordCount: 1450,
-          });
+          await telegram.sendMessage(
+            sub.chat_id,
+            `⚙️ *Task Processing...*\n\n*Action:* ${parsed.action_type}\n*Summary:* ${summaryText}`,
+            { parse_mode: 'Markdown' }
+          );
         }
       } else {
         await telegram.notifyWebsiteSubscribers(

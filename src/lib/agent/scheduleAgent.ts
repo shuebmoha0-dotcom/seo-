@@ -121,6 +121,57 @@ export class ScheduleAgent {
           primaryKeyword = 'SEO Best Practices';
         }
 
+        let projectMemory = '';
+        let projectInstructions = instruction;
+        let audience = 'marketers and practitioners';
+        let customRules = '';
+
+        try {
+          const { data: memoryRows } = await supabase
+            .from('project_memory')
+            .select('*')
+            .or(`website_id.eq.${input.website_id},website_id.is.null`)
+            .eq('is_outdated', false)
+            .order('is_important', { ascending: false });
+
+          if (memoryRows && memoryRows.length > 0) {
+            const customInstrRow = memoryRows.find((m: any) => m.source === 'project_custom_instructions');
+            const knowledgeBankRow = memoryRows.find((m: any) => m.source === 'project_knowledge_bank');
+            const standardFacts = memoryRows.filter((m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank');
+
+            if (customInstrRow?.content) customRules = customInstrRow.content;
+            if (knowledgeBankRow?.content) projectMemory = knowledgeBankRow.content;
+
+            if (standardFacts.length > 0) {
+              const uniqueFacts = new Set<string>();
+              const factBlocks: string[] = [];
+              for (const f of standardFacts) {
+                const text = f.content?.trim();
+                if (text && !uniqueFacts.has(text)) {
+                  uniqueFacts.add(text);
+                  factBlocks.push(`[${f.category?.toUpperCase() || 'FACT'}] ${text}`);
+                }
+              }
+              if (factBlocks.length > 0) {
+                projectMemory = projectMemory ? `${projectMemory}\n\n${factBlocks.join('\n\n')}` : factBlocks.join('\n\n');
+              }
+            }
+          }
+
+          const { data: websiteRules } = await supabase
+            .from('content_rules')
+            .select('custom_rules, audience')
+            .eq('website_id', input.website_id)
+            .maybeSingle();
+
+          if (websiteRules) {
+            if (websiteRules.custom_rules) customRules = websiteRules.custom_rules;
+            if (websiteRules.audience) audience = websiteRules.audience;
+          }
+        } catch (e) {
+          console.warn('[ScheduleAgent] Failed to load memory', e);
+        }
+
         const agent = new ContentAgent();
         const contentOutput = await agent.runFullPipeline({
           website_id: input.website_id,
@@ -128,14 +179,15 @@ export class ScheduleAgent {
           secondary_keywords: [],
           search_intent: 'informational',
           content_type: 'blog',
-          target_audience: 'marketers and practitioners',
-          project_instructions: instruction,
+          target_audience: audience,
+          project_instructions: projectInstructions,
+          project_memory: projectMemory,
           rules: {
             word_count_min: 800,
             word_count_max: 1500,
             language: 'en',
             tone: 'authoritative, direct, and actionable',
-            audience: 'professionals',
+            audience: audience,
             author_style: 'expert practitioner',
             structure_rules: 'Clear H2s, H3s, actionable bullet points, key takeaways',
             paragraph_style: 'Short punchy paragraphs',
@@ -143,7 +195,8 @@ export class ScheduleAgent {
             source_rules: 'Industry data',
             brand_rules: '',
             cta_rules: 'Actionable conclusion',
-            avoid_rules: 'No fluff or generic boilerplate'
+            avoid_rules: 'No fluff or generic boilerplate',
+            custom_rules: customRules,
           }
         });
 

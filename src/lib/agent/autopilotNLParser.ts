@@ -1,7 +1,7 @@
 import { LLMProvider } from '../tools/llm';
 import { z } from 'zod';
 
-export type AutopilotIntentType = 'immediate_action' | 'recurring_schedule';
+export type AutopilotIntentType = 'immediate_action' | 'recurring_schedule' | 'conversation_response';
 
 export type AutopilotActionType =
   | 'write_article'
@@ -10,7 +10,8 @@ export type AutopilotActionType =
   | 'internal_linking'
   | 'on_page_seo'
   | 'run_scheduled_tasks'
-  | 'general_optimization';
+  | 'general_optimization'
+  | 'answer_question';
 
 export interface AutopilotSchedule {
   frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
@@ -29,39 +30,33 @@ export interface ParsedAutopilotInstruction {
   summary: string;
   schedule?: AutopilotSchedule;
   next_run_at?: string;
+  response_message?: string;
 }
 
 export class AutopilotNLParser {
   /**
-   * Intelligently parses natural language into either an immediate execution command
-   * or a recurring scheduled workflow.
+   * Parse a natural language prompt into an executable instruction or a conversational response.
    */
   async parseInstruction(params: {
     prompt: string;
     domain: string;
     modeOverride?: 'auto' | 'immediate' | 'recurring';
     frequencyOverride?: string;
+    chatHistory?: { role: 'user' | 'assistant', content: string }[];
   }): Promise<ParsedAutopilotInstruction> {
     const rawPrompt = params.prompt.trim();
     const modeOverride = params.modeOverride || 'auto';
-
-    // Direct check for "run" / "execute" trigger
-    if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(rawPrompt) || /^run\b/i.test(rawPrompt)) {
-      return {
-        intent_type: 'immediate_action',
-        action_type: 'run_scheduled_tasks',
-        goal: rawPrompt,
-        summary: `Execute active scheduled tasks for ${params.domain}`,
-      };
-    }
+    const chatHistoryContext = params.chatHistory && params.chatHistory.length > 0 
+      ? `\n\nRecent Chat History:\n${params.chatHistory.map(h => `${h.role === 'user' ? 'User' : 'Agent'}: ${h.content}`).join('\n')}`
+      : '';
 
     // 1. Try LLM-driven deep understanding
     try {
       const { object } = await LLMProvider.generateObject({
         agent: 'MonitoringAgent',
         schema: z.object({
-          intent_type: z.enum(['immediate_action', 'recurring_schedule']).describe(
-            "Use 'immediate_action' if the user wants an action done right now (e.g. 'write an article about email warm-up', 'audit technical SEO', 'find keywords'). Use 'recurring_schedule' only if they express recurring frequency or schedule (e.g. 'every Monday', 'daily at 9am', 'weekly publish')."
+          intent_type: z.enum(['immediate_action', 'recurring_schedule', 'conversation_response']).describe(
+            "Use 'conversation_response' if the user is asking a general support question, SEO question, or chatting (e.g. 'How do I connect WordPress?', 'What is my score?'). Use 'immediate_action' for tasks like 'write an article' or 'audit site'. Use 'recurring_schedule' for 'daily audit'."
           ),
           action_type: z.enum([
             'write_article',
@@ -70,25 +65,29 @@ export class AutopilotNLParser {
             'internal_linking',
             'on_page_seo',
             'run_scheduled_tasks',
-            'general_optimization'
+            'general_optimization',
+            'answer_question'
           ]),
-          goal: z.string().describe("Clear, concise goal statement (e.g. 'Draft SEO article: 7 Best Email Warmup Strategies')"),
-          topic: z.string().nullable().describe("Extracted topic or keyword focus if applicable"),
+          goal: z.string().describe("Clear, concise goal statement based on the user's current prompt AND the chat history context if they are referencing something from before (e.g. 'make it longer' -> 'Make the article about email warmup longer')"),
+          topic: z.string().nullable().describe("Extracted topic or keyword focus if applicable (resolved using chat history if needed)"),
           target_url: z.string().nullable().describe("Extracted target URL if mentioned"),
           summary: z.string().describe("A professional, 1-sentence description of the interpreted instruction"),
           frequency: z.enum(['daily', 'weekly', 'monthly', 'custom']).nullable().describe("Recurring cadence if applicable"),
           time: z.string().nullable().describe("HH:mm 24-hour format if specified, or null"),
           day_of_week: z.string().nullable().describe("e.g. 'Monday' if specified"),
-          day_of_month: z.number().nullable()
+          day_of_month: z.number().nullable(),
+          response_message: z.string().nullable().describe("If intent_type is 'conversation_response', write a direct, helpful Markdown response to the user's question here. Use the persona of an expert AI SEO Consultant. Otherwise null.")
         }),
         system: `You are an advanced Natural Language Task Parser for an Autonomous SEO AI system.
 Understand the user's natural language input for domain "${params.domain}".
 CRITICAL:
+- If the user asks a question, requests support, or chats, use 'conversation_response' and provide a helpful 'response_message'.
 - If the user asks to "run", "run task", "execute", or "start", classify as 'immediate_action' with action_type 'run_scheduled_tasks'.
 - If the user asks to write an article, draft a post, research keywords, or audit the site WITHOUT a recurring word (every/daily/weekly/monthly), classify as 'immediate_action'.
 - Do NOT force one-time actions into a recurring schedule.
-- If the user specifies recurrence (e.g. "every Monday at 9am", "daily audit"), classify as 'recurring_schedule'.`,
-        prompt: `User Prompt: "${rawPrompt}"\nTarget Domain: "${params.domain}"`
+- If the user specifies recurrence (e.g. "every Monday at 9am", "daily audit"), classify as 'recurring_schedule'.
+- If the user is referring to "it", "that", "the article", "the first one", look at the 'Recent Chat History' to resolve the subject into the 'goal' and 'topic'.`,
+        prompt: `Current User Prompt: "${rawPrompt}"\nTarget Domain: "${params.domain}"${chatHistoryContext}`
       });
 
       let intent_type: AutopilotIntentType = object.intent_type;
