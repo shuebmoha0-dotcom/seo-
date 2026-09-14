@@ -69,82 +69,15 @@ export async function GET(request: Request) {
       }
     }
 
-    const now = Date.now();
-
-    // Self-Healing Watchdog: auto-heal any stale placeholder drafts in the background
-    const stuckDrafts = (drafts || []).filter(
-      (d: any) =>
-        (d.status === 'writing' || d.status === 'generating' || d.content_body?.includes('AI agent is writing this article in the background...')) &&
-        d.created_at &&
-        now - new Date(d.created_at).getTime() > 40000
-    );
-
-    if (stuckDrafts.length > 0) {
-      safeBackground(async () => {
-        for (const stuck of stuckDrafts) {
-          try {
-            console.log(`[Watchdog] Auto-healing stuck draft ${stuck.id} for "${stuck.primary_keyword}"...`);
-            const watchdogAgent = new ContentAgent();
-            const output = await watchdogAgent.runFullPipeline({
-              website_id: stuck.website_id,
-              primary_keyword: stuck.primary_keyword,
-              secondary_keywords: stuck.secondary_keywords || [],
-              search_intent: stuck.search_intent || 'informational',
-              content_type: stuck.content_type || 'blog_article',
-              target_audience: stuck.target_audience || 'Target audience and searchers',
-              working_title: stuck.working_title?.replace('Writing article for "', '')?.replace('"...', ''),
-              rules: {
-                word_count_min: stuck.rules?.word_count_min || 800,
-                word_count_max: stuck.rules?.word_count_max || 1200,
-                language: stuck.rules?.language || 'U.S. English',
-                tone: stuck.rules?.tone || 'Actionable, authoritative, first-person',
-                audience: stuck.target_audience || 'Target audience and searchers interested in ' + stuck.primary_keyword,
-                author_style: 'Alex Mercer (experienced sales & outreach consultant)',
-                structure_rules: 'Use H2 and H3 headings. Short paragraphs.',
-                paragraph_style: 'Short and easy to read.',
-                image_rules: 'Include relevant original images.',
-                source_rules: 'Use reliable sources. Verify factual claims.',
-                brand_rules: 'Do not make unsupported claims.',
-                cta_rules: 'Include one relevant CTA.',
-                avoid_rules: 'No keyword stuffing. No filler. No robotic language.',
-              },
-            });
-
-            await supabase.from('content_drafts').update({
-              working_title: output.working_title,
-              h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
-              content_body: output.content_body,
-              word_count: output.word_count,
-              reading_time_minutes: output.reading_time_minutes,
-              seo_title: output.seo_title,
-              meta_description: output.meta_description,
-              url_slug: output.url_slug,
-              status: output.status,
-              current_version: 1,
-              updated_at: new Date().toISOString(),
-            }).eq('id', stuck.id);
-
-            try {
-              await supabase.from('content_versions').insert({
-                draft_id: stuck.id,
-                version_number: 1,
-                content_body: output.content_body,
-                word_count: output.word_count,
-                status: output.status,
-                qa_results: output.qa,
-              });
-            } catch {}
-
-            console.log(`[Watchdog] Auto-healed stuck draft ${stuck.id} successfully!`);
-          } catch (wErr) {
-            console.warn(`[Watchdog] Failed to auto-heal draft ${stuck.id}:`, wErr);
-          }
-        }
-      });
-    }
-
+    // Fast read-only: resolve status cleanly without background loops
     const formattedDrafts = (drafts || []).map((d: any) => {
       let currentStatus = d.status || 'ready_for_approval';
+      const hasRealBody = d.content_body && d.content_body.length > 300 && !d.content_body.includes('AI agent is writing this article in the background...');
+      
+      // If draft has actual content but status was stuck on writing/generating, auto-mark ready_for_approval
+      if ((currentStatus === 'writing' || currentStatus === 'generating') && hasRealBody) {
+        currentStatus = 'ready_for_approval';
+      }
 
       return {
         id: d.id,
@@ -398,221 +331,99 @@ export async function POST(request: Request) {
       }
     }
 
-    // Determine execution mode (sync for guest/demo, async for registered users)
-    if (!website_id) {
-      // SYNCHRONOUS EXECUTION
-      const output = await agent.runFullPipeline(
-        {
-          primary_keyword,
-          secondary_keywords: secondary_keywords || [],
-          search_intent,
-          content_type: content_type || 'blog_article',
-          target_audience: target_audience || defaultRules.audience,
-          working_title: working_title || undefined,
-          competitor_gaps,
-          internal_linking_opportunities: internal_linking_opportunities || [],
-          entities: entities || [],
-          project_instructions: projectInstructions || undefined,
-          project_memory: projectMemory || undefined,
-          rules: defaultRules,
-        },
-        revision_notes
-      );
+    // Generate draft synchronously via ContentAgent (Claude Sonnet 5 writer)
+    console.log(`[Content Draft] Running generation for "${working_title || primary_keyword}"...`);
+    const output = await agent.runFullPipeline(
+      {
+        website_id: website_id || undefined,
+        primary_keyword,
+        secondary_keywords: secondary_keywords || [],
+        search_intent,
+        content_type: content_type || 'blog_article',
+        target_audience: target_audience || defaultRules.audience,
+        working_title: working_title || undefined,
+        competitor_gaps,
+        internal_linking_opportunities: internal_linking_opportunities || [],
+        entities: entities || [],
+        project_instructions: projectInstructions || undefined,
+        project_memory: projectMemory || undefined,
+        rules: defaultRules,
+      },
+      revision_notes
+    );
 
-      return NextResponse.json({
-        success: true,
-        draft: {
-          id: crypto.randomUUID(),
-          working_title: output.working_title,
-          primary_keyword,
-          search_intent,
-          content_type: content_type || 'blog_article',
-          word_count: output.word_count,
-          reading_time: output.reading_time_minutes,
-          status: output.status,
-          version: 1,
-          seo_title: output.seo_title,
-          meta_description: output.meta_description,
-          url_slug: output.url_slug,
-          content_body: output.content_body,
-          qa: output.qa,
-          images: output.images,
-        }
-      });
-    }
-
-    // ASYNCHRONOUS EXECUTION
     const draftId = crypto.randomUUID();
-    const placeholderDraft = {
+    let savedDraft: any = {
       id: draftId,
-      website_id,
+      website_id: website_id || null,
       primary_keyword,
       secondary_keywords: secondary_keywords || [],
       search_intent,
       content_type: content_type || 'blog_article',
       target_audience: target_audience || defaultRules.audience,
-      working_title: working_title || `Writing article for "${primary_keyword}"...`,
-      status: 'writing',
+      working_title: output.working_title || working_title || primary_keyword,
+      h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+      content_body: output.content_body,
+      word_count: output.word_count,
+      reading_time_minutes: output.reading_time_minutes,
+      seo_title: output.seo_title,
+      meta_description: output.meta_description,
+      url_slug: output.url_slug,
+      status: output.status || 'ready_for_approval',
       current_version: 1,
-      seo_title: working_title || `Draft for ${primary_keyword}`,
-      meta_description: 'Writing article...',
-      url_slug: 'draft-' + Date.now(),
-      content_body: 'AI agent is writing this article in the background...',
-      h1: working_title,
-      word_count: 1500,
-      reading_time_minutes: 5,
     };
 
-    const { error: draftErr } = await supabase.from('content_drafts').insert(placeholderDraft);
-
-    if (draftErr) {
-      throw new Error(draftErr.message || 'Failed to create placeholder draft');
-    }
-    const savedDraft = { ...placeholderDraft };
-
-    // Enqueue job for the Render 24/7 Background Worker
-    try {
-      const { data: websiteRow } = await supabase
-        .from('websites')
-        .select('project_id')
-        .eq('id', website_id)
-        .maybeSingle();
-
-      let projectId = websiteRow?.project_id;
-      if (!projectId) {
-        const { data: fallbackProj } = await supabase.from('projects').select('id').limit(1).maybeSingle();
-        projectId = fallbackProj?.id;
-      }
-
-      let taskId: string | null = null;
-      if (projectId) {
-        const { data: existingTask } = await supabase
-          .from('tasks')
-          .select('id')
-          .eq('project_id', projectId)
-          .limit(1)
-          .maybeSingle();
-
-        if (existingTask) {
-          taskId = existingTask.id;
-        } else {
-          const { data: newTask } = await supabase
-            .from('tasks')
-            .insert({
-              project_id: projectId,
-              title: 'Content Draft Generation',
-              task_type: 'content_generation',
-              status: 'active',
-            })
-            .select('id')
-            .single();
-          taskId = newTask?.id || null;
-        }
-      }
-
-      if (projectId && taskId) {
-        const { error: insError } = await supabase.from('task_executions').insert({
-          task_id: taskId,
-          project_id: projectId,
-          status: 'queued',
-          execution_payload: {
-            type: 'content_draft',
-            draft_id: draftId,
-            website_id,
-            content_input: {
-              primary_keyword,
-              secondary_keywords: secondary_keywords || [],
-              search_intent,
-              content_type: content_type || 'blog_article',
-              target_audience: target_audience || defaultRules.audience,
-              working_title: working_title || undefined,
-              competitor_gaps,
-              internal_linking_opportunities: internal_linking_opportunities || [],
-              entities: entities || [],
-              project_instructions: projectInstructions || undefined,
-              project_memory: projectMemory || undefined,
-              rules: defaultRules,
-            },
-            revision_notes,
-          },
-        });
-
-        if (insError) {
-          console.error('[Content Draft] Enqueue error:', insError);
-        } else {
-          console.log(`[Content Draft] Successfully enqueued background job for draft ${draftId} to Render worker.`);
-        }
-      }
-    } catch (qErr) {
-      console.warn('[Content Draft] Queue enqueue notice:', qErr);
-    }
-
-    // Double-Redundancy Fallback: Execute via safeBackground() in background runtime
-    safeBackground(async () => {
+    if (website_id) {
       try {
-        console.log(`[Content Draft] Running fallback parallel generation for draft ${draftId}...`);
-        const fallbackAgent = new ContentAgent();
-        const output = await fallbackAgent.runFullPipeline({
-          website_id,
-          primary_keyword,
-          secondary_keywords: secondary_keywords || [],
-          search_intent,
-          content_type: content_type || 'blog_article',
-          target_audience: target_audience || defaultRules.audience,
-          working_title: working_title || undefined,
-          competitor_gaps,
-          internal_linking_opportunities: internal_linking_opportunities || [],
-          entities: entities || [],
-          project_instructions: projectInstructions || undefined,
-          project_memory: projectMemory || undefined,
-          rules: defaultRules,
-        }, revision_notes);
+        const { data: inserted, error: draftErr } = await supabase
+          .from('content_drafts')
+          .insert(savedDraft)
+          .select()
+          .single();
 
-        // Check if draft is still in placeholder/writing state
-        const { data: latest } = await supabase.from('content_drafts').select('status, content_body').eq('id', draftId).maybeSingle();
-        if (latest && (latest.status === 'writing' || latest.content_body?.includes('AI agent is writing this article in the background...'))) {
-          await supabase.from('content_drafts').update({
-            working_title: output.working_title,
-            h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+        if (draftErr) {
+          console.error('[Content Draft] Save draft error:', draftErr);
+        } else if (inserted) {
+          savedDraft = inserted;
+        }
+
+        try {
+          await supabase.from('content_versions').insert({
+            draft_id: draftId,
+            version_number: 1,
             content_body: output.content_body,
             word_count: output.word_count,
-            reading_time_minutes: output.reading_time_minutes,
-            seo_title: output.seo_title,
-            meta_description: output.meta_description,
-            url_slug: output.url_slug,
-            status: output.status,
-            current_version: 1,
-            updated_at: new Date().toISOString(),
-          }).eq('id', draftId);
+            status: output.status || 'ready_for_approval',
+            qa_results: output.qa,
+          });
+        } catch {}
 
-          try {
-            await supabase.from('content_versions').insert({
-              draft_id: draftId,
-              version_number: 1,
-              content_body: output.content_body,
-              word_count: output.word_count,
-              status: output.status,
-              qa_results: output.qa,
-            });
-          } catch {}
-
-          console.log(`[Content Draft] Parallel generation completed draft ${draftId} successfully!`);
+        if (output.images && output.images.length > 0) {
+          for (const img of output.images) {
+            if (img.image_url) {
+              try {
+                await supabase.from('content_images').insert({
+                  draft_id: draftId,
+                  image_url: img.image_url,
+                  alt_text: img.alt_text,
+                  caption: (img as any).caption || img.alt_text,
+                  position: (img as any).position || 'featured',
+                });
+              } catch {}
+            }
+          }
         }
-      } catch (err: any) {
-        console.warn(`[Content Draft] Parallel generation note:`, err);
+      } catch (dbErr) {
+        console.error('[Content Draft] DB insert error:', dbErr);
       }
-    });
+    }
 
     return NextResponse.json({
       success: true,
       draft: {
-        id: savedDraft.id,
-        working_title: savedDraft.working_title,
-        primary_keyword: savedDraft.primary_keyword,
-        search_intent: savedDraft.search_intent,
-        content_type: savedDraft.content_type,
-        status: savedDraft.status,
-        version: savedDraft.current_version,
+        ...savedDraft,
+        qa: output.qa,
+        images: output.images,
       }
     });
   } catch (error: any) {

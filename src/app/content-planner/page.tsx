@@ -364,10 +364,16 @@ export default function ContentPlannerPage() {
         if (!selectedDraft || !loadedDrafts.some((d: any) => d.id === selectedDraft?.id)) {
           if (loadedDrafts.length > 0) setSelectedDraft(loadedDrafts[0]);
         } else {
-          // Ensure the currently viewed draft gets live status updates
+          // Ensure the currently viewed draft gets live status updates without unnecessary re-renders
           const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
           if (updatedSelected) {
-            setSelectedDraft(updatedSelected);
+            if (
+              updatedSelected.status !== selectedDraft.status ||
+              updatedSelected.content_body !== selectedDraft.content_body ||
+              updatedSelected.updated_at !== selectedDraft.updated_at
+            ) {
+              setSelectedDraft(updatedSelected);
+            }
             if (updatedSelected.status === "published" && publishing === updatedSelected.id) {
               setPublishing(null);
             }
@@ -387,21 +393,19 @@ export default function ContentPlannerPage() {
     fetchDrafts(false);
   }, [currentWebsite?.id]);
 
+  // Real-time polling ONLY when a draft is actively generating/writing, or currently publishing
+  const activeWritingCount = drafts.filter(d => d.status === "writing" || d.status === "generating").length;
   useEffect(() => {
-    fetchDrafts(false);
-  }, []);
-
-  // Real-time polling when any draft is queued or publishing so status flips to Live automatically
-  useEffect(() => {
-    const hasPending = drafts.some(d => d.status === "approved" || d.status === "ready_for_approval" || d.status === "generating" || d.status === "writing") || publishing !== null;
-    if (!hasPending) return;
+    const hasActiveWriting = activeWritingCount > 0;
+    const isPublishingActive = publishing !== null;
+    if (!hasActiveWriting && !isPublishingActive) return;
 
     const interval = setInterval(() => {
       fetchDrafts(true);
-    }, 4000);
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [drafts, publishing]);
+  }, [activeWritingCount, publishing]);
 
   const handleGenerateDraft = async (keywordOverride?: string) => {
     const keyword = (keywordOverride || quickKeyword || newDraftForm.primary_keyword).trim();
@@ -1036,7 +1040,7 @@ export default function ContentPlannerPage() {
                       </div>
                     )}
 
-                    {selectedDraft.status === "writing" || selectedDraft.status === "generating" ? (
+                    {(!selectedDraft.content_body || selectedDraft.content_body.length < 200 || selectedDraft.content_body.includes("AI agent is writing this article in the background...")) && (selectedDraft.status === "writing" || selectedDraft.status === "generating") ? (
                       <div className="bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-8 rounded-2xl border border-blue-200 text-center space-y-4 shadow-xs">
                         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-500/20">
                           <PenLine className="w-7 h-7 animate-pulse" />
