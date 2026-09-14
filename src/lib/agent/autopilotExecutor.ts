@@ -242,7 +242,7 @@ export class AutopilotExecutor {
           }
         };
 
-        if (params.sync) {
+        if (params.sync !== false) {
           try {
             const output = await runDrafting();
             return {

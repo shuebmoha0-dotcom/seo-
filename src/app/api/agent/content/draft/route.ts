@@ -77,6 +77,17 @@ export async function GET(request: Request) {
       // If draft has actual content but status was stuck on writing/generating, auto-mark ready_for_approval
       if ((currentStatus === 'writing' || currentStatus === 'generating') && hasRealBody) {
         currentStatus = 'ready_for_approval';
+        supabase.from('content_drafts').update({ status: 'ready_for_approval' }).eq('id', d.id).then(() => {});
+      } else if ((currentStatus === 'writing' || currentStatus === 'generating') && !hasRealBody) {
+        // If it has no body and is older than 2 minutes, mark failed so it never hangs in UI
+        const ageMs = Date.now() - new Date(d.created_at || 0).getTime();
+        if (ageMs > 120000) {
+          currentStatus = 'failed';
+          supabase.from('content_drafts').update({
+            status: 'failed',
+            revision_notes: 'Drafting timed out. Click Generate Draft to retry with Claude Sonnet 5.'
+          }).eq('id', d.id).then(() => {});
+        }
       }
 
       return {
