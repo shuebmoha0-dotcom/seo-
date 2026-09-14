@@ -1,3 +1,6 @@
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 import { NextResponse, after } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -424,6 +427,7 @@ Your agent will process the request in the background and ping you when finished
             website_url: currentSite.url || `https://${currentSite.domain}`,
             project_id: currentSite.project_id,
             user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+            sync: true,
           });
 
           if (execResult.success) {

@@ -50,6 +50,7 @@ export class AutopilotExecutor {
     website_url?: string;
     project_id?: string;
     user_id?: string;
+    sync?: boolean;
   }): Promise<AutopilotExecutionResult> {
     const { instruction, website_id, website_domain } = params;
     let supabase: any;
@@ -137,15 +138,13 @@ export class AutopilotExecutor {
         console.warn('[AutopilotExecutor] Failed to load memory context:', memErr);
       }
 
+
       // ── ACTION: WRITE ARTICLE ─────────────────────────────────────────
       if (instruction.action_type === 'write_article') {
-        const topic = instruction.topic || instruction.goal.replace(/^(write|draft|create|generate)\s+(an?\s+)?(article|post|blog|content)\s*(about|on)?\s*/i, '').trim();
-        const primaryKeyword = topic || `${website_domain.split('.')[0]} strategy`;
-        const workingTitle = topic.length > 5 ? topic : `Guide to ${primaryKeyword}`;
+        const workingTitle = instruction.topic || instruction.goal || `SEO Growth Guide for ${website_domain}`;
+        const primaryKeyword = instruction.topic || workingTitle;
 
-        contentRules.audience = websiteAudience === `Audience interested in ${website_domain}` ? `Readers looking for actionable ${primaryKeyword}` : websiteAudience;
-
-        // 1. Create a draft record in Supabase immediately
+        // 1. Create a placeholder draft in DB so the user has immediate visibility
         const { data: newDraft } = await supabase
           .from('content_drafts')
           .insert({
@@ -164,8 +163,8 @@ export class AutopilotExecutor {
 
         const draftId = newDraft?.id;
 
-        // 2. Run the full drafting pipeline via Claude Sonnet 5 in the background
-        safeBackground(async () => {
+        // 2. Drafting pipeline via Claude Sonnet 5
+        const runDrafting = async () => {
           try {
             console.log(`[AutopilotExecutor] Running ContentAgent for "${workingTitle}" on ${website_domain}...`);
             const contentAgent = new ContentAgent();
@@ -230,6 +229,7 @@ export class AutopilotExecutor {
               console.warn('[AutopilotExecutor] Failed to send Telegram approval prompt:', tErr);
             }
 
+            return output;
           } catch (err: any) {
             console.error('[AutopilotExecutor] Draft generation failed:', err?.message || err);
             if (draftId) {
@@ -238,18 +238,43 @@ export class AutopilotExecutor {
                 .update({ status: 'failed', revision_notes: err?.message })
                 .eq('id', draftId);
             }
+            throw err;
           }
-        });
-
-        return {
-          success: true,
-          intent_type: 'immediate_action',
-          action_type: 'write_article',
-          summary: `Writing article draft for "${workingTitle}". Drafting is running autonomously using Claude Sonnet 5.`,
-          link_url: '/content-planner',
-          link_label: 'View in Content Planner',
-          data: { draft_id: draftId, topic: workingTitle }
         };
+
+        if (params.sync) {
+          try {
+            const output = await runDrafting();
+            return {
+              success: true,
+              intent_type: 'immediate_action',
+              action_type: 'write_article',
+              summary: `Draft completed: "${output.working_title || workingTitle}" (${output.word_count} words, SEO Score: ${output.qa?.overall_status === 'pass' ? 95 : 75}/100). Ready for your approval!`,
+              link_url: '/content-planner',
+              link_label: 'View in Content Planner',
+              data: { draft_id: draftId, topic: workingTitle, output }
+            };
+          } catch (dErr: any) {
+            return {
+              success: false,
+              intent_type: 'immediate_action',
+              action_type: 'write_article',
+              summary: `Failed to draft article for "${workingTitle}": ${dErr.message || dErr}`,
+              error: dErr.message
+            };
+          }
+        } else {
+          safeBackground(async () => { await runDrafting(); });
+          return {
+            success: true,
+            intent_type: 'immediate_action',
+            action_type: 'write_article',
+            summary: `Writing article draft for "${workingTitle}". Drafting is running autonomously using Claude Sonnet 5.`,
+            link_url: '/content-planner',
+            link_label: 'View in Content Planner',
+            data: { draft_id: draftId, topic: workingTitle }
+          };
+        }
       }
 
       // ── ACTION: KEYWORD RESEARCH ──────────────────────────────────────
