@@ -342,8 +342,42 @@ export async function POST(request: Request) {
       }
     }
 
+    // Auto-discover candidate internal links from existing site pages & published drafts
+    let resolvedInternalLinks: string[] = internal_linking_opportunities || [];
+    if (resolvedInternalLinks.length === 0 && website_id) {
+      try {
+        const [pagesRes, draftsRes, webRes] = await Promise.all([
+          supabase.from('pages').select('path, title, h1').eq('website_id', website_id).limit(15),
+          supabase.from('content_drafts').select('working_title, url_slug, wordpress_post_url').eq('website_id', website_id).neq('status', 'failed').limit(15),
+          supabase.from('websites').select('url, domain').eq('id', website_id).maybeSingle()
+        ]);
+
+        const siteBase = webRes.data?.url || (webRes.data?.domain ? `https://${webRes.data.domain}` : 'https://example.com');
+
+        if (draftsRes.data) {
+          for (const d of draftsRes.data) {
+            if (d.wordpress_post_url) {
+              resolvedInternalLinks.push(`[${d.working_title}](${d.wordpress_post_url})`);
+            } else if (d.url_slug) {
+              resolvedInternalLinks.push(`[${d.working_title}](${siteBase.replace(/\/$/, '')}/blog/${d.url_slug})`);
+            }
+          }
+        }
+
+        if (pagesRes.data) {
+          for (const p of pagesRes.data) {
+            const title = p.title || p.h1 || p.path;
+            const fullUrl = p.path.startsWith('http') ? p.path : `${siteBase.replace(/\/$/, '')}${p.path.startsWith('/') ? '' : '/'}${p.path}`;
+            resolvedInternalLinks.push(`[${title}](${fullUrl})`);
+          }
+        }
+      } catch (linkErr) {
+        console.warn('[Content Draft] Auto internal links notice:', linkErr);
+      }
+    }
+
     // Generate draft synchronously via ContentAgent (Claude Sonnet 5 writer)
-    console.log(`[Content Draft] Running generation for "${working_title || primary_keyword}"...`);
+    console.log(`[Content Draft] Running generation for "${working_title || primary_keyword}" with ${resolvedInternalLinks.length} candidate internal links...`);
     const output = await agent.runFullPipeline(
       {
         website_id: website_id || undefined,
@@ -354,7 +388,7 @@ export async function POST(request: Request) {
         target_audience: target_audience || defaultRules.audience,
         working_title: working_title || undefined,
         competitor_gaps,
-        internal_linking_opportunities: internal_linking_opportunities || [],
+        internal_linking_opportunities: resolvedInternalLinks.slice(0, 6),
         entities: entities || [],
         project_instructions: projectInstructions || undefined,
         project_memory: projectMemory || undefined,
