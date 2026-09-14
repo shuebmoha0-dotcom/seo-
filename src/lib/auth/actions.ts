@@ -82,6 +82,8 @@ export async function signOut() {
   redirect('/login');
 }
 
+import { headers } from 'next/headers';
+
 // ─────────────────────────────────────────────
 // FORGOT PASSWORD
 // ─────────────────────────────────────────────
@@ -94,8 +96,19 @@ export async function forgotPassword(formData: FormData) {
     return { error: 'Email is required.' };
   }
 
+  let origin = process.env.NEXT_PUBLIC_SITE_URL || '';
+  try {
+    const headerList = await headers();
+    const host = headerList.get('x-forwarded-host') || headerList.get('host');
+    const proto = headerList.get('x-forwarded-proto') || 'https';
+    if (host) {
+      origin = `${proto}://${host}`;
+    }
+  } catch {}
+  if (!origin) origin = 'http://localhost:3000';
+
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/reset-password`,
+    redirectTo: `${origin}/auth/callback?next=/reset-password`,
   });
 
   if (error) {
@@ -113,6 +126,7 @@ export async function resetPassword(formData: FormData) {
 
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirmPassword') as string;
+  const code = formData.get('code') as string | null;
 
   if (!password || !confirmPassword) {
     return { error: 'Both password fields are required.' };
@@ -124,6 +138,15 @@ export async function resetPassword(formData: FormData) {
 
   if (password.length < 8) {
     return { error: 'Password must be at least 8 characters.' };
+  }
+
+  // If a recovery code was included, exchange it for a session first
+  if (code) {
+    try {
+      await supabase.auth.exchangeCodeForSession(code);
+    } catch (e) {
+      console.warn('[resetPassword] Code exchange attempt:', e);
+    }
   }
 
   const { error } = await supabase.auth.updateUser({ password });
