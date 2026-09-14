@@ -155,5 +155,5 @@ export async function resetPassword(formData: FormData) {
     return { error: error.message };
   }
 
-  redirect('/dashboard');
+  return { success: true };
 }

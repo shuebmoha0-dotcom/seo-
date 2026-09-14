@@ -16,13 +16,23 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const c = params.get("code");
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+      const rawErr = searchParams.get("error_description") || hashParams.get("error_description") || searchParams.get("error") || hashParams.get("error");
+      if (rawErr) {
+        const decoded = decodeURIComponent(rawErr.replace(/\+/g, " "));
+        setError(decoded.includes("expired") || decoded.includes("invalid") ? "This reset link has expired or has already been used. Please request a new one." : decoded);
+      }
+
+      const c = searchParams.get("code");
       if (c) {
         setCode(c);
         const supabase = createClient();
-        supabase.auth.exchangeCodeForSession(c).then(({ error }) => {
-          if (error) console.warn("[ResetPassword] Client code exchange:", error.message);
+        supabase.auth.exchangeCodeForSession(c).then(({ error: exErr }) => {
+          if (exErr) {
+            console.warn("[ResetPassword] Client code exchange:", exErr.message);
+          }
         });
       }
     }
@@ -55,9 +65,12 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    // Try client-side update first (covers hash-based recovery tokens & active sessions)
+    // 1. Try client-side update first (covers hash-based recovery tokens & active sessions)
     try {
       const supabase = createClient();
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(code).catch(() => {});
+      }
       const { error: clientErr } = await supabase.auth.updateUser({ password });
       if (!clientErr) {
         setSuccess(true);
@@ -67,9 +80,12 @@ export default function ResetPasswordPage() {
         }, 1500);
         return;
       }
-    } catch {}
+      console.warn("[ResetPassword] Client updateUser:", clientErr.message);
+    } catch (err) {
+      console.warn("[ResetPassword] Client exception:", err);
+    }
 
-    // Fallback to server action
+    // 2. Fallback to server action
     if (code) {
       formData.set("code", code);
     }
@@ -77,6 +93,12 @@ export default function ResetPasswordPage() {
     if (res?.error) {
       setError(res.error);
       setLoading(false);
+    } else {
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/dashboard");
+        router.refresh();
+      }, 1500);
     }
   };
 
@@ -97,9 +119,14 @@ export default function ResetPasswordPage() {
           </div>
 
           {error && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-6">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div className="flex flex-col gap-2 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-6">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+              <a href="/forgot-password" className="text-xs font-semibold text-red-800 hover:text-red-900 underline ml-7">
+                Request a new reset link &rarr;
+              </a>
             </div>
           )}
 

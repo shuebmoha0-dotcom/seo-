@@ -10,18 +10,19 @@ export async function createClient() {
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || anonKey;
 
   if (!cookieStore) {
     const { createClient: createSupabaseJsClient } = await import('@supabase/supabase-js');
-    return createSupabaseJsClient(supabaseUrl, supabaseKey, {
+    return createSupabaseJsClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     }) as any;
   }
 
   return createServerClient(
     supabaseUrl,
-    supabaseKey,
+    anonKey,
     {
       cookieOptions: {
         maxAge: 60 * 60 * 24 * 365, // 1 year persistent session
