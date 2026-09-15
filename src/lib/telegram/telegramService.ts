@@ -82,10 +82,16 @@ export class TelegramService {
       return { ok: true, simulated: true };
     }
 
+    // Safety: Telegram maximum message length is 4096 characters
+    let safeText = text;
+    if (safeText.length > 4000) {
+      safeText = safeText.slice(0, 3950) + '\n\n...[Full details available in web dashboard]';
+    }
+
     try {
       const payload: any = {
         chat_id: chatId,
-        text,
+        text: safeText,
         parse_mode: options?.parse_mode || 'Markdown',
       };
       if (options?.reply_markup) {
@@ -100,7 +106,20 @@ export class TelegramService {
 
       const data = await res.json();
       if (!data.ok) {
-        console.warn('[TelegramService] sendMessage returned error:', data.description);
+        console.warn('[TelegramService] sendMessage error:', data.description, '- retrying without formatting...');
+        // Fallback: If Markdown entity parsing failed, retry as clean plain text
+        if (options?.parse_mode) {
+          const fallbackRes = await fetch(`${this.apiUrl}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: safeText,
+              reply_markup: options?.reply_markup,
+            }),
+          });
+          return await fallbackRes.json();
+        }
       }
       return data;
     } catch (err) {
@@ -157,6 +176,11 @@ Tap a button below to execute or reject directly from your phone:`;
   ): Promise<any> {
     if (!this.isConfigured) return { ok: true, simulated: true };
 
+    let safeText = text;
+    if (safeText.length > 4000) {
+      safeText = safeText.slice(0, 3950) + '\n\n...[Truncated]';
+    }
+
     try {
       const res = await fetch(`${this.apiUrl}/editMessageText`, {
         method: 'POST',
@@ -164,11 +188,25 @@ Tap a button below to execute or reject directly from your phone:`;
         body: JSON.stringify({
           chat_id: chatId,
           message_id: messageId,
-          text,
+          text: safeText,
           parse_mode: 'Markdown',
         }),
       });
-      return await res.json();
+      const data = await res.json();
+      if (!data.ok) {
+        console.warn('[TelegramService] editMessageText error:', data.description, '- retrying plain text...');
+        const fallbackRes = await fetch(`${this.apiUrl}/editMessageText`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            message_id: messageId,
+            text: safeText,
+          }),
+        });
+        return await fallbackRes.json();
+      }
+      return data;
     } catch (err) {
       console.error('[TelegramService] editMessageText failed:', err);
       return { ok: false };

@@ -8,11 +8,32 @@ import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
 import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
 import { WebsiteCrawler } from '@/lib/agent/crawler';
 
+// In-memory deduplication cache for Telegram update_ids to prevent retry collisions
+const processedUpdates = new Map<number, number>();
+
+function isDuplicateUpdate(updateId?: number): boolean {
+  if (!updateId) return false;
+  const now = Date.now();
+  // Purge entries older than 5 minutes
+  for (const [id, time] of processedUpdates.entries()) {
+    if (now - time > 300000) processedUpdates.delete(id);
+  }
+  if (processedUpdates.has(updateId)) return true;
+  processedUpdates.set(updateId, now);
+  return false;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const telegram = new TelegramService();
     const supabase = createAdminClient();
+
+    // Deduplicate rapid Telegram retries
+    if (body.update_id && isDuplicateUpdate(body.update_id)) {
+      console.log(`[Telegram Webhook] Ignoring duplicate update ${body.update_id}`);
+      return NextResponse.json({ ok: true, duplicate: true });
+    }
 
     // 1. Handle Interactive Callback Queries (Button Taps)
     if (body.callback_query) {
@@ -439,15 +460,30 @@ Your agent will process the request in the background and ping you when finished
       }
 
       const executor = new AutopilotExecutor();
-      const execResult = await executor.executeImmediateAction({
-        instruction: parsed,
-        website_id: currentSite.id,
-        website_domain: currentSite.domain,
-        website_url: currentSite.url || `https://${currentSite.domain}`,
-        project_id: currentSite.project_id,
-        user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-        sync: true,
-      });
+      const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
+        setTimeout(() => resolve({ isTimeout: true }), 46000)
+      );
+
+      const execResult = await Promise.race([
+        executor.executeImmediateAction({
+          instruction: parsed,
+          website_id: currentSite.id,
+          website_domain: currentSite.domain,
+          website_url: currentSite.url || `https://${currentSite.domain}`,
+          project_id: currentSite.project_id,
+          user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+          sync: true,
+        }),
+        timeoutPromise
+      ]);
+
+      if ('isTimeout' in execResult) {
+        await telegram.sendMessage(
+          chatId,
+          `⏳ *Deep Research & Drafting In Progress...*\n\nYour article is currently being crafted with Claude Sonnet 5. It will appear directly in your \`/content-planner\` in just a moment, and you will receive an approval card as soon as it is ready!`
+        );
+        return NextResponse.json({ ok: true });
+      }
 
       if (execResult.success) {
         if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
@@ -500,6 +536,6 @@ Your agent will process the request in the background and ping you when finished
     return NextResponse.json({ ok: true });
   } catch (error: any) {
     console.error('[Telegram Webhook] Error:', error);
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, error: error.message });
   }
 }
