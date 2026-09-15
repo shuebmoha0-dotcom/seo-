@@ -480,7 +480,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
 
       const executor = new AutopilotExecutor();
       const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-        setTimeout(() => resolve({ isTimeout: true }), 46000)
+        setTimeout(() => resolve({ isTimeout: true }), 54000)
       );
 
       const execResult = await Promise.race([
@@ -492,6 +492,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           project_id: currentSite.project_id,
           user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
           sync: true,
+          chat_id: chatId,
         }),
         timeoutPromise
       ]);
@@ -499,7 +500,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       if ('isTimeout' in execResult) {
         await telegram.sendMessage(
           chatId,
-          `⏳ *Deep Research & Drafting In Progress...*\n\nYour article is currently being crafted with Claude Sonnet 5. It will appear directly in your \`/content-planner\` in just a moment, and you will receive an approval card as soon as it is ready!`
+          `⏳ *Drafting In Progress (Claude Sonnet 5)*\n\nYour article draft ticket has been created in your [Content Planner](/content-planner).\nClaude Sonnet 5 is finishing the prose now and will send your approval card as soon as it is ready!`
         );
         return NextResponse.json({ ok: true });
       }

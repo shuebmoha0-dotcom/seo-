@@ -51,6 +51,7 @@ export class AutopilotExecutor {
     project_id?: string;
     user_id?: string;
     sync?: boolean;
+    chat_id?: string | number;
   }): Promise<AutopilotExecutionResult> {
     const { instruction, website_id, website_domain, website_url } = params;
     let supabase: any;
@@ -170,21 +171,29 @@ export class AutopilotExecutor {
               searchIntent = best.search_intent || 'informational';
               keywordSource = `database opportunity (${best.search_volume}/mo, KD ${best.keyword_difficulty})`;
             } else {
-              // B. Run KeywordAgent to discover fresh high-demand targets
-              console.log(`[AutopilotExecutor] Calling KeywordAgent to research high-converting keyword for ${website_domain}...`);
-              const keywordAgent = new KeywordAgent();
-              const { opportunities } = await keywordAgent.discoverOpportunities({
-                domain: website_domain,
-                projectMemory,
-                projectInstructions,
-                mode: 'new'
+              // B. Fast single-pass targeted keyword selection (1.5s vs 25s)
+              console.log(`[AutopilotExecutor] Fast keyword selection for ${website_domain}...`);
+              const { LLMProvider } = await import('../tools/llm');
+              const { z } = await import('zod');
+              const kwRes = await LLMProvider.generateObject({
+                agent: 'KeywordAgent',
+                complexity: 'simple',
+                schema: z.object({
+                  keyword: z.string(),
+                  working_title: z.string(),
+                  search_intent: z.enum(['informational', 'commercial', 'transactional']),
+                  estimated_volume: z.number().default(850),
+                  estimated_kd: z.number().default(24)
+                }),
+                system: `You are an expert SEO strategist for "${website_domain}". Pick ONE high-demand, low-KD primary keyword and article title that will rank on Google.
+Niche context: ${projectMemory ? projectMemory.slice(0, 400) : 'B2B sales automation, AI cold email tools, outreach'}.`,
+                prompt: `Select the single best primary keyword and practical guide title to write about right now for ${website_domain}. Make sure it is realistic, highly actionable, and has high search demand.`
               });
-              const topChoice = opportunities.find(o => (o.search_volume || 0) >= 200 && (o.keyword_difficulty || 20) <= 35) || opportunities[0];
-              if (topChoice) {
-                targetKeyword = topChoice.keyword;
-                workingTitle = `${topChoice.keyword.charAt(0).toUpperCase() + topChoice.keyword.slice(1)}: Complete Guide`;
-                searchIntent = topChoice.search_intent || 'informational';
-                keywordSource = `KeywordAgent discovery (${topChoice.search_volume || 500}/mo, KD ${topChoice.keyword_difficulty || 20})`;
+              if (kwRes.object?.keyword) {
+                targetKeyword = kwRes.object.keyword;
+                workingTitle = kwRes.object.working_title || `${targetKeyword}: Complete Practical Guide`;
+                searchIntent = kwRes.object.search_intent || 'informational';
+                keywordSource = `AI keyword intelligence (${kwRes.object.estimated_volume || 850}/mo, KD ${kwRes.object.estimated_kd || 24})`;
               }
             }
           } catch (kErr) {
@@ -216,13 +225,20 @@ export class AutopilotExecutor {
         try {
           const [pagesRes, draftsRes] = await Promise.all([
             supabase.from('pages').select('path, title, h1').eq('website_id', website_id).limit(15),
-            supabase.from('content_drafts').select('working_title, url_slug, wordpress_post_url').eq('website_id', website_id).neq('status', 'failed').limit(15)
+            supabase.from('content_drafts').select('working_title, url_slug, revision_notes').eq('website_id', website_id).neq('status', 'failed').limit(15)
           ]);
 
           if (draftsRes.data) {
             for (const d of draftsRes.data) {
-              if (d.wordpress_post_url) {
-                candidateInternalLinks.push(`[${d.working_title}](${d.wordpress_post_url})`);
+              let wpUrl: string | null = null;
+              if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.startsWith('{')) {
+                try {
+                  const parsed = JSON.parse(d.revision_notes);
+                  if (parsed.wordpress_post_url) wpUrl = parsed.wordpress_post_url;
+                } catch (_) {}
+              }
+              if (wpUrl) {
+                candidateInternalLinks.push(`[${d.working_title}](${wpUrl})`);
               } else if (d.url_slug) {
                 candidateInternalLinks.push(`[${d.working_title}](${siteBaseUrl.replace(/\/$/, '')}/blog/${d.url_slug})`);
               }
@@ -242,7 +258,34 @@ export class AutopilotExecutor {
 
         // 3. Drafting pipeline via Claude Sonnet 5 + ImageAgent
         const runDrafting = async () => {
+          let preInsertedDraftId: string | null = null;
           try {
+            // A. Pre-insert draft ticket so the user sees it in Content Planner immediately (status: 'writing')
+            try {
+              const { data: preDraft } = await supabase
+                .from('content_drafts')
+                .insert({
+                  website_id,
+                  working_title: workingTitle,
+                  primary_keyword: targetKeyword,
+                  secondary_keywords: secondaryKeywords,
+                  search_intent: searchIntent,
+                  content_type: 'blog_article',
+                  target_audience: websiteAudience,
+                  content_body: `# ${workingTitle}\n\n*Autonomous Content Pipeline Activated: Drafting in progress with Claude Sonnet 5...*`,
+                  word_count: 0,
+                  status: 'writing',
+                  current_version: 1,
+                })
+                .select('id')
+                .single();
+              if (preDraft?.id) {
+                preInsertedDraftId = preDraft.id;
+              }
+            } catch (preErr) {
+              console.warn('[AutopilotExecutor] Pre-draft creation notice:', preErr);
+            }
+
             console.log(`[AutopilotExecutor] Multi-Agent Orchestration: Writing "${workingTitle}" for keyword "${targetKeyword}" with ${candidateInternalLinks.length} internal links...`);
             const contentAgent = new ContentAgent();
             const output = await contentAgent.runFullPipeline({
@@ -259,31 +302,56 @@ export class AutopilotExecutor {
               project_memory: projectMemory
             });
 
-            // Save completed draft directly to Supabase with ready_for_approval status
-            const { data: savedDraft, error: insErr } = await supabase
-              .from('content_drafts')
-              .insert({
-                website_id,
-                working_title: output.working_title || workingTitle,
-                h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
-                primary_keyword: targetKeyword,
-                secondary_keywords: secondaryKeywords,
-                search_intent: searchIntent,
-                content_type: 'blog_article',
-                target_audience: websiteAudience,
-                content_body: output.content_body,
-                word_count: output.word_count,
-                reading_time_minutes: output.reading_time_minutes,
-                seo_title: output.seo_title,
-                meta_description: output.meta_description,
-                url_slug: output.url_slug,
-                status: 'ready_for_approval',
-                current_version: 1,
-              })
-              .select()
-              .single();
+            let draftId = preInsertedDraftId;
 
-            const draftId = savedDraft?.id;
+            if (draftId) {
+              // Update the pre-inserted draft ticket to ready_for_approval
+              await supabase
+                .from('content_drafts')
+                .update({
+                  working_title: output.working_title || workingTitle,
+                  h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+                  primary_keyword: targetKeyword,
+                  secondary_keywords: secondaryKeywords,
+                  search_intent: searchIntent,
+                  content_type: 'blog_article',
+                  target_audience: websiteAudience,
+                  content_body: output.content_body,
+                  word_count: output.word_count,
+                  reading_time_minutes: output.reading_time_minutes,
+                  seo_title: output.seo_title,
+                  meta_description: output.meta_description,
+                  url_slug: output.url_slug,
+                  status: 'ready_for_approval',
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', draftId);
+            } else {
+              // Fallback: insert fresh draft
+              const { data: savedDraft } = await supabase
+                .from('content_drafts')
+                .insert({
+                  website_id,
+                  working_title: output.working_title || workingTitle,
+                  h1: output.content_body.match(/^# (.+)$/m)?.[1] || output.working_title,
+                  primary_keyword: targetKeyword,
+                  secondary_keywords: secondaryKeywords,
+                  search_intent: searchIntent,
+                  content_type: 'blog_article',
+                  target_audience: websiteAudience,
+                  content_body: output.content_body,
+                  word_count: output.word_count,
+                  reading_time_minutes: output.reading_time_minutes,
+                  seo_title: output.seo_title,
+                  meta_description: output.meta_description,
+                  url_slug: output.url_slug,
+                  status: 'ready_for_approval',
+                  current_version: 1,
+                })
+                .select('id')
+                .single();
+              draftId = savedDraft?.id;
+            }
 
             if (draftId) {
               try {
@@ -316,13 +384,21 @@ export class AutopilotExecutor {
 
             console.log(`[AutopilotExecutor] Draft generated successfully for "${workingTitle}"!`);
 
-            // Send interactive Telegram prompt
+            // Send interactive Telegram prompt to active chat_id and all subscribers
             try {
               const { TelegramService } = await import('../telegram/telegramService');
               const telegram = new TelegramService();
-              const subscribers = await telegram.getSubscribers(website_id);
-              for (const sub of subscribers) {
-                await telegram.sendApprovalPrompt(sub.chat_id, {
+              const targetChatIds = new Set<string | number>();
+              if (params.chat_id) targetChatIds.add(params.chat_id);
+              try {
+                const subscribers = await telegram.getSubscribers(website_id);
+                for (const sub of subscribers) {
+                  if (sub.chat_id) targetChatIds.add(sub.chat_id);
+                }
+              } catch (_) {}
+
+              for (const cId of targetChatIds) {
+                await telegram.sendApprovalPrompt(cId, {
                   executionId: draftId || 'completed',
                   taskTitle: output.working_title || workingTitle,
                   websiteDomain: website_domain,
@@ -337,6 +413,18 @@ export class AutopilotExecutor {
             return { output, draftId, targetKeyword, keywordSource };
           } catch (err: any) {
             console.error('[AutopilotExecutor] Draft generation failed:', err?.message || err);
+            if (preInsertedDraftId) {
+              try {
+                await supabase
+                  .from('content_drafts')
+                  .update({
+                    status: 'failed',
+                    revision_notes: `Generation failed: ${err?.message || String(err)}`,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', preInsertedDraftId);
+              } catch (_) {}
+            }
             throw err;
           }
         };

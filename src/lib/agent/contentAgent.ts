@@ -625,7 +625,8 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
 
       try {
         console.log(`[ContentAgent] Generating images in parallel with drafting for "${brief.working_title}"...`);
-        const imagePromises = brief.image_requirements.map(async (req, i) => {
+        // Limit to at most 2 visuals (1 hero + 1 body diagram) to guarantee fast generation (< 14s)
+        const imagePromises = brief.image_requirements.slice(0, 2).map(async (req, i) => {
           try {
             // Dynamic diverse visual style selection based on image requirement type and context
             let visualStyle = 'Modern editorial SaaS illustration with sophisticated color palette and clean conceptual metaphors';
@@ -637,7 +638,8 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               visualStyle = 'Modern editorial vector illustration with clean conceptual iconography, subtle textures, and rich color accents';
             }
 
-            const generatedImage = await ImageRouter.generate({
+            // Enforce a strict 14-second race so image generation cannot stall the article pipeline
+            const imgGenPromise = ImageRouter.generate({
               topic: brief.working_title,
               target_keyword: input.primary_keyword,
               purpose: req.purpose,
@@ -647,6 +649,8 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,
             });
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 14000));
+            const generatedImage = await Promise.race([imgGenPromise, timeoutPromise]);
 
             if (generatedImage && generatedImage.url) {
               return { index: i, req, generatedImage, success: true };
