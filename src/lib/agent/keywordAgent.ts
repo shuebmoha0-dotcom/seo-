@@ -125,6 +125,8 @@ export class KeywordAgent {
     projectMemory?: string;
     projectInstructions?: string;
     mode?: 'new' | 'established';
+    existingArticles?: string[];
+    categories?: string[];
   }): Promise<{ clusters: KeywordCluster[]; opportunities: KeywordOpportunity[] }> {
     try {
       const topic = params.seedTopic || params.domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ');
@@ -160,6 +162,9 @@ Domain: "${params.domain}"
 Core Topic / Niche: "${topic}"
 ${params.siteDescription ? `Site Description: ${params.siteDescription}` : ''}
 Mode: ${params.mode === 'established' ? 'Established site (optimize & scale)' : 'New site (low-competition long-tail & fast-win high-converting targets)'}
+
+${params.categories && params.categories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES:\n${params.categories.map(c => `• ${c}`).join('\n')}\n` : ''}
+${params.existingArticles && params.existingArticles.length > 0 ? `ALREADY PUBLISHED ARTICLES (DO NOT CANNIBALIZE OR DUPLICATE):\n${params.existingArticles.slice(0, 30).map(t => `- "${t}"`).join('\n')}\n` : ''}
 
 ${params.projectMemory ? `\n🧠 PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY:\n${params.projectMemory}\n` : ''}
 ${params.projectInstructions ? `\n📋 PROJECT CUSTOM INSTRUCTIONS:\n${params.projectInstructions}\n` : ''}

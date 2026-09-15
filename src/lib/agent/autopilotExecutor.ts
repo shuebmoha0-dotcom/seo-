@@ -5,6 +5,8 @@ import { KeywordAgent } from './keywordAgent';
 import { ScheduleAgent } from './scheduleAgent';
 import { CrawlService } from '../crawler/crawlService';
 import { ParsedAutopilotInstruction } from './autopilotNLParser';
+import { SiteContentGapDetector } from './siteContentGapDetector';
+import { DuplicateArticleChecker } from './duplicateChecker';
 
 export interface AutopilotExecutionResult {
   success: boolean;
@@ -148,97 +150,69 @@ export class AutopilotExecutor {
         let searchIntent: any = 'informational';
         let keywordSource = 'user_specified';
 
-        // 1. Intelligent Multi-Angle Keyword Research & Intent Verification
+        // 1. Site Inventory & Content Gap Analysis
+        console.log(`[AutopilotExecutor] Crawling site inventory & mapping content coverage for ${website_domain}...`);
+        const siteInventory = await SiteContentGapDetector.getSiteInventory({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+        console.log(`[AutopilotExecutor] Inventory mapped: ${siteInventory.coveredTitles.length} existing articles, ${siteInventory.categories.length} categories.`);
+
         const isGeneric = !targetKeyword || /^(write\s+an?\s+article|write\s+article|create\s+article|write\s+post|post\s+it|write|generate\s+article)/i.test(targetKeyword.trim());
 
         if (isGeneric) {
-          // A. Check database for high-priority keyword opportunities (demand floor >= 200, KD <= 35)
+          // A. Discover high-impact content gaps that the site has NOT covered yet
           try {
-            const { data: dbOpps } = await supabase
-              .from('keyword_opportunities')
-              .select('keyword, search_volume, keyword_difficulty, search_intent')
-              .eq('website_id', website_id)
-              .gte('search_volume', 200)
-              .lte('keyword_difficulty', 35)
-              .order('priority', { ascending: true })
-              .order('search_volume', { ascending: false })
-              .limit(5);
+            console.log(`[AutopilotExecutor] Running intelligent content gap detection for ${website_domain}...`);
+            const gaps = await SiteContentGapDetector.findContentGaps({
+              inventory: siteInventory,
+              projectMemory,
+              projectInstructions,
+              limit: 3,
+            });
 
-            if (dbOpps && dbOpps.length > 0) {
-              const best = dbOpps[0];
-              targetKeyword = best.keyword;
-              workingTitle = `${best.keyword.charAt(0).toUpperCase() + best.keyword.slice(1)}: Practical Action Guide`;
-              searchIntent = best.search_intent || 'informational';
-              keywordSource = `database opportunity (${best.search_volume}/mo, KD ${best.keyword_difficulty})`;
+            if (gaps && gaps.length > 0) {
+              const bestGap = gaps[0];
+              targetKeyword = bestGap.keyword;
+              workingTitle = bestGap.working_title;
+              searchIntent = bestGap.search_intent;
+              keywordSource = `Content gap analysis [${bestGap.target_category}] - ${bestGap.gap_rationale} (${bestGap.estimated_volume}/mo, KD ${bestGap.estimated_kd})`;
+              console.log(`[AutopilotExecutor] Selected content gap opportunity: "${workingTitle}" (Category: ${bestGap.target_category})`);
             } else {
-              // B. Category-Grounded Targeted Keyword Selection (1.5s)
-              console.log(`[AutopilotExecutor] Grounding keyword selection in verified categories for ${website_domain}...`);
-              
-              // Dynamically fetch live site categories to prevent niche drift
-              let activeCategories: string[] = [];
-              try {
-                const siteUrl = website_url || `https://${website_domain}`;
-                const catRes = await fetch(`${siteUrl.replace(/\/$/, '')}/wp-json/wp/v2/categories?per_page=15`, {
-                  signal: AbortSignal.timeout(2000),
-                });
-                if (catRes.ok) {
-                  const rawCats = await catRes.json();
-                  if (Array.isArray(rawCats)) {
-                    activeCategories = rawCats
-                      .filter((c: any) => c.slug !== 'uncategorized' && c.name)
-                      .map((c: any) => c.name);
-                  }
-                }
-              } catch (_) {}
+              // Fallback to database opportunities if no live gap returned
+              const { data: dbOpps } = await supabase
+                .from('keyword_opportunities')
+                .select('keyword, search_volume, keyword_difficulty, search_intent')
+                .eq('website_id', website_id)
+                .gte('search_volume', 200)
+                .lte('keyword_difficulty', 35)
+                .order('priority', { ascending: true })
+                .order('search_volume', { ascending: false })
+                .limit(5);
 
-              if (activeCategories.length === 0) {
-                // Discover categories from client's existing pages and drafts in database
-                try {
-                  const { data: clientPages } = await supabase
-                    .from('pages')
-                    .select('title, h1, path')
-                    .eq('website_id', website_id)
-                    .limit(10);
-                  if (clientPages && clientPages.length > 0) {
-                    activeCategories = clientPages
-                      .map((p: any) => p.h1 || p.title)
-                      .filter(Boolean)
-                      .slice(0, 6);
-                  }
-                } catch (_) {}
-              }
-
-              const { LLMProvider } = await import('../tools/llm');
-              const { z } = await import('zod');
-              const kwRes = await LLMProvider.generateObject({
-                agent: 'KeywordAgent',
-                complexity: 'simple',
-                schema: z.object({
-                  keyword: z.string(),
-                  working_title: z.string(),
-                  target_category: z.string(),
-                  search_intent: z.enum(['informational', 'commercial', 'transactional']),
-                  estimated_volume: z.number().default(850),
-                  estimated_kd: z.number().default(24)
-                }),
-                system: `You are an elite, highly targeted SEO strategist for the commercial client website "${website_domain}".
-${activeCategories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES / CORE TOPICS:\n${activeCategories.map(c => `• ${c}`).join('\n')}\n` : ''}
-MANDATORY CLIENT NICHE ANCHORING:
-- You MUST pick a primary keyword that strictly aligns with the client's industry, verified categories, and audience.
-- Honor all client custom instructions, brand specifications, and niche boundaries from project memory:
-${projectMemory ? projectMemory.slice(0, 500) : `Domain niche for ${website_domain}`}.
-- Strictly FORBID generic, off-topic, or irrelevant keywords that do not serve this specific client website.`,
-                prompt: `Select the single best primary keyword, practical guide title, and matching website category to write about right now for ${website_domain}. Make sure it is realistic, highly actionable, and has verified search demand.`
-              });
-              if (kwRes.object?.keyword) {
-                targetKeyword = kwRes.object.keyword;
-                workingTitle = kwRes.object.working_title || `${targetKeyword}: Complete Practical Guide`;
-                searchIntent = kwRes.object.search_intent || 'informational';
-                keywordSource = `Category-grounded intelligence [${kwRes.object.target_category || 'Cold Email'}] (${kwRes.object.estimated_volume || 850}/mo, KD ${kwRes.object.estimated_kd || 24})`;
+              if (dbOpps && dbOpps.length > 0) {
+                const best = dbOpps[0];
+                targetKeyword = best.keyword;
+                workingTitle = `${best.keyword.charAt(0).toUpperCase() + best.keyword.slice(1)}: Practical Action Guide`;
+                searchIntent = best.search_intent || 'informational';
+                keywordSource = `database opportunity (${best.search_volume}/mo, KD ${best.keyword_difficulty})`;
               }
             }
-          } catch (kErr) {
-            console.warn('[AutopilotExecutor] Keyword discovery notice:', kErr);
+          } catch (gapErr) {
+            console.warn('[AutopilotExecutor] Content gap detection notice:', gapErr);
+          }
+        } else {
+          // B. User specified a keyword/topic: check against site inventory for potential cannibalization
+          for (const existingTitle of siteInventory.coveredTitles) {
+            const wordsA = DuplicateArticleChecker.extractCoreWords(targetKeyword);
+            const wordsB = DuplicateArticleChecker.extractCoreWords(existingTitle);
+            const overlap = DuplicateArticleChecker.calculateOverlap(wordsA, wordsB);
+            if (overlap >= 0.6) {
+              console.log(`[AutopilotExecutor] Caution: target keyword "${targetKeyword}" has high topical overlap with existing article "${existingTitle}". Adapting angle to prevent cannibalization.`);
+              workingTitle = `${targetKeyword.charAt(0).toUpperCase() + targetKeyword.slice(1)}: Advanced Playbook & Case Studies`;
+              break;
+            }
           }
         }
 
@@ -508,7 +482,14 @@ ${projectMemory ? projectMemory.slice(0, 500) : `Domain niche for ${website_doma
       // ── ACTION: KEYWORD RESEARCH ──────────────────────────────────────
       if (instruction.action_type === 'keyword_research') {
         const seedTopic = instruction.topic || undefined;
-        console.log(`[AutopilotExecutor] Running KeywordAgent for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
+        console.log(`[AutopilotExecutor] Running intelligent site inventory crawl & keyword discovery for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
+
+        // Map existing content & categories to prevent cannibalization
+        const inventory = await SiteContentGapDetector.getSiteInventory({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
 
         const keywordAgent = new KeywordAgent();
         const { clusters, opportunities } = await keywordAgent.discoverOpportunities({
@@ -516,7 +497,9 @@ ${projectMemory ? projectMemory.slice(0, 500) : `Domain niche for ${website_doma
           seedTopic,
           projectMemory,
           projectInstructions,
-          mode: 'new'
+          mode: 'new',
+          existingArticles: inventory.coveredTitles,
+          categories: inventory.categories.map(c => c.name),
         });
 
         // Save clusters to DB
@@ -598,10 +581,12 @@ ${projectMemory ? projectMemory.slice(0, 500) : `Domain niche for ${website_doma
           success: true,
           intent_type: 'immediate_action',
           action_type: 'keyword_research',
-          summary: `Discovered ${clusters.length} topical clusters and ${opportunities.length} keyword opportunities for ${website_domain}. All terms strictly verified for real search demand (>= 200 searches/mo) and fast-win rankability (KD <= 30).`,
+          summary: `Mapped ${inventory.coveredTitles.length} existing articles and ${inventory.categories.length} categories on ${website_domain}. Discovered ${clusters.length} topical clusters and ${opportunities.length} keyword opportunities with zero cannibalization (Demand >= 200/mo, KD <= 30).`,
           link_url: '/keywords',
           link_label: 'View Discovered Keywords',
           data: {
+            existing_articles_mapped: inventory.coveredTitles.length,
+            categories_analyzed: inventory.categories.length,
             clusters_count: clusters.length,
             opportunities_count: opportunities.length,
             top_opportunities: topOpps,
