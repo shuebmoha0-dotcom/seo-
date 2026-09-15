@@ -601,7 +601,8 @@ export default function ContentPlannerPage() {
     const target = draftToindex || selectedDraft;
     if (!target) return;
 
-    const liveUrl = target.wordpress_post_url || `https://bizaigenius.com/${target.url_slug}/`;
+    const domainBase = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "https://bizaigenius.com");
+    const liveUrl = target.wordpress_post_url || `${domainBase.replace(/\/$/, '')}/${target.url_slug}/`;
     const confirmed = window.confirm(`Request instant Google & IndexNow indexing for this article?\n\nURL: ${liveUrl}\n\nGooglebot and Bingbot will be notified to crawl and index this URL.`);
     if (!confirmed) return;
 

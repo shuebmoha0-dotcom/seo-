@@ -192,8 +192,20 @@ export class AutopilotExecutor {
               } catch (_) {}
 
               if (activeCategories.length === 0) {
-                // Fallback to core taxonomy for bizaigenius.com
-                activeCategories = ['Cold Email', 'AI Tools & Reviews', 'Email Deliverability', 'LinkedIn Outreach', 'Sales Email', 'Email Sequences'];
+                // Discover categories from client's existing pages and drafts in database
+                try {
+                  const { data: clientPages } = await supabase
+                    .from('pages')
+                    .select('title, h1, path')
+                    .eq('website_id', website_id)
+                    .limit(10);
+                  if (clientPages && clientPages.length > 0) {
+                    activeCategories = clientPages
+                      .map((p: any) => p.h1 || p.title)
+                      .filter(Boolean)
+                      .slice(0, 6);
+                  }
+                } catch (_) {}
               }
 
               const { LLMProvider } = await import('../tools/llm');
@@ -209,15 +221,13 @@ export class AutopilotExecutor {
                   estimated_volume: z.number().default(850),
                   estimated_kd: z.number().default(24)
                 }),
-                system: `You are an expert SEO strategist for "${website_domain}".
-VERIFIED WEBSITE CATEGORIES:
-${activeCategories.map(c => `• ${c}`).join('\n')}
-
-MANDATORY NICHE ANCHORING:
-- You MUST pick a primary keyword that strictly falls under one of the verified categories above.
-- Focus: Cold email deliverability, email warmup, Clay/Smartlead/Instantly automation, B2B prospecting, and outbound sales tools.
-- FORBIDDEN: General B2C marketing, unrelated software, social media management, generic business advice.
-- Niche context from memory: ${projectMemory ? projectMemory.slice(0, 400) : 'B2B sales automation, AI cold email tools, outreach'}.`,
+                system: `You are an elite, highly targeted SEO strategist for the commercial client website "${website_domain}".
+${activeCategories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES / CORE TOPICS:\n${activeCategories.map(c => `• ${c}`).join('\n')}\n` : ''}
+MANDATORY CLIENT NICHE ANCHORING:
+- You MUST pick a primary keyword that strictly aligns with the client's industry, verified categories, and audience.
+- Honor all client custom instructions, brand specifications, and niche boundaries from project memory:
+${projectMemory ? projectMemory.slice(0, 500) : `Domain niche for ${website_domain}`}.
+- Strictly FORBID generic, off-topic, or irrelevant keywords that do not serve this specific client website.`,
                 prompt: `Select the single best primary keyword, practical guide title, and matching website category to write about right now for ${website_domain}. Make sure it is realistic, highly actionable, and has verified search demand.`
               });
               if (kwRes.object?.keyword) {

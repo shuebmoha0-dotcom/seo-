@@ -201,7 +201,12 @@ export async function POST(request: Request) {
       // 3. If user explicitly requested indexing alongside approval
       if (body.request_indexing) {
         try {
-          const liveUrl = wpPostResult?.link || `https://bizaigenius.com/${updatedDraft.url_slug}/`;
+          let siteDomain = 'https://bizaigenius.com';
+          if (updatedDraft.website_id) {
+            const { data: wRecord } = await supabase.from('websites').select('url, domain').eq('id', updatedDraft.website_id).maybeSingle();
+            if (wRecord) siteDomain = wRecord.url || `https://${wRecord.domain}`;
+          }
+          const liveUrl = wpPostResult?.link || `${siteDomain.replace(/\/$/, '')}/${updatedDraft.url_slug}/`;
           const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
           const indexRes = await GoogleIndexingService.requestIndexing({
             url: liveUrl,

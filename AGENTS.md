@@ -46,5 +46,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Markdown Rendering**: Headings (H1–H4), blockquotes, lists, images, and tables must render cleanly without raw tags or split `![alt]\n(url)` markers.
 - **No Flash of Unparsed Content**: Never dump raw markdown or unstyled text onto the preview area.
 
+## 8. COMMERCIAL MULTI-TENANT ARCHITECTURE & ZERO HARDCODED DOMAINS
+- **MANDATE**: This platform is a commercial SaaS product built for paying clients across any industry, niche, or CMS. `bizaigenius.com` is strictly a test website, NOT a hardcoded system assumption.
+- **PROHIBITION**: NEVER hardcode `bizaigenius.com`, cold email niches, specific author names, or test credentials into production routes, executors, or prompts.
+- **Dynamic Multi-Tenant Scope**:
+  - Every domain, URL, API call, category, WordPress job, and indexing request must be dynamically resolved from the active `website_id` / client website record.
+  - Client niche and topic boundaries must be derived dynamically from the client's `project_memory`, `website_rules`, and live categories.
+  - Every feature (indexing, crawling, drafting, scheduling, publishing) must work identically for any client website connected to the platform.
+
+
 
 

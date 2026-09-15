@@ -66,24 +66,43 @@ export async function POST(request: Request) {
           .maybeSingle();
 
         let livePostUrl = '';
-        const siteBaseUrl = 'https://bizaigenius.com';
+        let siteBaseUrl = '';
 
         if (draft) {
+          // Fetch site record to dynamically resolve domain/url
+          if (draft.website_id) {
+            const { data: siteRecord } = await supabase
+              .from('websites')
+              .select('domain, url')
+              .eq('id', draft.website_id)
+              .maybeSingle();
+            if (siteRecord) {
+              siteBaseUrl = siteRecord.url || `https://${siteRecord.domain}`;
+            }
+          }
+
           // Trigger automated WordPress publish sync
           try {
             const { markdownToWordPressHtml, cleanMetaString } = await import('@/lib/utils/markdownToHtml');
             const formattedHtmlContent = markdownToWordPressHtml(draft.content_body);
             const cleanKw = (draft.primary_keyword || '').replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '').trim();
             
-            const { data: wpSite } = await supabase
+            let wpSiteQuery = supabase
               .from('wordpress_outbound_sites')
               .select('*')
-              .eq('status', 'active')
+              .eq('status', 'active');
+            
+            if (draft.website_id) {
+              wpSiteQuery = wpSiteQuery.eq('website_id', draft.website_id);
+            }
+
+            const { data: wpSite } = await wpSiteQuery
               .order('last_ping_at', { ascending: false })
               .limit(1)
               .maybeSingle();
 
             if (wpSite) {
+              siteBaseUrl = wpSite.site_url;
               livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${draft.url_slug}/`;
               await supabase.from('wordpress_jobs').insert({
                 site_id: wpSite.id,
@@ -114,8 +133,13 @@ export async function POST(request: Request) {
             console.warn('[Telegram Webhook] WordPress dispatch notice:', wpErr);
           }
 
+          if (!siteBaseUrl) {
+            const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
+            siteBaseUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : 'https://bizaigenius.com');
+          }
+
           if (!livePostUrl) {
-            livePostUrl = `${siteBaseUrl}/${draft.url_slug}/`;
+            livePostUrl = `${siteBaseUrl.replace(/\/$/, '')}/${draft.url_slug}/`;
           }
 
           // Update draft status to published
@@ -170,13 +194,21 @@ export async function POST(request: Request) {
               } catch (_) {}
             }
             if (!targetUrl && d.url_slug) {
-              targetUrl = `https://bizaigenius.com/${d.url_slug}/`;
+              let domainBase = 'https://bizaigenius.com';
+              const { data: ws } = await supabase
+                .from('websites')
+                .select('url, domain')
+                .eq('id', draftWebsiteId || '')
+                .maybeSingle();
+              if (ws) domainBase = ws.url || `https://${ws.domain}`;
+              targetUrl = `${domainBase.replace(/\/$/, '')}/${d.url_slug}/`;
             }
           }
         }
 
         if (!targetUrl) {
-          targetUrl = 'https://bizaigenius.com';
+          const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
+          targetUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : 'https://bizaigenius.com');
         }
 
         // Execute Google & IndexNow indexing submission
