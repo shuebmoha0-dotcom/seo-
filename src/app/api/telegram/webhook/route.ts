@@ -422,14 +422,33 @@ Your agent will process the request in the background and ping you when finished
       } catch(e) {}
 
       // E. Conversational Response (Greetings, Questions, Explanations)
-      if (parsed.intent_type === 'conversation_response' && parsed.response_message) {
-        await telegram.sendMessage(chatId, parsed.response_message, { parse_mode: 'Markdown' });
+      if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
+        let answer = parsed.response_message;
+        if (!answer) {
+          try {
+            const { LLMProvider } = await import('@/lib/tools/llm');
+            const replyResult = await LLMProvider.generateText({
+              agent: 'MonitoringAgent',
+              system: `You are an elite, highly knowledgeable AI SEO Consultant and Growth Architect for the website "${currentSite.domain}".
+Answer the user's natural language question with deep SEO expertise, actionable insights, and a helpful, concise tone.
+If the user is asking about their site, reference ${currentSite.domain}.
+Format your response with clean Markdown (bullet points, bold text). Keep it under 250 words so it is easy to read on mobile.`,
+              prompt: taskPrompt,
+              messages: chatHistory.map(h => ({ role: h.role, content: h.content }))
+            });
+            answer = replyResult.text;
+          } catch (replyErr) {
+            answer = `👋 I am your AI SEO Consultant for *${currentSite.domain}*.\n\nYou asked: _"${taskPrompt}"_\n\nHow can I help you grow search traffic? You can ask me any SEO questions, analyze keywords, or tell me to write comprehensive articles!`;
+          }
+        }
+
+        await telegram.sendMessage(chatId, answer, { parse_mode: 'Markdown' });
         
         try {
           await supabase.from('project_memory').insert({
             website_id: currentSite.id,
             category: 'workflow',
-            content: parsed.response_message,
+            content: answer,
             source: 'assistant_response',
             source_detail: chatId,
             confidence: 'high'
