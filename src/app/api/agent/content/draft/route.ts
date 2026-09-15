@@ -69,6 +69,30 @@ export async function GET(request: Request) {
       }
     }
 
+    // Query recently completed WordPress jobs to match live post URLs
+    const { data: wpJobs } = await supabase
+      .from('wordpress_jobs')
+      .select('id, idempotency_key, payload, result, completed_at')
+      .in('job_type', ['create_post', 'update_post'])
+      .eq('status', 'completed')
+      .order('completed_at', { ascending: false })
+      .limit(50);
+
+    const jobsByDraftId = new Map<string, any>();
+    const jobsByTitle = new Map<string, any>();
+
+    for (const job of wpJobs || []) {
+      if (job.idempotency_key?.startsWith('create_post_draft_')) {
+        const parts = job.idempotency_key.split('_');
+        if (parts[3] && !jobsByDraftId.has(parts[3])) {
+          jobsByDraftId.set(parts[3], job);
+        }
+      }
+      if (job.payload?.title && !jobsByTitle.has(job.payload.title)) {
+        jobsByTitle.set(job.payload.title, job);
+      }
+    }
+
     // Fast read-only: resolve status cleanly without background loops
     const formattedDrafts = (drafts || []).map((d: any) => {
       let currentStatus = d.status || 'ready_for_approval';
@@ -90,6 +114,35 @@ export async function GET(request: Request) {
         }
       }
 
+      let wpUrl = d.wordpress_post_url;
+      let wpId = d.wordpress_post_id;
+      let pubAt = d.published_at || (d.status === 'published' ? d.updated_at : undefined);
+
+      if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(d.revision_notes);
+          if (parsed.wordpress_post_url) wpUrl = parsed.wordpress_post_url;
+          if (parsed.wordpress_post_id) wpId = parsed.wordpress_post_id;
+          if (parsed.published_at) pubAt = parsed.published_at;
+        } catch (_) {}
+      }
+
+      const matchingJob = jobsByDraftId.get(d.id) || jobsByTitle.get(d.working_title);
+      if (matchingJob?.result) {
+        if (matchingJob.result.permalink) wpUrl = matchingJob.result.permalink;
+        if (matchingJob.result.post_id) wpId = matchingJob.result.post_id;
+        if (matchingJob.completed_at) pubAt = matchingJob.completed_at;
+      }
+
+      if (wpUrl && currentStatus !== 'published') {
+        currentStatus = 'published';
+      }
+
+      let cleanBody = d.content_body || '';
+      if (cleanBody) {
+        cleanBody = cleanBody.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
+      }
+
       return {
         id: d.id,
         working_title: d.working_title,
@@ -103,12 +156,12 @@ export async function GET(request: Request) {
         seo_title: d.seo_title,
         meta_description: d.meta_description,
         url_slug: d.url_slug,
-        content_body: d.content_body,
+        content_body: cleanBody,
         qa: d.content_qa_results?.[0] || null,
         images: d.content_images || [],
-        published_at: d.published_at || (d.status === 'published' ? d.updated_at : undefined),
-        wordpress_post_id: d.wordpress_post_id,
-        wordpress_post_url: d.wordpress_post_url,
+        published_at: pubAt,
+        wordpress_post_id: wpId,
+        wordpress_post_url: wpUrl,
         created_at: d.created_at,
         updated_at: d.updated_at,
       };

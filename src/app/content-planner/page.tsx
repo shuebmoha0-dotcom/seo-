@@ -211,128 +211,196 @@ export default function ContentPlannerPage() {
   const renderFormattedArticle = (content: string) => {
     if (!content) return <p className="text-xs text-neutral-500">No content body generated.</p>;
 
-    // Pre-clean content: strip out raw Gutenberg comment markers and stray TOC anchors
-    const cleanContent = content
-      .replace(/<!--\s*\/?wp:[^>]*-->/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '');
+    try {
+      // 1. Pre-clean content: strip out raw Gutenberg comment markers and stray TOC anchors
+      let cleanContent = content
+        .replace(/<!--\s*\/?wp:[^>]*-->/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
 
-    const rawBlocks = cleanContent.split(/\n\s*\n/);
+      // 2. Normalize broken / split image markdown: ![alt]\n(url) or ![alt] (url)
+      cleanContent = cleanContent.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
+      cleanContent = cleanContent.replace(/!\[([^\]]*)\]\s+\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
 
-    // Expand blocks where headings were immediately followed by content without empty lines
-    const blocks: string[] = [];
-    for (const b of rawBlocks) {
-      const trimmed = b.trim();
-      if (!trimmed) continue;
+      // 3. Normalize broken / split link markdown: [text]\n(url)
+      cleanContent = cleanContent.replace(/\[([^\]]+)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '[$1]($2)');
 
-      if (/^(#{1,6}\s+)/.test(trimmed) && trimmed.includes('\n')) {
-        const lines = trimmed.split('\n');
-        blocks.push(lines[0]);
-        const rest = lines.slice(1).join('\n').trim();
-        if (rest) blocks.push(rest);
-      } else {
-        blocks.push(trimmed);
+      // 4. Ensure images have blank lines before and after so they don't get stuck inside paragraph blocks
+      cleanContent = cleanContent.replace(/([^\n])\n(!\[[^\]]*\]\([^\)]+\))/g, '$1\n\n$2');
+      cleanContent = cleanContent.replace(/(!\[[^\]]*\]\([^\)]+\))\n([^\n])/g, '$1\n\n$2');
+
+      const rawBlocks = cleanContent.split(/\n\s*\n/);
+
+      // Expand blocks where headings were immediately followed by content without empty lines
+      const blocks: string[] = [];
+      for (const b of rawBlocks) {
+        const trimmed = b.trim();
+        if (!trimmed) continue;
+
+        if (/^(#{1,6}\s+)/.test(trimmed) && trimmed.includes('\n')) {
+          const lines = trimmed.split('\n');
+          blocks.push(lines[0]);
+          const rest = lines.slice(1).join('\n').trim();
+          if (rest) blocks.push(rest);
+        } else {
+          blocks.push(trimmed);
+        }
       }
+
+      return (
+        <div className="space-y-4">
+          {blocks.map((block, bIdx) => {
+            let trimmed = block ? block.trim() : '';
+            if (!trimmed) return null;
+            try {
+
+              // 1. Drop any Table of Contents completely (user requested: zero Table of Contents)
+              const isTOC =
+                trimmed.includes('wp-block-rank-math-toc-block') ||
+                trimmed.includes('rank-math/toc-block') ||
+                /^#*\s*table of contents/i.test(trimmed);
+
+              if (isTOC) {
+                return null;
+              }
+
+              // 2. Strip any standalone or remaining HTML comments
+              trimmed = trimmed.replace(/<!--[\s\S]*?-->/g, '').trim();
+              if (!trimmed) return null;
+
+              // 3. Fenced Code Blocks (```code```)
+              if (trimmed.startsWith('```')) {
+                const codeLines = trimmed.split('\n');
+                const codeBody = codeLines.slice(1, codeLines[codeLines.length - 1].startsWith('```') ? -1 : undefined).join('\n');
+                return (
+                  <pre key={bIdx} className="my-4 p-4 rounded-xl bg-neutral-900 text-neutral-100 font-mono text-xs overflow-x-auto">
+                    <code>{codeBody}</code>
+                  </pre>
+                );
+              }
+
+              // 4. Check for Image Markdown ![alt](url)
+              const imgMatch = trimmed.match(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/);
+              if (imgMatch) {
+                const alt = imgMatch[1] || '';
+                const src = imgMatch[2];
+                // Safely escape special regex characters in alt so new RegExp never crashes
+                const safeAlt = alt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const remainingText = trimmed
+                  .replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/, '')
+                  .replace(safeAlt ? new RegExp(`\\*+${safeAlt}\\*+`, 'gi') : '', '')
+                  .trim();
+
+                return (
+                  <div key={bIdx} className="my-6 space-y-2">
+                    <figure className="rounded-2xl overflow-hidden border border-neutral-200 shadow-sm bg-neutral-50">
+                      <img src={src} alt={alt || 'Article visual'} className="w-full h-auto object-cover max-h-[420px]" loading="lazy" />
+                      {alt && (
+                        <figcaption className="p-2.5 text-center text-xs text-neutral-500 italic bg-white border-t border-neutral-100">
+                          {alt}
+                        </figcaption>
+                      )}
+                    </figure>
+                    {remainingText && (
+                      <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
+                        {renderInlineText(remainingText)}
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
+              // 5. Headings H1, H2, H3, H4
+              if (trimmed.startsWith('# ')) {
+                return (
+                  <h1 key={bIdx} className="text-xl md:text-2xl font-bold text-neutral-900 tracking-tight mt-6 mb-3 pb-2 border-b border-neutral-200">
+                    {renderInlineText(trimmed.replace(/^#\s+/, ''))}
+                  </h1>
+                );
+              }
+              if (trimmed.startsWith('## ')) {
+                return (
+                  <h2 key={bIdx} className="text-base md:text-lg font-bold text-neutral-900 tracking-tight mt-6 mb-2">
+                    {renderInlineText(trimmed.replace(/^##\s+/, ''))}
+                  </h2>
+                );
+              }
+              if (trimmed.startsWith('### ')) {
+                return (
+                  <h3 key={bIdx} className="text-sm md:text-base font-bold text-neutral-800 tracking-tight mt-4 mb-1">
+                    {renderInlineText(trimmed.replace(/^###\s+/, ''))}
+                  </h3>
+                );
+              }
+              if (trimmed.startsWith('#### ')) {
+                return (
+                  <h4 key={bIdx} className="text-xs md:text-sm font-bold text-neutral-800 tracking-tight mt-3 mb-1">
+                    {renderInlineText(trimmed.replace(/^####\s+/, ''))}
+                  </h4>
+                );
+              }
+
+              // 6. Blockquote (> quote)
+              if (trimmed.startsWith('>')) {
+                const quoteText = trimmed.split('\n').map(l => l.replace(/^>\s*/, '')).join(' ').trim();
+                return (
+                  <blockquote key={bIdx} className="my-4 pl-4 py-2.5 border-l-4 border-indigo-500 bg-neutral-50 rounded-r-xl text-xs md:text-sm text-neutral-700 italic leading-relaxed">
+                    {renderInlineText(quoteText)}
+                  </blockquote>
+                );
+              }
+
+              // 7. Bullet list (- or *)
+              if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                const items = trimmed.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
+                return (
+                  <ul key={bIdx} className="space-y-1.5 my-3 pl-5 list-disc text-xs md:text-sm text-neutral-700 leading-relaxed">
+                    {items.map((item, iIdx) => (
+                      <li key={iIdx}>
+                        {renderInlineText(item.replace(/^[-*]\s+/, ''))}
+                      </li>
+                    ))}
+                  </ul>
+                );
+              }
+
+              // 8. Numbered list (1. 2. 3.)
+              if (/^\d+\.\s+/.test(trimmed)) {
+                const items = trimmed.split('\n').filter(l => /^\d+\.\s+/.test(l.trim()));
+                return (
+                  <ol key={bIdx} className="space-y-1.5 my-3 pl-5 list-decimal text-xs md:text-sm text-neutral-700 leading-relaxed">
+                    {items.map((item, iIdx) => (
+                      <li key={iIdx}>
+                        {renderInlineText(item.replace(/^\d+\.\s+/, ''))}
+                      </li>
+                    ))}
+                  </ol>
+                );
+              }
+
+              // 9. Standard paragraph
+              return (
+                <p key={bIdx} className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
+                  {renderInlineText(trimmed)}
+                </p>
+              );
+            } catch (blockErr) {
+              return (
+                <p key={bIdx} className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
+                  {trimmed}
+                </p>
+              );
+            }
+          })}
+        </div>
+      );
+    } catch (err) {
+      console.error('[renderFormattedArticle error]:', err);
+      return (
+        <div className="text-xs text-neutral-700 whitespace-pre-wrap leading-relaxed">
+          {content}
+        </div>
+      );
     }
-
-    return (
-      <div className="space-y-4">
-        {blocks.map((block, bIdx) => {
-          let trimmed = block.trim();
-          if (!trimmed) return null;
-
-          // 1. Drop any Table of Contents completely (user requested: zero Table of Contents)
-          const isTOC =
-            trimmed.includes('wp-block-rank-math-toc-block') ||
-            trimmed.includes('rank-math/toc-block') ||
-            /^#*\s*table of contents/i.test(trimmed);
-
-          if (isTOC) {
-            return null;
-          }
-
-          // 2. Strip any standalone or remaining HTML comments
-          trimmed = trimmed.replace(/<!--[\s\S]*?-->/g, '').trim();
-          if (!trimmed) return null;
-
-          // 3. Check for Image Markdown ![alt](url)
-          const imgMatch = trimmed.match(/!\[([^\]]*)\]\(([^)]+)\)/);
-          if (imgMatch) {
-            const alt = imgMatch[1];
-            const src = imgMatch[2];
-            const remainingText = trimmed
-              .replace(/!\[([^\]]*)\]\(([^)]+)\)/, '')
-              .replace(new RegExp(`\\*+${alt}\\*+`, 'gi'), '')
-              .trim();
-
-            return (
-              <div key={bIdx} className="my-6 space-y-2">
-                <figure className="rounded-2xl overflow-hidden border border-neutral-200 shadow-sm bg-neutral-50">
-                  <img src={src} alt={alt} className="w-full h-auto object-cover max-h-96" />
-                  {alt && (
-                    <figcaption className="p-2.5 text-center text-xs text-neutral-500 italic bg-white border-t border-neutral-100">
-                      {alt}
-                    </figcaption>
-                  )}
-                </figure>
-                {remainingText && (
-                  <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
-                    {renderInlineText(remainingText)}
-                  </p>
-                )}
-              </div>
-            );
-          }
-
-          // 4. Check for H1 #
-          if (trimmed.startsWith('# ')) {
-            return (
-              <h1 key={bIdx} className="text-xl md:text-2xl font-bold text-neutral-900 tracking-tight mt-4 mb-2 pb-2 border-b border-neutral-200">
-                {renderInlineText(trimmed.replace(/^#\s+/, ''))}
-              </h1>
-            );
-          }
-
-          // 5. Check for H2 ##
-          if (trimmed.startsWith('## ')) {
-            return (
-              <h2 key={bIdx} className="text-base md:text-lg font-bold text-neutral-900 tracking-tight mt-6 mb-2">
-                {renderInlineText(trimmed.replace(/^##\s+/, ''))}
-              </h2>
-            );
-          }
-
-          // 6. Check for H3 ###
-          if (trimmed.startsWith('### ')) {
-            return (
-              <h3 key={bIdx} className="text-sm md:text-base font-bold text-neutral-800 tracking-tight mt-4 mb-1">
-                {renderInlineText(trimmed.replace(/^###\s+/, ''))}
-              </h3>
-            );
-          }
-
-          // 7. Check for bullet list
-          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-            const items = trimmed.split('\n').filter(l => l.trim().startsWith('- ') || l.trim().startsWith('* '));
-            return (
-              <ul key={bIdx} className="space-y-1.5 my-3 pl-5 list-disc text-xs text-neutral-700 leading-relaxed">
-                {items.map((item, iIdx) => (
-                  <li key={iIdx}>
-                    {renderInlineText(item.replace(/^[-*]\s+/, ''))}
-                  </li>
-                ))}
-              </ul>
-            );
-          }
-
-          // 8. Standard paragraph
-          return (
-            <p key={bIdx} className="text-xs md:text-sm text-neutral-700 leading-relaxed font-normal">
-              {renderInlineText(trimmed)}
-            </p>
-          );
-        })}
-      </div>
-    );
   };
 
   const [filterStatus, setFilterStatus] = useState<"all" | "draft" | "published" | "needs_revision">("all");
@@ -854,7 +922,10 @@ export default function ContentPlannerPage() {
                 .map(d => (
                   <div
                     key={d.id}
-                    onClick={() => setSelectedDraft(d)}
+                    onClick={() => {
+                      setSelectedDraft(d);
+                      setPreviewMode("formatted");
+                    }}
                     className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-2 ${
                       selectedDraft?.id === d.id
                         ? "bg-indigo-50/70 border-indigo-300 shadow-sm"
@@ -920,14 +991,33 @@ export default function ContentPlannerPage() {
 
                   {/* Approval and Publish Actions */}
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handlePublishWordPress(selectedDraft)}
-                      disabled={publishing === selectedDraft.id}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>{publishing === selectedDraft.id ? "Publishing to WordPress..." : "Publish to WordPress"}</span>
-                    </button>
+                    {selectedDraft.wordpress_post_url ? (
+                      <a
+                        href={selectedDraft.wordpress_post_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>View on WordPress</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => handlePublishWordPress(selectedDraft)}
+                        disabled={publishing === selectedDraft.id}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>
+                          {publishing === selectedDraft.id
+                            ? "Publishing to WordPress..."
+                            : selectedDraft.status === "published"
+                            ? "Re-sync to WordPress"
+                            : "Publish to WordPress"}
+                        </span>
+                      </button>
+                    )}
 
                     <button
                       onClick={() => setShowRevisionInput(!showRevisionInput)}
@@ -1062,8 +1152,27 @@ export default function ContentPlannerPage() {
                         {renderFormattedArticle(selectedDraft.content_body || "")}
                       </div>
                     ) : (
-                      <div className="prose prose-sm max-w-none text-neutral-800 bg-neutral-50 p-6 rounded-2xl border border-neutral-200 text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                        {selectedDraft.content_body || "No content body generated."}
+                      <div className="space-y-3">
+                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-xs">
+                          <div className="flex items-center gap-2.5">
+                            <span className="text-lg">ℹ️</span>
+                            <div>
+                              <p className="font-bold text-neutral-900">Viewing Raw Markdown Source Code</p>
+                              <p className="text-neutral-600 text-[11px]">
+                                Headings and images are shown as raw markdown syntax. To view the formatted article, click Formatted Article View.
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setPreviewMode("formatted")}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs shrink-0 transition-colors shadow-xs flex items-center gap-1.5"
+                          >
+                            <span>📖 Switch to Formatted View</span>
+                          </button>
+                        </div>
+                        <div className="prose prose-sm max-w-none text-neutral-800 bg-neutral-50 p-6 rounded-2xl border border-neutral-200 text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                          {selectedDraft.content_body || "No content body generated."}
+                        </div>
                       </div>
                     )}
                   </div>

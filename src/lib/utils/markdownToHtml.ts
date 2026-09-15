@@ -20,6 +20,10 @@ export function markdownToWordPressHtml(markdown: string): string {
 
   let html = markdown.trim();
 
+  // 0. Pre-clean and normalize split images and split links
+  html = html.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
+  html = html.replace(/\[([^\]]+)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '[$1]($2)');
+
   // 1. Remove duplicate leading H1 (# Title) because WordPress renders post_title as primary H1
   html = html.replace(/^#\s+[^\n]+\n*/i, '');
 

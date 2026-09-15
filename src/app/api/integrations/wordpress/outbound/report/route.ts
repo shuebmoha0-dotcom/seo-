@@ -84,11 +84,16 @@ export async function POST(request: Request) {
           }
         }
 
-        const draftUpdatePayload: Record<string, any> = {
-          status: 'published',
-          published_at: new Date().toISOString(),
+        const wpMeta = JSON.stringify({
           wordpress_post_id: result?.post_id || null,
           wordpress_post_url: result?.permalink || null,
+          published_at: new Date().toISOString(),
+        });
+
+        // Update with existing columns in content_drafts schema so Postgres never rejects the update
+        const draftUpdatePayload: Record<string, any> = {
+          status: 'published',
+          revision_notes: wpMeta,
           updated_at: new Date().toISOString(),
         };
 
