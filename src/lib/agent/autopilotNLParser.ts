@@ -158,6 +158,39 @@ CRITICAL:
   ): ParsedAutopilotInstruction {
     const lower = prompt.toLowerCase();
 
+    // Check for conversational greetings
+    if (/^(hello|hi|hey|good\s+morning|good\s+afternoon|good\s+evening|greetings|howdy|sup|yo)\b/i.test(lower) || lower === 'hello' || lower === 'hi' || lower === 'hey') {
+      return {
+        intent_type: 'conversation_response',
+        action_type: 'answer_question',
+        goal: prompt,
+        summary: `Conversational greeting for ${domain}`,
+        response_message: `👋 Hello! I am your autonomous AI SEO Agent for *${domain}*.\n\nYou can ask me questions or assign tasks directly:\n\n• *\"Write an article about [topic]\"*\n• *\"Research top low-difficulty keywords\"*\n• *\"Audit technical SEO and page health\"*\n• *\"How do I use the Content Planner?\"*\n\nWhat would you like me to tackle today?`
+      };
+    }
+
+    // Check for how to use Content Planner questions
+    if (/(how\s+to\s+use|how\s+do\s+i\s+use|what\s+is|explain|need\s+to\s+(know\s+)?how\s+to\s+use)\s+(the\s+)?content\s+planner/i.test(lower) || lower.includes('use content planner') || lower.includes('how to use content planner')) {
+      return {
+        intent_type: 'conversation_response',
+        action_type: 'answer_question',
+        goal: prompt,
+        summary: `Explanation of Content Planner for ${domain}`,
+        response_message: `📝 *How to Use the Content Planner:*\n\n1. **View Generated Articles:** Open \`/content-planner\` in your web dashboard to see all drafts with SEO scores, word counts, and featured images.\n2. **Generate from Telegram:** Simply tell me *\"Write an article about [topic]\"* right here. I will research keywords, weave internal links from live pages, generate featured graphics, and draft the post with Claude Sonnet 5.\n3. **One-Click Publishing:** When drafting finishes, you will receive an approval card here in Telegram. Tap *\"Approve & Publish Live\"* to push it directly to your WordPress site!\n4. **Real-Time Visibility:** Drafts display immediately without lag.`
+      };
+    }
+
+    // Check for general help / capabilities
+    if (/^(help|\/help|what\s+can\s+you\s+do|who\s+are\s+you)/i.test(lower)) {
+      return {
+        intent_type: 'conversation_response',
+        action_type: 'answer_question',
+        goal: prompt,
+        summary: `Help information for ${domain}`,
+        response_message: `🤖 *SEO Agent Capabilities for ${domain}:*\n\n• \`/status\` — View site health & active tasks\n• *\"Write an article about [topic]\"* — Full multi-agent content drafting\n• *\"Find low competition keywords\"* — High-ROI keyword discovery\n• *\"Audit technical SEO\"* — Live site crawl & issue detection\n• *\"How do I use Content Planner?\"* — Feature guide`
+      };
+    }
+
     // 1. Determine intent
     let intent_type: AutopilotIntentType = 'immediate_action';
     if (modeOverride === 'recurring') {
@@ -179,7 +212,13 @@ CRITICAL:
     let action_type: AutopilotActionType = 'general_optimization';
     if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(lower) || /^run\b/i.test(lower)) {
       action_type = 'run_scheduled_tasks';
-    } else if (lower.includes('article') || lower.includes('write') || lower.includes('blog') || lower.includes('post') || lower.includes('draft') || lower.includes('content')) {
+    } else if (
+      /(write|wrote|draft|create|generate)\s+(an?\s+)?(article|blog|post|guide|content)/i.test(lower) ||
+      /^(write|wrote)\s+article/i.test(lower) ||
+      lower.includes('article') ||
+      lower.includes('blog') ||
+      lower.includes('post it')
+    ) {
       action_type = 'write_article';
     } else if (lower.includes('keyword') || lower.includes('cluster') || lower.includes('search volume') || lower.includes('intent')) {
       action_type = 'keyword_research';
@@ -193,9 +232,17 @@ CRITICAL:
 
     // Extract topic
     let topic: string | undefined = undefined;
-    const aboutMatch = prompt.match(/(?:about|on|covering|topic|for)\s+["']?([^"'.?,]+)["']?/i);
-    if (aboutMatch && aboutMatch[1]) {
-      topic = aboutMatch[1].trim();
+    const cleanPrompt = prompt
+      .replace(/^(write|wrote|draft|create|generate)\s+(an?\s+)?(article|blog|post|guide|content)?\s*(about|on|covering|for)?\s*/i, '')
+      .replace(/\s*(and\s+)?(post|publish)\s+it$/i, '')
+      .trim();
+    if (cleanPrompt && !/^(write|wrote|article|blog|post|guide|content|post\s+it)$/i.test(cleanPrompt)) {
+      topic = cleanPrompt;
+    } else {
+      const aboutMatch = prompt.match(/(?:about|on|covering|topic|for)\s+["']?([^"'.?,]+)["']?/i);
+      if (aboutMatch && aboutMatch[1]) {
+        topic = aboutMatch[1].trim();
+      }
     }
 
     let schedule: AutopilotSchedule | undefined = undefined;

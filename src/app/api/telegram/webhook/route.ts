@@ -1,7 +1,7 @@
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-import { NextResponse, after } from 'next/server';
+import { NextResponse } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
@@ -247,239 +247,257 @@ Your agent will process the request in the background and ping you when finished
     // D. Natural Language Task Dispatcher
     const taskPrompt = rawText.replace(/^\/task\s+/i, '');
 
-    // 1. Send instant acknowledgement
-    await telegram.sendMessage(
-      chatId,
-      `🧠 *Analyzing Request...*\n\n*Target:* \`${currentSite.domain}\`\n*Status:* Agent is processing your input. Give me just a moment... ⏳`,
-      { parse_mode: 'Markdown' }
-    );
+    try {
+      const isDailySchedule = /(everyday|daily|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt);
+      const isScanRequest = /(scan|audit|health|crawl|check\s+site|analyze\s+site|seo\s+report)/i.test(taskPrompt);
 
-      // 2. Wrap heavy execution in Next.js `after` to prevent Vercel Serverless timeout!
-      after(async () => {
+      if (isDailySchedule || isScanRequest) {
+        // Send initial progress notice
+        await telegram.sendMessage(
+          chatId,
+          `🔍 *Running live SEO scan & crawl on \`${currentSite.domain}\`...* ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+
+        // A. If recurring schedule requested, activate in database
+        if (isDailySchedule) {
+          try {
+            await supabase.from('tasks').upsert({
+              project_id: currentSite.project_id,
+              user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+              name: `Daily SEO Scan & Audit for ${currentSite.domain}`,
+              natural_language_instruction: taskPrompt,
+              status: 'active',
+              schedule_type: 'daily',
+              schedule_config: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+              timezone: 'UTC',
+              next_run_at: new Date(Date.now() + 86400000).toISOString(),
+            });
+
+            await supabase.from('scheduled_agent_configs').upsert({
+              website_id: currentSite.id,
+              frequency: 'daily',
+              schedule_time: '09:00',
+              status: 'active',
+              next_run_at: new Date(Date.now() + 86400000).toISOString(),
+              notify_on_run_complete: true,
+              notify_on_opportunity: true
+            });
+          } catch (e) { }
+        }
+
+        // B. Run live website crawl immediately using WebsiteCrawler
+        const crawler = new WebsiteCrawler();
+        const targetUrl = currentSite.url || `https://${currentSite.domain}`;
+        const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
+
+        // Analyze key signals
+        const titleLength = crawlData.title?.length || 0;
+        const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
+        const h1Count = crawlData.h1.length;
+        const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
+        const metaLength = crawlData.meta_description?.length || 0;
+
+        let reportLines = [
+          `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
+          '━━━━━━━━━━━━━━━━━━━━━',
+        ];
+
+        if (isDailySchedule) {
+          reportLines.push(
+            '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
+            'Your site will now be scanned and reported every morning automatically!\n'
+          );
+        }
+
+        reportLines.push(
+          '🔍 *Live Site Scan Results:*',
+          `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
+          `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
+          `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
+          `• *Images:* ${crawlData.images.length} analyzed`
+        );
+
+        reportLines.push('\n⚠️ *On-Page Audit Findings:*');
+
+        if (isWastedH1) {
+          reportLines.push(
+            `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
+            `   • Current H1: \`"${crawlData.h1[0]}"\``,
+            `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
+            `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
+          );
+        } else if (h1Count === 0) {
+          reportLines.push(
+            `\n1️⃣ *Missing H1 Tag:*`,
+            `   • *Impact:* No primary H1 tag detected on the page.`,
+            `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
+          );
+        } else {
+          reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
+        }
+
+        if (isGenericTitle) {
+          reportLines.push(
+            `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
+            `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
+            `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
+          );
+        } else {
+          reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
+        }
+
+        if (metaLength < 70) {
+          reportLines.push(
+            `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
+          );
+        } else {
+          reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
+        }
+
+        reportLines.push(
+          '\n━━━━━━━━━━━━━━━━━━━━━',
+          '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
+        );
+
+        await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
+        return NextResponse.json({ ok: true });
+      }
+
+      // C. Fetch previous chat history for context
+      const { data: historyData } = await supabase
+        .from('project_memory')
+        .select('content, source')
+        .eq('website_id', currentSite.id)
+        .eq('category', 'workflow')
+        .eq('source_detail', chatId)
+        .order('created_at', { ascending: false })
+        .limit(6);
+        
+      const chatHistory = (historyData || []).reverse().map(row => ({
+        role: (row.source === 'user_instruction' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: row.content
+      }));
+
+      // D. Parse instruction via Autopilot NL Parser
+      const nlParser = new AutopilotNLParser();
+      const parsed = await nlParser.parseInstruction({
+        prompt: taskPrompt,
+        domain: currentSite.domain,
+        modeOverride: 'auto',
+        chatHistory
+      });
+
+      // Save user message to memory
+      try {
+        await supabase.from('project_memory').insert({
+          website_id: currentSite.id,
+          category: 'workflow',
+          content: taskPrompt,
+          source: 'user_instruction',
+          source_detail: chatId,
+          confidence: 'high'
+        });
+      } catch(e) {}
+
+      // E. Conversational Response (Greetings, Questions, Explanations)
+      if (parsed.intent_type === 'conversation_response' && parsed.response_message) {
+        await telegram.sendMessage(chatId, parsed.response_message, { parse_mode: 'Markdown' });
+        
         try {
-          const isDailySchedule = /(everyday|daily|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt);
-          const isScanRequest = /(scan|audit|health|crawl|check\s+site|analyze\s+site|seo\s+report)/i.test(taskPrompt);
-
-          if (isDailySchedule || isScanRequest) {
-            // A. If recurring schedule requested, activate in database
-            if (isDailySchedule) {
-              try {
-                await supabase.from('tasks').upsert({
-                  project_id: currentSite.project_id,
-                  user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-                  name: `Daily SEO Scan & Audit for ${currentSite.domain}`,
-                  natural_language_instruction: taskPrompt,
-                  status: 'active',
-                  schedule_type: 'daily',
-                  schedule_config: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
-                  timezone: 'UTC',
-                  next_run_at: new Date(Date.now() + 86400000).toISOString(),
-                });
-
-                await supabase.from('scheduled_agent_configs').upsert({
-                  website_id: currentSite.id,
-                  frequency: 'daily',
-                  schedule_time: '09:00',
-                  status: 'active',
-                  next_run_at: new Date(Date.now() + 86400000).toISOString(),
-                  notify_on_run_complete: true,
-                  notify_on_opportunity: true
-                });
-              } catch (e) { }
-            }
-
-            // B. Run live website crawl immediately using WebsiteCrawler
-            const crawler = new WebsiteCrawler();
-            const targetUrl = currentSite.url || `https://${currentSite.domain}`;
-            const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
-
-            // Analyze key signals
-            const titleLength = crawlData.title?.length || 0;
-            const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
-            const h1Count = crawlData.h1.length;
-            const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
-            const metaLength = crawlData.meta_description?.length || 0;
-
-            let reportLines = [
-              `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
-              '━━━━━━━━━━━━━━━━━━━━━',
-            ];
-
-            if (isDailySchedule) {
-              reportLines.push(
-                '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
-                'Your site will now be scanned and reported every morning automatically!\n'
-              );
-            }
-
-            reportLines.push(
-              '🔍 *Live Site Scan Results:*',
-              `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
-              `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
-              `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
-              `• *Images:* ${crawlData.images.length} analyzed`
-            );
-
-            reportLines.push('\n⚠️ *On-Page Audit Findings:*');
-
-            if (isWastedH1) {
-              reportLines.push(
-                `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
-                `   • Current H1: \`"${crawlData.h1[0]}"\``,
-                `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
-                `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
-              );
-            } else if (h1Count === 0) {
-              reportLines.push(
-                `\n1️⃣ *Missing H1 Tag:*`,
-                `   • *Impact:* No primary H1 tag detected on the page.`,
-                `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
-              );
-            } else {
-              reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
-            }
-
-            if (isGenericTitle) {
-              reportLines.push(
-                `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
-                `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
-                `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
-              );
-            } else {
-              reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
-            }
-
-            if (metaLength < 70) {
-              reportLines.push(
-                `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
-              );
-            } else {
-              reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
-            }
-
-            reportLines.push(
-              '\n━━━━━━━━━━━━━━━━━━━━━',
-              '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
-            );
-
-            await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
-            return;
-          }
-
-          // C. Fetch previous chat history for context
-          const { data: historyData } = await supabase
-            .from('project_memory')
-            .select('content, source')
-            .eq('website_id', currentSite.id)
-            .eq('category', 'workflow')
-            .eq('source_detail', chatId)
-            .order('created_at', { ascending: false })
-            .limit(6);
-            
-          const chatHistory = (historyData || []).reverse().map(row => ({
-            role: (row.source === 'user_instruction' ? 'user' : 'assistant') as 'user' | 'assistant',
-            content: row.content
-          }));
-
-          // C. Otherwise, run full Autopilot NL Parser + Executor
-          const nlParser = new AutopilotNLParser();
-          const parsed = await nlParser.parseInstruction({
-            prompt: taskPrompt,
-            domain: currentSite.domain,
-            modeOverride: 'auto',
-            chatHistory
-          });
-
-          // Save user message to memory
-          try {
-            await supabase.from('project_memory').insert({
-              website_id: currentSite.id,
-              category: 'workflow',
-              content: taskPrompt,
-              source: 'user_instruction',
-              source_detail: chatId,
-              confidence: 'high'
-            });
-          } catch(e) {}
-
-          if (parsed.intent_type === 'conversation_response' && parsed.response_message) {
-            await telegram.sendMessage(chatId, parsed.response_message, { parse_mode: 'Markdown' });
-            
-            // Save assistant response to memory
-            try {
-              await supabase.from('project_memory').insert({
-                website_id: currentSite.id,
-                category: 'workflow',
-                content: parsed.response_message,
-                source: 'assistant_response',
-                source_detail: chatId,
-                confidence: 'high'
-              });
-            } catch(e) {}
-            return;
-          }
-
-          const executor = new AutopilotExecutor();
-          const execResult = await executor.executeImmediateAction({
-            instruction: parsed,
+          await supabase.from('project_memory').insert({
             website_id: currentSite.id,
-            website_domain: currentSite.domain,
-            website_url: currentSite.url || `https://${currentSite.domain}`,
-            project_id: currentSite.project_id,
-            user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-            sync: true,
+            category: 'workflow',
+            content: parsed.response_message,
+            source: 'assistant_response',
+            source_detail: chatId,
+            confidence: 'high'
           });
+        } catch(e) {}
+        return NextResponse.json({ ok: true });
+      }
 
-          if (execResult.success) {
-            if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
-              const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
-                `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
-              ).join('\n\n');
+      // F. Actionable Execution (Write Article, Keyword Research, Technical Audit)
+      if (parsed.action_type === 'write_article') {
+        await telegram.sendMessage(
+          chatId,
+          `🚀 *Autonomous Content Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Topic / Goal:* ${parsed.topic || parsed.goal}\n\n1️⃣ Researching high-demand, low-KD keywords\n2️⃣ Weaving internal links from live pages\n3️⃣ Generating visual assets\n4️⃣ Drafting 1,200–1,600 words with Claude Sonnet 5\n\n_Agent is writing now..._ ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+      } else if (parsed.action_type === 'keyword_research') {
+        await telegram.sendMessage(
+          chatId,
+          `🎯 *Researching Keywords for \`${currentSite.domain}\`...* ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        await telegram.sendMessage(
+          chatId,
+          `⚙️ *Executing Task:* \`${parsed.action_type}\` for \`${currentSite.domain}\`... ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+      }
 
-              await telegram.sendMessage(
-                chatId,
-                `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
-                { parse_mode: 'Markdown' }
-              );
-            } else {
-              const isProcessing = execResult.summary.includes('background') || execResult.summary.includes('started') || execResult.summary.includes('running');
-              await telegram.sendMessage(
-                chatId,
-                `${isProcessing ? '⚙️ *Task Processing...*' : '✅ *Task Completed!*'}\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
-                { parse_mode: 'Markdown' }
-              );
-            }
-          } else {
-            await telegram.sendMessage(
-              chatId,
-              `⚠️ *Task Finished with Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
-              { parse_mode: 'Markdown' }
-            );
-          }
+      const executor = new AutopilotExecutor();
+      const execResult = await executor.executeImmediateAction({
+        instruction: parsed,
+        website_id: currentSite.id,
+        website_domain: currentSite.domain,
+        website_url: currentSite.url || `https://${currentSite.domain}`,
+        project_id: currentSite.project_id,
+        user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+        sync: true,
+      });
 
-          // Save agent response to memory
-          try {
-            await supabase.from('project_memory').insert({
-              website_id: currentSite.id,
-              category: 'workflow',
-              content: execResult.summary,
-              source: 'agent_response',
-              source_detail: chatId,
-              confidence: 'high'
-            });
-          } catch(e) {}
+      if (execResult.success) {
+        if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
+          const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
+            `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
+          ).join('\n\n');
 
-        } catch (taskErr: any) {
-          console.error('[Telegram Task Exec Error]:', taskErr);
           await telegram.sendMessage(
             chatId,
-            `❌ *Task Execution Notice:*\n${taskErr.message || 'An unexpected error occurred during execution.'}`,
+            `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
+            { parse_mode: 'Markdown' }
+          );
+        } else {
+          const isProcessing = execResult.summary.includes('background') || execResult.summary.includes('started') || execResult.summary.includes('running');
+          await telegram.sendMessage(
+            chatId,
+            `${isProcessing ? '⚙️ *Task Processing...*' : '✅ *Task Completed!*'}\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
             { parse_mode: 'Markdown' }
           );
         }
-      });
+      } else {
+        await telegram.sendMessage(
+          chatId,
+          `⚠️ *Task Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
+          { parse_mode: 'Markdown' }
+        );
+      }
 
-      return NextResponse.json({ ok: true });
+      // Save agent response to memory
+      try {
+        await supabase.from('project_memory').insert({
+          website_id: currentSite.id,
+          category: 'workflow',
+          content: execResult.summary,
+          source: 'agent_response',
+          source_detail: chatId,
+          confidence: 'high'
+        });
+      } catch(e) {}
+
+    } catch (taskErr: any) {
+      console.error('[Telegram Task Exec Error]:', taskErr);
+      await telegram.sendMessage(
+        chatId,
+        `❌ *Task Execution Notice:*\n${taskErr.message || 'An unexpected error occurred during execution.'}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    return NextResponse.json({ ok: true });
   } catch (error: any) {
     console.error('[Telegram Webhook] Error:', error);
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
