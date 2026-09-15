@@ -611,6 +611,13 @@ Your agent will process the request in the background and ping you when finished
         });
       } catch(e) {}
 
+      // Route diagnostic and drop-investigation questions to seo_diagnostic immediately
+      const isDiagnosticQuestion = /why.*(rank|drop|fall|traffic|declin|loss|lost|position)|diagnos|what happened to my (rank|traffic)|why.*not ranking/i.test(taskPrompt);
+      if (isDiagnosticQuestion && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'seo_diagnostic';
+      }
+
       // E. Conversational Response (Greetings, Questions, Explanations)
       if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
         let answer = parsed.response_message;
@@ -647,8 +654,14 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         return NextResponse.json({ ok: true });
       }
 
-      // F. Actionable Execution (Write Article, Keyword Research, Technical Audit)
-      if (parsed.action_type === 'write_article') {
+      // F. Actionable Execution (Write Article, Keyword Research, Technical Audit, Diagnostic)
+      if (parsed.action_type === 'seo_diagnostic') {
+        await telegram.sendMessage(
+          chatId,
+          `🔎 *Forensic SEO Diagnostic Agent Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Investigating:* "${parsed.goal}"\n\n1️⃣ Inspecting Search Console queries & position trends\n2️⃣ Auditing technical signals (indexability, canonicals, status codes)\n3️⃣ Checking for keyword & topical cannibalization\n4️⃣ Isolating root causes and building step-by-step remediation plan...\n\n_Agent is investigating now..._ ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+      } else if (parsed.action_type === 'write_article') {
         await telegram.sendMessage(
           chatId,
           `🚀 *Autonomous Content Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Topic / Goal:* ${parsed.topic || parsed.goal}\n\n1️⃣ Researching high-demand, low-KD keywords\n2️⃣ Weaving internal links from live pages\n3️⃣ Generating visual assets\n4️⃣ Drafting 1,200–1,600 words with Claude Sonnet 5\n\n_Agent is writing now..._ ⏳`,
@@ -696,7 +709,13 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       }
 
       if (execResult.success) {
-        if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
+        if (parsed.action_type === 'seo_diagnostic') {
+          await telegram.sendMessage(
+            chatId,
+            execResult.summary,
+            { parse_mode: 'Markdown' }
+          );
+        } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
           const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
             `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
           ).join('\n\n');

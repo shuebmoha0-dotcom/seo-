@@ -7,6 +7,7 @@ import { CrawlService } from '../crawler/crawlService';
 import { ParsedAutopilotInstruction } from './autopilotNLParser';
 import { SiteContentGapDetector } from './siteContentGapDetector';
 import { DuplicateArticleChecker } from './duplicateChecker';
+import { DiagnosticAgent } from './diagnosticAgent';
 
 export interface AutopilotExecutionResult {
   success: boolean;
@@ -591,6 +592,45 @@ export class AutopilotExecutor {
             opportunities_count: opportunities.length,
             top_opportunities: topOpps,
           }
+        };
+      }
+
+      // ── ACTION: SEO FORENSIC DIAGNOSTIC ──────────────────────────────
+      if (instruction.action_type === 'seo_diagnostic') {
+        console.log(`[AutopilotExecutor] Running DiagnosticAgent forensic investigation for "${website_domain}"...`);
+        const report = await DiagnosticAgent.diagnoseSite({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+          userQuery: instruction.goal || instruction.summary || 'Diagnose ranking and traffic changes',
+          targetKeyword: instruction.topic,
+          targetUrl: instruction.target_url,
+        });
+
+        // Save diagnostic findings to project_memory for long-term intelligence
+        try {
+          await supabase.from('project_memory').insert({
+            website_id,
+            category: 'seo_diagnosis',
+            source: 'diagnostic_agent',
+            content: JSON.stringify({
+              health: report.overall_health,
+              summary: report.executive_summary,
+              findings: report.findings,
+              action_plan: report.action_plan,
+            }),
+            confidence: 'high',
+          });
+        } catch (_) {}
+
+        return {
+          success: true,
+          intent_type: 'immediate_action',
+          action_type: 'seo_diagnostic',
+          summary: report.formatted_markdown,
+          link_url: '/rank-tracking',
+          link_label: 'View Diagnostic Details',
+          data: report,
         };
       }
 

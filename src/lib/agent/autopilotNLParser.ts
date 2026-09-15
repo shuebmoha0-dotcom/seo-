@@ -11,6 +11,7 @@ export type AutopilotActionType =
   | 'on_page_seo'
   | 'run_scheduled_tasks'
   | 'general_optimization'
+  | 'seo_diagnostic'
   | 'answer_question';
 
 export interface AutopilotSchedule {
@@ -66,6 +67,7 @@ export class AutopilotNLParser {
             'on_page_seo',
             'run_scheduled_tasks',
             'general_optimization',
+            'seo_diagnostic',
             'answer_question'
           ]),
           goal: z.string().describe("Clear, concise goal statement based on the user's current prompt AND the chat history context if they are referencing something from before (e.g. 'make it longer' -> 'Make the article about email warmup longer')"),
@@ -82,21 +84,24 @@ export class AutopilotNLParser {
 Your primary mission is to understand user natural language input with human-level nuance.
 
 CLASSIFICATION RULES:
-1. 'conversation_response' (PRIMARY for all natural dialogue):
-   - ANY question about SEO, keywords, rankings, traffic, strategy, or how things work (e.g. "what is bounce rate?", "how do I rank for competitor terms?", "how do I use content planner?", "should I write long or short posts?")
-   - Casual conversation, greetings, compliments, check-ins, or questions about the agent's capabilities (e.g. "hello", "who are you?", "thanks", "what can you do?")
-   - Requests for strategic advice or recommendations (e.g. "give me some content ideas", "what should I focus on next?")
-   -> MANDATORY: When intent_type is 'conversation_response', you MUST craft an insightful, authoritative, concise Markdown 'response_message' answering their question thoroughly.
+1. 'seo_diagnostic' (FORENSIC INVESTIGATION FOR RANKINGS, TRAFFIC & PERFORMANCE DROPS):
+   - ANY question asking why rankings dropped, why traffic declined, or asking for a diagnosis/audit of lost search visibility (e.g. "why did my ranking drop?", "why is my traffic down?", "what happened to my positions?", "diagnose my site", "why am I not ranking for X?", "audit my drops").
+   - Set intent_type to 'immediate_action' and action_type to 'seo_diagnostic'.
+   - This triggers our multi-agent diagnostic engine to inspect live site evidence, isolate the true root cause (technical block, cannibalization, content decay, intent shift), and deliver a clear, step-by-step solution!
 
-2. 'immediate_action' (STRICTLY FOR DIRECT COMMANDS):
+2. 'conversation_response' (For general educational dialogue & chit-chat):
+   - General conceptual questions about SEO definitions, tools, or best practices (e.g. "what is bounce rate?", "what is a canonical tag?", "how does the content planner work?")
+   - Casual conversation, greetings, compliments, check-ins, or questions about the agent's capabilities (e.g. "hello", "who are you?", "thanks")
+   -> When intent_type is 'conversation_response', craft an insightful, authoritative, concise Markdown 'response_message'.
+
+3. 'immediate_action' (FOR DIRECT COMMANDS):
    - ONLY when the user gives a clear imperative command to EXECUTE a change or run a workflow right now:
      • "write an article about [topic]" / "create a post on [topic]" -> action_type: 'write_article'
      • "find keywords" / "discover keyword opportunities" -> action_type: 'keyword_research'
      • "audit technical SEO" / "crawl my site" -> action_type: 'technical_audit'
      • "run tasks" / "execute scheduled jobs" -> action_type: 'run_scheduled_tasks'
-   - NEVER classify an informational question like "how does the content planner work?" or "what keywords are best for SaaS?" as immediate_action! Those are conversation_response!
 
-3. 'recurring_schedule':
+4. 'recurring_schedule':
    - ONLY when the user explicitly requests an automated recurring cadence (e.g. "every day at 9am", "weekly report every Monday").`,
         prompt: `Current User Prompt: "${rawPrompt}"\nTarget Domain: "${params.domain}"${chatHistoryContext}`
       });
@@ -222,7 +227,11 @@ CLASSIFICATION RULES:
 
     // 3. Determine action type for explicit commands
     let action_type: AutopilotActionType = 'general_optimization';
-    if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(lower) || /^run\b/i.test(lower)) {
+    const isDiagnostic = /why.*(rank|drop|fall|traffic|declin|loss|lost|position)|diagnos|what happened to my (rank|traffic)|why.*not ranking/i.test(lower);
+    if (isDiagnostic) {
+      intent_type = 'immediate_action';
+      action_type = 'seo_diagnostic';
+    } else if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(lower) || /^run\b/i.test(lower)) {
       action_type = 'run_scheduled_tasks';
     } else if (
       isImperativeWrite ||
