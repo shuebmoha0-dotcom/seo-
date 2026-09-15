@@ -197,6 +197,22 @@ export async function POST(request: Request) {
       } catch (jobErr) {
         console.warn('[Content Approval] Outbound job insert error:', jobErr);
       }
+
+      // 3. If user explicitly requested indexing alongside approval
+      if (body.request_indexing) {
+        try {
+          const liveUrl = wpPostResult?.link || `https://bizaigenius.com/${updatedDraft.url_slug}/`;
+          const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+          const indexRes = await GoogleIndexingService.requestIndexing({
+            url: liveUrl,
+            websiteId: updatedDraft.website_id,
+            type: 'URL_UPDATED',
+          });
+          console.log('[Content Approval] Indexing triggered:', indexRes.summary);
+        } catch (idxErr) {
+          console.warn('[Content Approval] Indexing request error:', idxErr);
+        }
+      }
     }
 
     return NextResponse.json({

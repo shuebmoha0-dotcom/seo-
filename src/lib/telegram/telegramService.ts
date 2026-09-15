@@ -167,6 +167,40 @@ Tap a button below to execute or reject directly from your phone:`;
   }
 
   /**
+   * Interactive permission card asking user if they want to request Google Indexing
+   */
+  async sendIndexingPrompt(
+    chatId: string | number,
+    data: {
+      postUrl: string;
+      postTitle: string;
+      draftId?: string;
+    }
+  ): Promise<any> {
+    const text =
+`🎉 *Article Published Live!*
+
+*Title:* ${data.postTitle}
+🔗 *Live URL:* ${data.postUrl}
+
+Would you like me to request Google Search Console & IndexNow indexing for this URL now?`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '🚀 Request Google Indexing', callback_data: `approve_index:${data.draftId || 'url'}` },
+          { text: '⏭️ Skip', callback_data: `skip_index:${data.draftId || 'url'}` },
+        ],
+      ],
+    };
+
+    return this.sendMessage(chatId, text, {
+      parse_mode: 'Markdown',
+      reply_markup: inlineKeyboard,
+    });
+  }
+
+  /**
    * Edit message text (used after user taps Approve/Reject so button cannot be double clicked)
    */
   async editMessageText(

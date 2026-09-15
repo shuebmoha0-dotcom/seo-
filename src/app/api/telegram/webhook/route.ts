@@ -58,12 +58,148 @@ export async function POST(request: Request) {
           })
           .eq('id', executionId);
 
-        // Edit message in Telegram
+        // Fetch draft details to construct live post URL
+        const { data: draft } = await supabase
+          .from('content_drafts')
+          .select('id, working_title, url_slug, website_id, content_body, primary_keyword, seo_title, meta_description, featured_image_url')
+          .eq('id', executionId)
+          .maybeSingle();
+
+        let livePostUrl = '';
+        const siteBaseUrl = 'https://bizaigenius.com';
+
+        if (draft) {
+          // Trigger automated WordPress publish sync
+          try {
+            const { markdownToWordPressHtml, cleanMetaString } = await import('@/lib/utils/markdownToHtml');
+            const formattedHtmlContent = markdownToWordPressHtml(draft.content_body);
+            const cleanKw = (draft.primary_keyword || '').replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '').trim();
+            
+            const { data: wpSite } = await supabase
+              .from('wordpress_outbound_sites')
+              .select('*')
+              .eq('status', 'active')
+              .order('last_ping_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (wpSite) {
+              livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${draft.url_slug}/`;
+              await supabase.from('wordpress_jobs').insert({
+                site_id: wpSite.id,
+                website_id: draft.website_id,
+                job_type: 'create_post',
+                payload: {
+                  title: draft.working_title,
+                  content: formattedHtmlContent,
+                  slug: draft.url_slug,
+                  status: 'publish',
+                  seo_title: cleanMetaString(draft.seo_title || draft.working_title),
+                  meta_description: cleanMetaString(draft.meta_description || ''),
+                  canonical_url: livePostUrl,
+                  focus_keyword: cleanKw,
+                  primary_keyword: cleanKw,
+                  featured_image_url: draft.featured_image_url || undefined,
+                },
+                idempotency_key: `create_post_draft_${draft.id}_${Date.now()}`,
+                status: 'pending',
+              });
+
+              // Wake up WordPress plugin to execute immediately
+              const siteUrl = wpSite.site_url.replace(/\/+$/, '');
+              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+            }
+          } catch (wpErr) {
+            console.warn('[Telegram Webhook] WordPress dispatch notice:', wpErr);
+          }
+
+          if (!livePostUrl) {
+            livePostUrl = `${siteBaseUrl}/${draft.url_slug}/`;
+          }
+
+          // Update draft status to published
+          await supabase
+            .from('content_drafts')
+            .update({
+              status: 'published',
+              updated_at: new Date().toISOString(),
+              revision_notes: JSON.stringify({ wordpress_post_url: livePostUrl })
+            })
+            .eq('id', draft.id);
+        }
+
+        // Edit current message confirming approval
         if (chatId && messageId) {
           await telegram.editMessageText(
             chatId,
             messageId,
-            `✅ *Approved & Published Live!*\n\nThe article action was approved from your phone and queued for live publishing.`
+            `✅ *Approved & Published Live!*\n\n*Title:* "${draft?.working_title || 'Article'}"\n🔗 *URL:* ${livePostUrl || siteBaseUrl}\n\nQueued to WordPress for immediate publication.`
+          );
+        }
+
+        // Send permission prompt card asking user if they want to request Google Indexing
+        if (chatId && livePostUrl) {
+          await telegram.sendIndexingPrompt(chatId, {
+            postUrl: livePostUrl,
+            postTitle: draft?.working_title || 'New Article',
+            draftId: executionId,
+          });
+        }
+      } else if (action === 'approve_index' && executionId) {
+        // User explicitly approved Google Indexing
+        let targetUrl = '';
+        let targetTitle = '';
+
+        let draftWebsiteId: string | undefined = undefined;
+
+        if (executionId && executionId !== 'url') {
+          const { data: d } = await supabase
+            .from('content_drafts')
+            .select('working_title, url_slug, revision_notes, website_id')
+            .eq('id', executionId)
+            .maybeSingle();
+
+          if (d) {
+            targetTitle = d.working_title;
+            draftWebsiteId = d.website_id || undefined;
+            if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(d.revision_notes);
+                if (parsed.wordpress_post_url) targetUrl = parsed.wordpress_post_url;
+              } catch (_) {}
+            }
+            if (!targetUrl && d.url_slug) {
+              targetUrl = `https://bizaigenius.com/${d.url_slug}/`;
+            }
+          }
+        }
+
+        if (!targetUrl) {
+          targetUrl = 'https://bizaigenius.com';
+        }
+
+        // Execute Google & IndexNow indexing submission
+        const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+        const indexRes = await GoogleIndexingService.requestIndexing({
+          url: targetUrl,
+          websiteId: draftWebsiteId,
+          type: 'URL_UPDATED',
+        });
+
+        if (chatId && messageId) {
+          await telegram.editMessageText(
+            chatId,
+            messageId,
+            `🚀 *Googlebot & IndexNow Indexing Submitted!*\n\n🔗 *URL:* \`${targetUrl}\`\n\n${indexRes.summary}\n\n*Status:* Googlebot and Bingbot have been notified to crawl and index your new page.`
+          );
+        }
+      } else if (action === 'skip_index' && executionId) {
+        if (chatId && messageId) {
+          await telegram.editMessageText(
+            chatId,
+            messageId,
+            `⏭️ *Indexing Skipped.*\n\nYou can request Google Search Console indexing at any time by texting *"Index <URL>"*.`
           );
         }
       } else if (action === 'reject' && executionId) {
@@ -385,7 +521,29 @@ Your agent will process the request in the background and ping you when finished
         return NextResponse.json({ ok: true });
       }
 
-      // C. Fetch previous chat history for context
+      // C. Direct URL Indexing Request Check (e.g. "index https://bizaigenius.com/...", "request indexing for...")
+      const indexingMatch = taskPrompt.match(/(?:request\s+)?index(?:ing)?\s*(?:for\s+)?(https?:\/\/[^\s]+)/i);
+      if (indexingMatch) {
+        const targetUrl = indexingMatch[1];
+        await telegram.sendMessage(
+          chatId,
+          `🔍 *URL Indexing Requested*\n\n🔗 *Target URL:* \`${targetUrl}\`\n\nWould you like me to submit this URL to Google Search Console and IndexNow?`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '🚀 Approve & Request Google Indexing', callback_data: `approve_index:${targetUrl}` },
+                  { text: '❌ Cancel', callback_data: `skip_index:url` },
+                ],
+              ],
+            },
+          }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // D. Fetch previous chat history for context
       const { data: historyData } = await supabase
         .from('project_memory')
         .select('content, source')

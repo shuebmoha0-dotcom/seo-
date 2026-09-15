@@ -405,6 +405,7 @@ export default function ContentPlannerPage() {
 
   const [filterStatus, setFilterStatus] = useState<"all" | "draft" | "published" | "needs_revision">("all");
   const [publishing, setPublishing] = useState<string | null>(null);
+  const [requestingIndex, setRequestingIndex] = useState<string | null>(null);
 
   const fetchDrafts = async (isBackground = false) => {
     try {
@@ -593,6 +594,40 @@ export default function ContentPlannerPage() {
       alert(`🎉 Post approved and queued! WordPress background sync is in progress.`);
     } finally {
       setPublishing(null);
+    }
+  };
+
+  const handleRequestIndexing = async (draftToindex?: ContentDraft) => {
+    const target = draftToindex || selectedDraft;
+    if (!target) return;
+
+    const liveUrl = target.wordpress_post_url || `https://bizaigenius.com/${target.url_slug}/`;
+    const confirmed = window.confirm(`Request instant Google & IndexNow indexing for this article?\n\nURL: ${liveUrl}\n\nGooglebot and Bingbot will be notified to crawl and index this URL.`);
+    if (!confirmed) return;
+
+    setRequestingIndex(target.id);
+    try {
+      const res = await fetch("/api/indexing/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: liveUrl,
+          website_id: currentWebsite?.id,
+          draft_id: target.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to request indexing");
+      }
+
+      alert(`🚀 Indexing Requested Successfully!\n\n${data.summary || "Googlebot and Bingbot notified."}`);
+    } catch (err: any) {
+      console.error("Indexing request error:", err);
+      alert(`⚠️ Indexing Request Notice:\n${err.message || "Failed to submit request"}`);
+    } finally {
+      setRequestingIndex(null);
     }
   };
 
@@ -1018,6 +1053,17 @@ export default function ContentPlannerPage() {
                         </span>
                       </button>
                     )}
+
+                    {/* Request Google Indexing Permission Button */}
+                    <button
+                      onClick={() => handleRequestIndexing(selectedDraft)}
+                      disabled={requestingIndex === selectedDraft.id}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                      title="Request Google Search Console & IndexNow Crawl"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{requestingIndex === selectedDraft.id ? "Submitting to Google..." : "Request Indexing"}</span>
+                    </button>
 
                     <button
                       onClick={() => setShowRevisionInput(!showRevisionInput)}

@@ -171,8 +171,31 @@ export class AutopilotExecutor {
               searchIntent = best.search_intent || 'informational';
               keywordSource = `database opportunity (${best.search_volume}/mo, KD ${best.keyword_difficulty})`;
             } else {
-              // B. Fast single-pass targeted keyword selection (1.5s vs 25s)
-              console.log(`[AutopilotExecutor] Fast keyword selection for ${website_domain}...`);
+              // B. Category-Grounded Targeted Keyword Selection (1.5s)
+              console.log(`[AutopilotExecutor] Grounding keyword selection in verified categories for ${website_domain}...`);
+              
+              // Dynamically fetch live site categories to prevent niche drift
+              let activeCategories: string[] = [];
+              try {
+                const siteUrl = website_url || `https://${website_domain}`;
+                const catRes = await fetch(`${siteUrl.replace(/\/$/, '')}/wp-json/wp/v2/categories?per_page=15`, {
+                  signal: AbortSignal.timeout(2000),
+                });
+                if (catRes.ok) {
+                  const rawCats = await catRes.json();
+                  if (Array.isArray(rawCats)) {
+                    activeCategories = rawCats
+                      .filter((c: any) => c.slug !== 'uncategorized' && c.name)
+                      .map((c: any) => c.name);
+                  }
+                }
+              } catch (_) {}
+
+              if (activeCategories.length === 0) {
+                // Fallback to core taxonomy for bizaigenius.com
+                activeCategories = ['Cold Email', 'AI Tools & Reviews', 'Email Deliverability', 'LinkedIn Outreach', 'Sales Email', 'Email Sequences'];
+              }
+
               const { LLMProvider } = await import('../tools/llm');
               const { z } = await import('zod');
               const kwRes = await LLMProvider.generateObject({
@@ -181,19 +204,27 @@ export class AutopilotExecutor {
                 schema: z.object({
                   keyword: z.string(),
                   working_title: z.string(),
+                  target_category: z.string(),
                   search_intent: z.enum(['informational', 'commercial', 'transactional']),
                   estimated_volume: z.number().default(850),
                   estimated_kd: z.number().default(24)
                 }),
-                system: `You are an expert SEO strategist for "${website_domain}". Pick ONE high-demand, low-KD primary keyword and article title that will rank on Google.
-Niche context: ${projectMemory ? projectMemory.slice(0, 400) : 'B2B sales automation, AI cold email tools, outreach'}.`,
-                prompt: `Select the single best primary keyword and practical guide title to write about right now for ${website_domain}. Make sure it is realistic, highly actionable, and has high search demand.`
+                system: `You are an expert SEO strategist for "${website_domain}".
+VERIFIED WEBSITE CATEGORIES:
+${activeCategories.map(c => `• ${c}`).join('\n')}
+
+MANDATORY NICHE ANCHORING:
+- You MUST pick a primary keyword that strictly falls under one of the verified categories above.
+- Focus: Cold email deliverability, email warmup, Clay/Smartlead/Instantly automation, B2B prospecting, and outbound sales tools.
+- FORBIDDEN: General B2C marketing, unrelated software, social media management, generic business advice.
+- Niche context from memory: ${projectMemory ? projectMemory.slice(0, 400) : 'B2B sales automation, AI cold email tools, outreach'}.`,
+                prompt: `Select the single best primary keyword, practical guide title, and matching website category to write about right now for ${website_domain}. Make sure it is realistic, highly actionable, and has verified search demand.`
               });
               if (kwRes.object?.keyword) {
                 targetKeyword = kwRes.object.keyword;
                 workingTitle = kwRes.object.working_title || `${targetKeyword}: Complete Practical Guide`;
                 searchIntent = kwRes.object.search_intent || 'informational';
-                keywordSource = `AI keyword intelligence (${kwRes.object.estimated_volume || 850}/mo, KD ${kwRes.object.estimated_kd || 24})`;
+                keywordSource = `Category-grounded intelligence [${kwRes.object.target_category || 'Cold Email'}] (${kwRes.object.estimated_volume || 850}/mo, KD ${kwRes.object.estimated_kd || 24})`;
               }
             }
           } catch (kErr) {
