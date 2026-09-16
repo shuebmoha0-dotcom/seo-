@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         // Fetch draft details to construct live post URL
         const { data: draft } = await supabase
           .from('content_drafts')
-          .select('id, working_title, url_slug, website_id, content_body, primary_keyword, seo_title, meta_description, featured_image_url')
+          .select('id, working_title, url_slug, website_id, content_body, primary_keyword, seo_title, meta_description, revision_notes')
           .eq('id', executionId)
           .maybeSingle();
 
@@ -86,6 +86,18 @@ export async function POST(request: Request) {
             const { markdownToWordPressHtml, cleanMetaString } = await import('@/lib/utils/markdownToHtml');
             const formattedHtmlContent = markdownToWordPressHtml(draft.content_body);
             const cleanKw = (draft.primary_keyword || '').replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '').trim();
+
+            let featuredImg: string | undefined = undefined;
+            if (draft.revision_notes && typeof draft.revision_notes === 'string') {
+              try {
+                const parsedNotes = JSON.parse(draft.revision_notes);
+                if (parsedNotes.featured_image_url) featuredImg = parsedNotes.featured_image_url;
+              } catch (_) {}
+            }
+            if (!featuredImg && draft.content_body) {
+              const match = draft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+              if (match) featuredImg = match[1];
+            }
             
             let wpSiteQuery = supabase
               .from('wordpress_outbound_sites')
@@ -118,7 +130,7 @@ export async function POST(request: Request) {
                   canonical_url: livePostUrl,
                   focus_keyword: cleanKw,
                   primary_keyword: cleanKw,
-                  featured_image_url: draft.featured_image_url || undefined,
+                  featured_image_url: featuredImg,
                 },
                 idempotency_key: `create_post_draft_${draft.id}_${Date.now()}`,
                 status: 'pending',

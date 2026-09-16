@@ -648,7 +648,9 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
     let content = rawContent;
 
     // Embed generated images into the markdown body safely without bloating database rows
-    for (const img of enrichedImages) {
+    let heroInserted = false;
+    for (let idx = 0; idx < enrichedImages.length; idx++) {
+      const img = enrichedImages[idx];
       if (img.image_url) {
         const isOversizedDataUri = img.image_url.startsWith('data:image/') && img.image_url.length > 50000;
         const imageMarkdown = isOversizedDataUri
@@ -657,8 +659,22 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
 
         if (content.match(/\[IMAGE:[^\]]+\]/)) {
           content = content.replace(/\[IMAGE:[^\]]+\]/, imageMarkdown);
-        } else if (img === enrichedImages[0]) {
-          content = content.replace(/^(# .+\n)/m, `$1${imageMarkdown}`);
+        } else if (idx === 0 && !heroInserted) {
+          // Embed hero image right under the H1 heading
+          content = content.replace(/^(# [^\n]+\n)/m, `$1${imageMarkdown}`);
+          heroInserted = true;
+        } else {
+          // Secondary visual: place after the 2nd H2 or 1st H2
+          const h2Matches = [...content.matchAll(/(## [^\n]+\n)/g)];
+          if (h2Matches.length > 1 && h2Matches[1].index !== undefined) {
+            const pos = h2Matches[1].index + h2Matches[1][0].length;
+            content = content.slice(0, pos) + imageMarkdown + content.slice(pos);
+          } else if (h2Matches.length > 0 && h2Matches[0].index !== undefined) {
+            const pos = h2Matches[0].index + h2Matches[0][0].length;
+            content = content.slice(0, pos) + imageMarkdown + content.slice(pos);
+          } else {
+            content += imageMarkdown;
+          }
         }
       }
     }

@@ -394,6 +394,11 @@ export class AutopilotExecutor {
                   meta_description: output.meta_description,
                   url_slug: output.url_slug,
                   status: 'ready_for_approval',
+                  revision_notes: JSON.stringify({
+                    featured_image_url: output.featured_image_url,
+                    featured_image_alt: output.featured_image_alt,
+                    images: output.images,
+                  }),
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', draftId);
@@ -417,6 +422,11 @@ export class AutopilotExecutor {
                   meta_description: output.meta_description,
                   url_slug: output.url_slug,
                   status: 'ready_for_approval',
+                  revision_notes: JSON.stringify({
+                    featured_image_url: output.featured_image_url,
+                    featured_image_alt: output.featured_image_alt,
+                    images: output.images,
+                  }),
                   current_version: 1,
                 })
                 .select('id')
@@ -442,12 +452,16 @@ export class AutopilotExecutor {
                     try {
                       await supabase.from('content_images').insert({
                         draft_id: draftId,
-                        image_url: img.image_url,
+                        placement_context: img.placement_context || 'header',
+                        image_type: img.image_type || 'featured',
+                        purpose: img.purpose || img.alt_text,
                         alt_text: img.alt_text,
-                        caption: (img as any).caption || img.alt_text,
-                        position: (img as any).position || 'featured',
+                        suggested_filename: img.image_url,
+                        status: 'created',
                       });
-                    } catch {}
+                    } catch (imgDbErr: any) {
+                      console.warn('[AutopilotExecutor] Failed inserting content_images:', imgDbErr?.message);
+                    }
                   }
                 }
               }

@@ -59,6 +59,8 @@ export const IMAGE_PRICING_ESTIMATES: Record<string, number> = {
   [AI_CONFIG.GEMINI_IMAGE_MODEL]: 0.03, // ~$0.030 per image
   'imagen-3.0-generate-002': 0.03,
   [AI_CONFIG.LEONARDO_IMAGE_MODEL]: 0.025, // ~$0.025 per image
+  'pollinations': 0.0,
+  'editorial_fallback': 0.0,
 };
 
 export type ProviderHealthStatus = 'operational' | 'degraded' | 'unconfigured';
@@ -71,11 +73,12 @@ export interface ProviderHealth {
 }
 
 // In-memory provider health tracking
-export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'gemini_image' | 'leonardo_image', ProviderHealth> = {
+export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'gemini_image' | 'leonardo_image' | 'pollinations_image', ProviderHealth> = {
   luna: { status: 'operational', consecutiveFailures: 0 },
   sonnet: { status: 'operational', consecutiveFailures: 0 },
   gemini_image: { status: 'operational', consecutiveFailures: 0 },
   leonardo_image: { status: 'operational', consecutiveFailures: 0 },
+  pollinations_image: { status: 'operational', consecutiveFailures: 0 },
 };
 
 export function recordProviderSuccess(provider: keyof typeof PROVIDER_HEALTH) {

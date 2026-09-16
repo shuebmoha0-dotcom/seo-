@@ -118,12 +118,13 @@ export async function GET(request: Request) {
       let wpId = d.wordpress_post_id;
       let pubAt = d.published_at || (d.status === 'published' ? d.updated_at : undefined);
 
+      let parsedNotes: any = null;
       if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.trim().startsWith('{')) {
         try {
-          const parsed = JSON.parse(d.revision_notes);
-          if (parsed.wordpress_post_url) wpUrl = parsed.wordpress_post_url;
-          if (parsed.wordpress_post_id) wpId = parsed.wordpress_post_id;
-          if (parsed.published_at) pubAt = parsed.published_at;
+          parsedNotes = JSON.parse(d.revision_notes);
+          if (parsedNotes.wordpress_post_url) wpUrl = parsedNotes.wordpress_post_url;
+          if (parsedNotes.wordpress_post_id) wpId = parsedNotes.wordpress_post_id;
+          if (parsedNotes.published_at) pubAt = parsedNotes.published_at;
         } catch (_) {}
       }
 
@@ -143,6 +144,36 @@ export async function GET(request: Request) {
         cleanBody = cleanBody.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
       }
 
+      // Resolve images from revision_notes, content_images, or embedded markdown
+      let resolvedImages: any[] = [];
+      if (parsedNotes?.images && Array.isArray(parsedNotes.images) && parsedNotes.images.length > 0) {
+        resolvedImages = parsedNotes.images.map((img: any) => ({
+          ...img,
+          image_url: img.image_url || (img.suggested_filename?.startsWith('http') ? img.suggested_filename : undefined),
+        }));
+      } else if (d.content_images && d.content_images.length > 0) {
+        resolvedImages = d.content_images.map((img: any) => ({
+          ...img,
+          image_url: img.image_url || (img.suggested_filename?.startsWith('http') ? img.suggested_filename : undefined) || (img.purpose?.startsWith('http') ? img.purpose : undefined),
+        }));
+      }
+
+      if (resolvedImages.length === 0 && cleanBody) {
+        const bodyMatches = [...cleanBody.matchAll(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g)];
+        if (bodyMatches.length > 0) {
+          resolvedImages = bodyMatches.map((m, idx) => ({
+            id: `img-${idx}`,
+            image_type: idx === 0 ? 'featured' : 'diagram',
+            alt_text: m[1] || `${d.working_title} visual`,
+            image_url: m[2],
+            suggested_filename: `${d.url_slug || 'visual'}-${idx + 1}.jpg`,
+            placement_context: idx === 0 ? 'Header / Hero' : 'Body Section',
+          }));
+        }
+      }
+
+      const featuredImgUrl = parsedNotes?.featured_image_url || resolvedImages[0]?.image_url || undefined;
+
       return {
         id: d.id,
         working_title: d.working_title,
@@ -158,7 +189,8 @@ export async function GET(request: Request) {
         url_slug: d.url_slug,
         content_body: cleanBody,
         qa: d.content_qa_results?.[0] || null,
-        images: d.content_images || [],
+        images: resolvedImages,
+        featured_image_url: featuredImgUrl,
         published_at: pubAt,
         wordpress_post_id: wpId,
         wordpress_post_url: wpUrl,
