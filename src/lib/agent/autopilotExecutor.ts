@@ -8,6 +8,7 @@ import { ParsedAutopilotInstruction } from './autopilotNLParser';
 import { SiteContentGapDetector } from './siteContentGapDetector';
 import { DuplicateArticleChecker } from './duplicateChecker';
 import { DiagnosticAgent } from './diagnosticAgent';
+import { RankRecoveryEngine } from './rankRecoveryEngine';
 
 export interface AutopilotExecutionResult {
   success: boolean;
@@ -701,6 +702,80 @@ export class AutopilotExecutor {
           summary: report.formatted_markdown,
           link_url: '/rank-tracking',
           link_label: 'View Diagnostic Details',
+          data: report,
+        };
+      }
+
+      // ── ACTION: RANK DROP RECOVERY ───────────────────────────────────
+      if (instruction.action_type === 'rank_recovery') {
+        console.log(`[AutopilotExecutor] Running RankRecoveryEngine for "${website_domain}"...`);
+        const report = await RankRecoveryEngine.scanAndAnalyze({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
+        const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+          websiteId: website_id,
+          report,
+        });
+
+        const dropCount = report.detected_drops_count;
+        let recoverySummary = '';
+        if (dropCount > 0) {
+          recoverySummary = `🚨 *Detected ${dropCount} Rank Drops on ${website_domain}*\n\n`;
+          for (const d of report.detected_rank_drops.slice(0, 3)) {
+            recoverySummary += `• *${d.keyword}*: #${d.previous_position} → #${d.current_position} (${d.primary_root_cause.replace(/_/g, ' ')})\n`;
+            recoverySummary += `  ↳ _Diagnosis:_ ${d.root_cause_explanation}\n`;
+            recoverySummary += `  ↳ _Recovery Action:_ ${d.recovery_plan[0]?.description || 'Content Refresh & Re-index'}\n\n`;
+          }
+          recoverySummary += `Generated ${savedCount} actionable recovery plans ready for execution in the dashboard.`;
+        } else {
+          recoverySummary = `✅ *Zero Critical Rank Drops on ${website_domain}*\n\nMonitored keywords are stable. Discovered ${report.striking_distance_count} striking-distance queries ready to push into the Top 3 for click acceleration.`;
+        }
+
+        return {
+          success: true,
+          intent_type: 'immediate_action',
+          action_type: 'rank_recovery',
+          summary: recoverySummary,
+          link_url: '/rank-tracking',
+          link_label: 'Open Rank Recovery Center',
+          data: report,
+        };
+      }
+
+      // ── ACTION: GROWTH ACCELERATION (STRIKING DISTANCE) ───────────────
+      if (instruction.action_type === 'growth_acceleration') {
+        console.log(`[AutopilotExecutor] Running Striking-Distance Click Accelerator for "${website_domain}"...`);
+        const report = await RankRecoveryEngine.scanAndAnalyze({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
+        const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+          websiteId: website_id,
+          report,
+        });
+
+        let growthSummary = `⚡ *Fast-Rank Growth Opportunities for ${website_domain}:*\n\n`;
+        growthSummary += `Identified ${report.striking_distance_count} striking-distance queries (positions 4–20) with potential unlock of +${report.total_potential_clicks_gain.toLocaleString()} monthly clicks!\n\n`;
+
+        for (const opp of report.striking_distance_opportunities.slice(0, 3)) {
+          growthSummary += `• *"${opp.keyword}"* (Position #${opp.current_position} · ${opp.impressions.toLocaleString()} imps)\n`;
+          growthSummary += `  ↳ _Action:_ Rewrite title to high-CTR formula & expand missing H2 subtopics.\n`;
+          growthSummary += `  ↳ _Target:_ Push to Top 3 (${opp.estimated_click_multiplier})\n\n`;
+        }
+        growthSummary += `Saved ${savedCount} high-leverage opportunities queued for 1-click execution.`;
+
+        return {
+          success: true,
+          intent_type: 'immediate_action',
+          action_type: 'growth_acceleration',
+          summary: growthSummary,
+          link_url: '/rank-tracking',
+          link_label: 'View Growth Opportunities',
           data: report,
         };
       }
