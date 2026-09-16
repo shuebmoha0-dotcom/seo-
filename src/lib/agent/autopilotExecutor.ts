@@ -55,8 +55,9 @@ export class AutopilotExecutor {
     user_id?: string;
     sync?: boolean;
     chat_id?: string | number;
+    siteInventory?: import('./siteContentGapDetector').SiteInventory;
   }): Promise<AutopilotExecutionResult> {
-    const { instruction, website_id, website_domain, website_url } = params;
+    const { instruction, website_id, website_domain, website_url, siteInventory: preloadedInventory } = params;
     let supabase: any;
     try {
       supabase = await createClient();
@@ -152,12 +153,14 @@ export class AutopilotExecutor {
         let keywordSource = 'user_specified';
 
         // 1. Site Inventory & Content Gap Analysis
-        console.log(`[AutopilotExecutor] Crawling site inventory & mapping content coverage for ${website_domain}...`);
-        const siteInventory = await SiteContentGapDetector.getSiteInventory({
-          websiteId: website_id,
-          domain: website_domain,
-          siteUrl: website_url,
-        });
+        const siteInventory = preloadedInventory || await (async () => {
+          console.log(`[AutopilotExecutor] Crawling site inventory & mapping content coverage for ${website_domain}...`);
+          return SiteContentGapDetector.getSiteInventory({
+            websiteId: website_id,
+            domain: website_domain,
+            siteUrl: website_url,
+          });
+        })();
         console.log(`[AutopilotExecutor] Inventory mapped: ${siteInventory.coveredTitles.length} existing articles, ${siteInventory.categories.length} categories.`);
 
         const isGeneric = !targetKeyword || /^(write\s+an?\s+article|write\s+article|create\s+article|write\s+post|post\s+it|write|generate\s+article)/i.test(targetKeyword.trim());
@@ -537,11 +540,14 @@ export class AutopilotExecutor {
         console.log(`[AutopilotExecutor] Running intelligent site inventory crawl & keyword discovery for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
 
         // Map existing content & categories to prevent cannibalization
-        const inventory = await SiteContentGapDetector.getSiteInventory({
-          websiteId: website_id,
-          domain: website_domain,
-          siteUrl: website_url,
-        });
+        const inventory = preloadedInventory || await (async () => {
+          console.log(`[AutopilotExecutor] Running intelligent site inventory crawl & keyword discovery for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
+          return SiteContentGapDetector.getSiteInventory({
+            websiteId: website_id,
+            domain: website_domain,
+            siteUrl: website_url,
+          });
+        })();
 
         const keywordAgent = new KeywordAgent();
         const { clusters, opportunities } = await keywordAgent.discoverOpportunities({

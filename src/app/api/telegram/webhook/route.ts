@@ -662,6 +662,8 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       }
 
       // F. Actionable Execution (Write Article, Keyword Research, Technical Audit, Diagnostic)
+      let sharedInventory: any = null;
+
       if (parsed.action_type === 'seo_diagnostic') {
         await telegram.sendMessage(
           chatId,
@@ -677,6 +679,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           domain: currentSite.domain,
           siteUrl: currentSite.url,
         });
+        sharedInventory = inventory;
 
         const targetTopic = (parsed.topic || parsed.goal || '').trim();
         const isGeneric = !targetTopic || /^(write\s+an?\s+article|write\s+article|create\s+article|write\s+post|post\s+it|write|generate\s+article)/i.test(targetTopic);
@@ -724,6 +727,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           domain: currentSite.domain,
           siteUrl: currentSite.url,
         });
+        sharedInventory = inventory;
 
         const seed = (parsed.topic || '').trim();
         let coveredNotice = '';
@@ -767,6 +771,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
           sync: true,
           chat_id: chatId,
+          siteInventory: sharedInventory || undefined,
         }),
         timeoutPromise
       ]);
