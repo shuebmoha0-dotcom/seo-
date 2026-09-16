@@ -74,7 +74,129 @@ export class DuplicateArticleChecker {
   }
 
   /**
-   * Comprehensive check across content_drafts, crawled_urls, and wordpress_jobs
+   * Evaluates whether two topics/titles/keywords are duplicates or heavily overlapping
+   */
+  public static isTopicDuplicate(target: string, existing: string): { isDuplicate: boolean; reason?: string; overlap: number } {
+    if (!target || !existing) return { isDuplicate: false, overlap: 0 };
+    const normA = this.normalize(target);
+    const normB = this.normalize(existing);
+
+    if (normA === normB) {
+      return { isDuplicate: true, reason: 'Exact match', overlap: 1.0 };
+    }
+
+    // Direct phrase containment (e.g. "cold email deliverability" inside "how to fix cold email deliverability")
+    if (normA.length >= 8 && normB.length >= 8 && (normA.includes(normB) || normB.includes(normA))) {
+      return { isDuplicate: true, reason: 'Direct phrase containment', overlap: 0.95 };
+    }
+
+    const wordsA = this.extractCoreWords(target);
+    const wordsB = this.extractCoreWords(existing);
+    if (wordsA.size === 0 || wordsB.size === 0) return { isDuplicate: false, overlap: 0 };
+
+    let intersection = 0;
+    for (const w of wordsA) {
+      if (wordsB.has(w)) intersection++;
+    }
+    const union = new Set([...wordsA, ...wordsB]).size;
+    const jaccard = union > 0 ? intersection / union : 0;
+
+    const subsetA = intersection / wordsA.size;
+    const subsetB = intersection / wordsB.size;
+
+    // Strict duplicate criteria:
+    // 1. Jaccard similarity >= 0.40
+    // 2. OR 65%+ of core words from either title are contained in the other
+    // 3. OR 3+ identical core words and 50%+ containment
+    const maxOverlap = Math.max(jaccard, subsetA, subsetB);
+
+    if (jaccard >= 0.40 || subsetA >= 0.65 || subsetB >= 0.65 || (intersection >= 3 && (subsetA >= 0.50 || subsetB >= 0.50))) {
+      return {
+        isDuplicate: true,
+        reason: `High topical overlap (${Math.round(maxOverlap * 100)}%) with "${existing}"`,
+        overlap: maxOverlap,
+      };
+    }
+
+    return { isDuplicate: false, overlap: maxOverlap };
+  }
+
+  /**
+   * Scans a target keyword or title against the entire site inventory
+   */
+  public static findDuplicateInInventory(
+    target: string,
+    inventory: {
+      coveredItems?: Array<{ title: string; primary_keyword?: string; url?: string; slug?: string }>;
+      coveredTitles?: string[];
+      coveredKeywords?: string[];
+    }
+  ): { isDuplicate: boolean; existingTitle?: string; url?: string; reason?: string; overlap: number } {
+    if (!target) return { isDuplicate: false, overlap: 0 };
+
+    // 1. Check coveredItems
+    if (inventory.coveredItems && inventory.coveredItems.length > 0) {
+      for (const item of inventory.coveredItems) {
+        const matchTitle = this.isTopicDuplicate(target, item.title);
+        if (matchTitle.isDuplicate) {
+          return {
+            isDuplicate: true,
+            existingTitle: item.title,
+            url: item.url,
+            reason: matchTitle.reason,
+            overlap: matchTitle.overlap,
+          };
+        }
+        if (item.primary_keyword) {
+          const matchKw = this.isTopicDuplicate(target, item.primary_keyword);
+          if (matchKw.isDuplicate) {
+            return {
+              isDuplicate: true,
+              existingTitle: item.title || item.primary_keyword,
+              url: item.url,
+              reason: matchKw.reason,
+              overlap: matchKw.overlap,
+            };
+          }
+        }
+      }
+    }
+
+    // 2. Check coveredTitles
+    if (inventory.coveredTitles && inventory.coveredTitles.length > 0) {
+      for (const title of inventory.coveredTitles) {
+        const match = this.isTopicDuplicate(target, title);
+        if (match.isDuplicate) {
+          return {
+            isDuplicate: true,
+            existingTitle: title,
+            reason: match.reason,
+            overlap: match.overlap,
+          };
+        }
+      }
+    }
+
+    // 3. Check coveredKeywords
+    if (inventory.coveredKeywords && inventory.coveredKeywords.length > 0) {
+      for (const kw of inventory.coveredKeywords) {
+        const match = this.isTopicDuplicate(target, kw);
+        if (match.isDuplicate) {
+          return {
+            isDuplicate: true,
+            existingTitle: kw,
+            reason: match.reason,
+            overlap: match.overlap,
+          };
+        }
+      }
+    }
+
+    return { isDuplicate: false, overlap: 0 };
+  }
+
+  /**
+   * Comprehensive check across content_drafts, crawled_urls, pages, and wordpress_jobs
    */
   public static async check(params: {
     website_id?: string;
@@ -139,14 +261,15 @@ export class DuplicateArticleChecker {
           };
         }
 
-        // High title/keyword word overlap (Jaccard similarity >= 0.70)
-        const dWords = this.extractCoreWords(`${d.working_title} ${d.primary_keyword}`);
-        const overlap = this.calculateOverlap(targetWords, dWords);
-        if (overlap >= 0.70) {
+        // High title/keyword overlap check using isTopicDuplicate
+        const targetString = `${params.working_title || ''} ${params.primary_keyword || ''}`.trim();
+        const existingString = `${d.working_title || ''} ${d.primary_keyword || ''}`.trim();
+        const match = this.isTopicDuplicate(targetString, existingString);
+        if (match.isDuplicate) {
           return {
             isDuplicate: true,
             confidence: 'high',
-            reason: `Topic heavily overlaps (${Math.round(overlap * 100)}% similarity) with existing article "${d.working_title}". Writing this would cause SEO keyword cannibalization.`,
+            reason: `Topic already covered in draft/article "${d.working_title}". Writing this would cause SEO keyword cannibalization.`,
             matchedArticle: {
               id: d.id,
               title: d.working_title,
@@ -160,27 +283,27 @@ export class DuplicateArticleChecker {
       }
     }
 
-    // 2. Query crawled URLs on the website (live site content)
+    // 2. Query pages table (Supabase live site content and sitemap)
     if (params.website_id) {
-      const { data: crawled } = await supabase
-        .from('crawled_urls')
-        .select('url, title, h1')
+      const { data: pages } = await supabase
+        .from('pages')
+        .select('path, title, h1')
         .eq('website_id', params.website_id);
 
-      if (crawled && crawled.length > 0) {
-        for (const p of crawled) {
-          const pageTitle = this.normalize(p.title);
-          const pageWords = this.extractCoreWords(`${p.title || ''} ${p.h1 || ''}`);
-          const overlap = this.calculateOverlap(targetWords, pageWords);
+      if (pages && pages.length > 0) {
+        const targetString = `${params.working_title || ''} ${params.primary_keyword || ''}`.trim();
+        for (const p of pages) {
+          const pageText = `${p.title || ''} ${p.h1 || ''}`.trim();
+          const match = this.isTopicDuplicate(targetString, pageText);
 
-          if (overlap >= 0.75) {
+          if (match.isDuplicate) {
             return {
               isDuplicate: true,
               confidence: 'high',
-              reason: `Topic is already covered on your live website at ${p.url} ("${p.title}").`,
+              reason: `Topic is already covered on your live website at ${p.path} ("${p.title || p.h1}").`,
               matchedArticle: {
-                title: p.title || p.url,
-                url: p.url,
+                title: p.title || p.h1 || p.path,
+                url: p.path,
                 source: 'crawled_urls',
               },
             };
@@ -194,18 +317,18 @@ export class DuplicateArticleChecker {
       .from('wordpress_jobs')
       .select('payload')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(25);
 
     if (jobs && jobs.length > 0) {
+      const targetString = `${params.working_title || ''} ${params.primary_keyword || ''}`.trim();
       for (const j of jobs) {
         const postTitle = j.payload?.title;
         const postSlug = j.payload?.slug;
         if (!postTitle) continue;
 
-        const jWords = this.extractCoreWords(postTitle);
-        const overlap = this.calculateOverlap(targetWords, jWords);
+        const match = this.isTopicDuplicate(targetString, postTitle);
 
-        if (overlap >= 0.75 || (targetSlug && postSlug && targetSlug === postSlug)) {
+        if (match.isDuplicate || (targetSlug && postSlug && targetSlug === postSlug)) {
           return {
             isDuplicate: true,
             confidence: 'high',
@@ -245,17 +368,18 @@ export class DuplicateArticleChecker {
       if (d.primary_keyword) topics.add(d.primary_keyword.trim());
     });
 
-    // 2. From crawled URLs
+    // 2. From pages
     if (website_id) {
-      const { data: crawled } = await supabase
-        .from('crawled_urls')
-        .select('title')
+      const { data: pages } = await supabase
+        .from('pages')
+        .select('title, h1')
         .eq('website_id', website_id);
-      (crawled || []).forEach(c => {
-        if (c.title) topics.add(c.title.replace(/\s*[-|]\s*.*$/, '').trim());
+      (pages || []).forEach(p => {
+        if (p.title) topics.add(p.title.replace(/\s*[-|]\s*.*$/, '').trim());
+        if (p.h1) topics.add(p.h1.replace(/\s*[-|]\s*.*$/, '').trim());
       });
     }
 
-    return Array.from(topics).filter(Boolean).slice(0, 30);
+    return Array.from(topics).filter(Boolean).slice(0, 50);
   }
 }

@@ -205,15 +205,55 @@ export class AutopilotExecutor {
           }
         } else {
           // B. User specified a keyword/topic: check against site inventory for potential cannibalization
-          for (const existingTitle of siteInventory.coveredTitles) {
-            const wordsA = DuplicateArticleChecker.extractCoreWords(targetKeyword);
-            const wordsB = DuplicateArticleChecker.extractCoreWords(existingTitle);
-            const overlap = DuplicateArticleChecker.calculateOverlap(wordsA, wordsB);
-            if (overlap >= 0.6) {
-              console.log(`[AutopilotExecutor] Caution: target keyword "${targetKeyword}" has high topical overlap with existing article "${existingTitle}". Adapting angle to prevent cannibalization.`);
-              workingTitle = `${targetKeyword.charAt(0).toUpperCase() + targetKeyword.slice(1)}: Advanced Playbook & Case Studies`;
-              break;
+          const dupResult = DuplicateArticleChecker.findDuplicateInInventory(targetKeyword, siteInventory);
+          if (dupResult.isDuplicate) {
+            console.warn(`[AutopilotExecutor] BLOCKED write request on already covered topic: "${targetKeyword}" matches "${dupResult.existingTitle}"`);
+
+            // Discover 3 fresh, uncovered content gap alternatives
+            let alternativeGaps: any[] = [];
+            try {
+              alternativeGaps = await SiteContentGapDetector.findContentGaps({
+                inventory: siteInventory,
+                projectMemory,
+                projectInstructions,
+                limit: 3,
+              });
+            } catch (_) {}
+
+            const altList = alternativeGaps.length > 0
+              ? alternativeGaps.map((g, idx) => `${idx + 1}️⃣ *"${g.working_title}"*\n   ↳ _Keyword:_ \`${g.keyword}\` | _Category:_ ${g.target_category} (${g.estimated_volume}/mo, KD ${g.estimated_kd})`).join('\n\n')
+              : '• Check your Content Planner for fresh, uncovered keyword opportunities.';
+
+            const blockSummary = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
+              `Your website already has an article covering *"${targetKeyword}"*:\n` +
+              `👉 *"${dupResult.existingTitle}"* ${dupResult.url ? `([View Published Article](${dupResult.url}))` : ''}\n\n` +
+              `Writing another article on this topic would cause *search cannibalization* and burn AI tokens.\n\n` +
+              `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
+              `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
+
+            // If a chat_id is present, notify user immediately
+            if (params.chat_id) {
+              try {
+                const { TelegramService } = await import('../telegram/telegramService');
+                const telegram = new TelegramService();
+                await telegram.sendMessage(params.chat_id, blockSummary, { parse_mode: 'Markdown' });
+              } catch (_) {}
             }
+
+            return {
+              success: false,
+              intent_type: 'immediate_action',
+              action_type: 'write_article',
+              summary: blockSummary,
+              link_url: '/content-planner',
+              link_label: 'View Content Planner',
+              data: {
+                already_covered: true,
+                existing_title: dupResult.existingTitle,
+                existing_url: dupResult.url,
+                alternatives: alternativeGaps,
+              }
+            };
           }
         }
 

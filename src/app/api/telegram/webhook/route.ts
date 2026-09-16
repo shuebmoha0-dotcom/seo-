@@ -618,6 +618,13 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'seo_diagnostic';
       }
 
+      // Route keyword requests directly to keyword_research to guarantee grounded inventory check
+      const isKeywordRequest = /give me keywords?|find keywords?|keyword opportunities|what keywords?|keyword ideas/i.test(taskPrompt);
+      if (isKeywordRequest && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'keyword_research';
+      }
+
       // E. Conversational Response (Greetings, Questions, Explanations)
       if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
         let answer = parsed.response_message;
@@ -662,15 +669,64 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'write_article') {
+        // Pre-Execution Anti-Cannibalization Check: Never draft an already written topic
+        const { SiteContentGapDetector } = await import('@/lib/agent/siteContentGapDetector');
+        const { DuplicateArticleChecker } = await import('@/lib/agent/duplicateChecker');
+        const inventory = await SiteContentGapDetector.getSiteInventory({
+          websiteId: currentSite.id,
+          domain: currentSite.domain,
+          siteUrl: currentSite.url,
+        });
+
+        const targetTopic = (parsed.topic || parsed.goal || '').trim();
+        const isGeneric = !targetTopic || /^(write\s+an?\s+article|write\s+article|create\s+article|write\s+post|post\s+it|write|generate\s+article)/i.test(targetTopic);
+
+        if (!isGeneric) {
+          const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(targetTopic, inventory);
+          if (dupCheck.isDuplicate) {
+            const gaps = await SiteContentGapDetector.findContentGaps({ inventory, limit: 3 });
+            const altList = gaps.length > 0
+              ? gaps.map((g, idx) => `${idx + 1}️⃣ *"${g.working_title}"*\n   ↳ _Keyword:_ \`${g.keyword}\` | _Category:_ ${g.target_category} (${g.estimated_volume}/mo, KD ${g.estimated_kd})`).join('\n\n')
+              : '• Check your Content Planner for fresh, uncovered keyword opportunities.';
+
+            const cancelMsg = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
+              `Your website already published an article covering *"${targetTopic}"*:\n` +
+              `👉 *"${dupCheck.existingTitle}"* ${dupCheck.url ? `([View Published Article](${dupCheck.url}))` : ''}\n\n` +
+              `Writing another article on this topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
+              `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
+              `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
+
+            await telegram.sendMessage(chatId, cancelMsg, { parse_mode: 'Markdown' });
+            return NextResponse.json({ ok: true });
+          }
+        }
+
         await telegram.sendMessage(
           chatId,
           `🚀 *Autonomous Content Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Topic / Goal:* ${parsed.topic || parsed.goal}\n\n1️⃣ Researching high-demand, low-KD keywords\n2️⃣ Weaving internal links from live pages\n3️⃣ Generating visual assets\n4️⃣ Drafting 1,200–1,600 words with Claude Sonnet 5\n\n_Agent is writing now..._ ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'keyword_research') {
+        const { SiteContentGapDetector } = await import('@/lib/agent/siteContentGapDetector');
+        const { DuplicateArticleChecker } = await import('@/lib/agent/duplicateChecker');
+        const inventory = await SiteContentGapDetector.getSiteInventory({
+          websiteId: currentSite.id,
+          domain: currentSite.domain,
+          siteUrl: currentSite.url,
+        });
+
+        const seed = (parsed.topic || '').trim();
+        let coveredNotice = '';
+        if (seed) {
+          const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(seed, inventory);
+          if (dupCheck.isDuplicate) {
+            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"*. Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
+          }
+        }
+
         await telegram.sendMessage(
           chatId,
-          `🎯 *Researching Keywords for \`${currentSite.domain}\`...* ⏳`,
+          `🎯 *Researching Uncovered Keywords for \`${currentSite.domain}\`...* ⏳${coveredNotice}`,
           { parse_mode: 'Markdown' }
         );
       } else {

@@ -1,5 +1,5 @@
 import { LLMProvider } from '../tools/llm';
-
+import { DuplicateArticleChecker } from './duplicateChecker';
 import { z } from 'zod';
 
 export type SiteType = 'saas' | 'ecommerce' | 'local_business' | 'blog' | 'agency' | 'other';
@@ -197,20 +197,39 @@ For each cluster:
         system: 'You are an elite SEO strategist and growth intelligence architect who identifies fast-win, low-competition, high-converting keyword opportunities with verified search demand.'
       });
 
+      const existingTitles = params.existingArticles || [];
       const allOpps: KeywordOpportunity[] = [];
-      const clusters: KeywordCluster[] = object.clusters.map((c: any) => {
+      const clusters: KeywordCluster[] = [];
+
+      for (const c of object.clusters) {
         // Enforce minimum search volume floor: reject ghost keywords (< 200 searches/mo)
-        const validOpps = (c.opportunities || []).filter((op: any) => {
+        const volumeFiltered = (c.opportunities || []).filter((op: any) => {
           const vol = op.search_volume;
           return vol === null || vol >= 200;
         });
 
-        const oppsToUse = validOpps.length > 0 ? validOpps : c.opportunities.map((op: any) => ({
+        const oppsToUse = volumeFiltered.length > 0 ? volumeFiltered : c.opportunities.map((op: any) => ({
           ...op,
           search_volume: Math.max(op.search_volume || 350, 250),
         }));
 
-        const clusterOpps: KeywordOpportunity[] = oppsToUse.map((op: any) => {
+        // STRICT ANTI-CANNIBALIZATION FILTER: Discard any keyword that matches an already written article
+        const nonDuplicateOpps = oppsToUse.filter((op: any) => {
+          if (existingTitles.length > 0) {
+            for (const existing of existingTitles) {
+              const dupCheck = DuplicateArticleChecker.isTopicDuplicate(op.keyword, existing);
+              if (dupCheck.isDuplicate) {
+                console.log(`[KeywordAgent] Strict filter: Dropped duplicate keyword "${op.keyword}" (matches existing "${existing}")`);
+                return false;
+              }
+            }
+          }
+          return true;
+        });
+
+        if (nonDuplicateOpps.length === 0) continue;
+
+        const clusterOpps: KeywordOpportunity[] = nonDuplicateOpps.map((op: any) => {
           const enforcedVol = Math.max(op.search_volume || 350, 200);
           const enforcedKd = params.mode !== 'established'
             ? Math.min(Math.max(op.keyword_difficulty || 20, 10), 30)
@@ -227,15 +246,28 @@ For each cluster:
         });
 
         allOpps.push(...clusterOpps);
-        return {
+
+        // Ensure cluster primary keyword is not duplicate
+        let primaryKw = c.primary_keyword;
+        const isPrimaryDup = existingTitles.some(t => DuplicateArticleChecker.isTopicDuplicate(primaryKw, t).isDuplicate);
+        if (isPrimaryDup && clusterOpps.length > 0) {
+          primaryKw = clusterOpps[0].keyword;
+        }
+
+        // Clean secondary keywords
+        const cleanSecondary = (c.secondary_keywords || []).filter((kw: string) => {
+          return !existingTitles.some(t => DuplicateArticleChecker.isTopicDuplicate(kw, t).isDuplicate);
+        });
+
+        clusters.push({
           name: c.name,
-          primary_keyword: c.primary_keyword,
-          secondary_keywords: c.secondary_keywords,
+          primary_keyword: primaryKw,
+          secondary_keywords: cleanSecondary,
           search_intent: c.search_intent,
           recommended_content_type: c.recommended_content_type,
           opportunities: clusterOpps,
-        };
-      });
+        });
+      }
 
       return { clusters, opportunities: allOpps };
     } catch (err) {
