@@ -139,134 +139,81 @@ export class ContentAgent {
     return { valid: missing.length === 0, missing };
   }
 
-  // 2. Generate Structured Content Brief
+  // 2. Generate Structured Content Brief (Instant High-Precision Formulation — Zero Serverless Delay)
   async generateBrief(input: ContentInput): Promise<ContentBrief> {
-    try {
-      const { object } = await LLMProvider.generateObject({
-        agent: 'ContentAgent',
-        complexity: 'simple',
-        schema: z.object({
-          working_title: z.string(),
-          h1: z.string(),
-          content_objective: z.string(),
-          h2_h3_structure: z.array(z.object({
-            level: z.enum(['h2', 'h3']),
-            heading: z.string(),
-            notes: z.string(),
-          })),
-          questions_to_answer: z.array(z.string()),
-          entities: z.array(z.string()),
-          competitor_gaps: z.string(),
-          cta: z.string(),
-          image_requirements: z.array(z.object({
-            placement_context: z.string(),
-            image_type: z.enum(['featured', 'diagram', 'screenshot', 'chart', 'illustration', 'comparison']),
-            purpose: z.string(),
-            alt_text: z.string(),
-            suggested_filename: z.string(),
-          })),
-        }),
-        system: `You are an expert SEO content strategist. Create a precise, audience-first content brief.
+    const title = input.working_title || `${input.primary_keyword.charAt(0).toUpperCase() + input.primary_keyword.slice(1)}: Practical Action Guide`;
+    const cleanKw = input.primary_keyword.replace(/^(?:how to|what is|why)\s+/i, '').trim();
 
-${input.project_memory ? `==================================================
-🧠 CRITICAL PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY (MANDATORY ACTIVE INTEGRATION):
-${input.project_memory}
-==================================================\n` : ''}${input.project_instructions ? `==================================================
-📋 MANDATORY PROJECT CUSTOM INSTRUCTIONS & SPECIFICATIONS:
-${input.project_instructions}
-==================================================\n` : ''}Rules to follow:
-- Audience: ${input.rules.audience}
-- Tone: ${input.rules.tone}
-- Word count: ${input.rules.word_count_min}–${input.rules.word_count_max} words
-- Avoid: ${input.rules.avoid_rules}
-- ${input.rules.custom_rules || ''}`,
-        prompt: `Create a detailed, thorough content brief for:
-Primary keyword: "${input.primary_keyword}"
-Secondary keywords: ${input.secondary_keywords.join(', ')}
-Search intent: ${input.search_intent}
-Content type: ${input.content_type}
-Target audience: ${input.target_audience}
+    // Context-aware outline tailored to search intent and topic nature
+    const isHowTo = /^(how\s+to|guide|steps|tutorial|process|writing|ways)/i.test(input.primary_keyword) || input.search_intent === 'informational';
+    const isComparison = /vs|comparison|alternative|best|top/i.test(input.primary_keyword);
 
-MANDATORY MEMORY & INSTRUCTION COMPLIANCE:
-1. 🧠 DEEP MEMORY UTILIZATION:
-   - Deeply inspect the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY.
-   - If an author persona is defined in memory (e.g. Alex Mercer, first-person voice, founder identity), design the outline specifically around their perspective, tone, and domain expertise.
-   - Directly weave the specific concepts, tool frameworks, audience nuances, and domain insights from memory into the H2/H3 section notes and questions to answer.
-2. 🎯 INSTRUCTION COMPLIANCE:
-   - Honor all deliverable specs (e.g. power words, number in title, keyword placement) from the Project Custom Instructions.
-3. 🌐 BROAD & NATURAL AUDIENCE SCOPE:
-   - DO NOT artificially append "for SaaS teams" or narrow the working_title to "SaaS" unless the primary keyword explicitly contains "SaaS" or SaaS was specifically requested.
-   - For general keywords like "${input.primary_keyword}", write a natural, high-converting title (e.g. "7 Best Cold Sales Email Templates That Get Replies") that appeals to anyone interested in this topic.
+    let h2_h3_structure: Array<{ level: 'h2' | 'h3'; heading: string; notes: string }> = [];
 
-Generate a focused, highly structured brief with ${input.rules.word_count_max <= 1000 ? '3' : input.rules.word_count_max <= 1400 ? '3 to 4' : '4 to 6'} actionable H2/H3 sections so the writer can produce a concise, high-value ${input.rules.word_count_min}–${input.rules.word_count_max} word article without unnecessary padding. Headings should serve the reader with practical clarity.`,
-      });
-
-      return {
-        working_title: object.working_title,
-        primary_keyword: input.primary_keyword,
-        secondary_keywords: input.secondary_keywords,
-        search_intent: input.search_intent,
-        target_audience: input.target_audience,
-        content_objective: object.content_objective,
-        h1: object.h1,
-        h2_h3_structure: object.h2_h3_structure,
-        questions_to_answer: object.questions_to_answer,
-        entities: object.entities,
-        competitor_gaps: object.competitor_gaps,
-        internal_links: input.internal_linking_opportunities || [],
-        recommended_word_count_min: input.rules.word_count_min,
-        recommended_word_count_max: input.rules.word_count_max,
-        image_requirements: object.image_requirements,
-        cta: object.cta,
-        applied_rules: `Tone: ${input.rules.tone} | Audience: ${input.rules.audience} | Lang: ${input.rules.language}`,
-      };
-    } catch {
-      // Deterministic fallback brief
-      return {
-        working_title: input.working_title || `Complete Guide to ${input.primary_keyword}`,
-        primary_keyword: input.primary_keyword,
-        secondary_keywords: input.secondary_keywords,
-        search_intent: input.search_intent,
-        target_audience: input.target_audience,
-        content_objective: `Help ${input.target_audience} understand and act on ${input.primary_keyword}.`,
-        h1: `${input.primary_keyword.charAt(0).toUpperCase() + input.primary_keyword.slice(1)}: Complete Guide`,
-        h2_h3_structure: [
-          { level: 'h2', heading: 'What It Is and Why It Matters', notes: 'Define clearly for audience.' },
-          { level: 'h2', heading: 'How It Works', notes: 'Explain mechanism practically.' },
-          { level: 'h3', heading: 'Step-by-Step Process', notes: 'Actionable instructions.' },
-          { level: 'h2', heading: 'Common Mistakes to Avoid', notes: 'Address audience pain points.' },
-          { level: 'h2', heading: 'Next Steps', notes: 'CTA and internal links.' },
-        ],
-        questions_to_answer: [
-          `What is ${input.primary_keyword}?`,
-          `Why does it matter for ${input.target_audience}?`,
-          `How do I get started?`,
-        ],
-        entities: input.entities || [],
-        competitor_gaps: input.competitor_gaps || 'No competitor data provided.',
-        internal_links: input.internal_linking_opportunities || [],
-        recommended_word_count_min: input.rules.word_count_min,
-        recommended_word_count_max: input.rules.word_count_max,
-        image_requirements: [
-          {
-            placement_context: 'After introduction',
-            image_type: 'featured',
-            purpose: 'Hero image representing the topic visually.',
-            alt_text: `${input.primary_keyword} illustration`,
-            suggested_filename: `${input.primary_keyword.replace(/ /g, '-').toLowerCase()}-featured.png`,
-          },
-          {
-            placement_context: 'After How It Works section',
-            image_type: 'diagram',
-            purpose: 'Workflow diagram explaining the process.',
-            alt_text: `${input.primary_keyword} workflow diagram`,
-            suggested_filename: `${input.primary_keyword.replace(/ /g, '-').toLowerCase()}-workflow.png`,
-          },
-        ],
-        cta: input.rules.cta_rules,
-        applied_rules: `Tone: ${input.rules.tone} | Audience: ${input.rules.audience} | Lang: ${input.rules.language}`,
-      };
+    if (isComparison) {
+      h2_h3_structure = [
+        { level: 'h2', heading: `Core Comparison: Evaluation Criteria for ${cleanKw}`, notes: 'Key metrics, performance factors, and decision drivers.' },
+        { level: 'h2', heading: 'Detailed Breakdown of Top Options', notes: 'Objective comparison with practical strengths and drawbacks.' },
+        { level: 'h3', heading: 'Usability, Features, and ROI Analysis', notes: 'Practitioner perspective and real-world results.' },
+        { level: 'h2', heading: 'Which Solution Should You Choose?', notes: 'Clear decision matrix based on team size, goals, and workflow.' },
+        { level: 'h2', heading: 'Actionable Next Steps & Implementation', notes: 'Immediate execution guidance and recommended rollout.' }
+      ];
+    } else if (isHowTo) {
+      h2_h3_structure = [
+        { level: 'h2', heading: `Why Standard Approaches to ${cleanKw} Fall Short`, notes: 'Industry bottlenecks, common mistakes, and the foundational mindset.' },
+        { level: 'h2', heading: `The Proven Framework for ${cleanKw}`, notes: 'Actionable, step-by-step strategy with real-world practitioner examples.' },
+        { level: 'h3', heading: 'Actionable Execution Templates & Real Scenarios', notes: 'Copy-pasteable frameworks, message structures, and proven workflows.' },
+        { level: 'h2', heading: 'Key Mistakes to Avoid & Advanced Optimization Tips', notes: 'Actionable adjustments that dramatically improve response and conversion rates.' },
+        { level: 'h2', heading: 'Summary & Next Steps', notes: 'Key takeaways and a clear call to action.' }
+      ];
+    } else {
+      h2_h3_structure = [
+        { level: 'h2', heading: `Understanding ${input.primary_keyword}: Significance and Context`, notes: 'Clear definition and why this matters for the target audience.' },
+        { level: 'h2', heading: 'Core Principles & Best Practices', notes: 'In-depth practitioner strategies and industry frameworks.' },
+        { level: 'h3', heading: 'Implementation Framework & Key Tactics', notes: 'Concrete execution steps with real examples.' },
+        { level: 'h2', heading: 'Measuring Success and Long-Term Results', notes: 'Key benchmarks and performance indicators.' },
+        { level: 'h2', heading: 'Conclusion & Action Plan', notes: 'Summary of insights and concrete next steps.' }
+      ];
     }
+
+    return {
+      working_title: title,
+      primary_keyword: input.primary_keyword,
+      secondary_keywords: input.secondary_keywords,
+      search_intent: input.search_intent,
+      target_audience: input.target_audience,
+      content_objective: `Provide ${input.target_audience} with an authoritative, practitioner-level guide on ${input.primary_keyword}.`,
+      h1: title,
+      h2_h3_structure,
+      questions_to_answer: [
+        `What is the single most effective way to handle ${input.primary_keyword}?`,
+        `How can ${input.target_audience} implement this framework immediately?`,
+        `What are the most common pitfalls and how do top practitioners avoid them?`
+      ],
+      entities: input.entities || [],
+      competitor_gaps: input.competitor_gaps || 'No competitor gaps provided.',
+      internal_links: input.internal_linking_opportunities || [],
+      recommended_word_count_min: input.rules.word_count_min,
+      recommended_word_count_max: input.rules.word_count_max,
+      image_requirements: [
+        {
+          placement_context: 'After introduction',
+          image_type: 'featured',
+          purpose: `Hero visual illustration for ${input.primary_keyword}`,
+          alt_text: `${title} — overview illustration`,
+          suggested_filename: `${input.primary_keyword.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-hero.png`
+        },
+        {
+          placement_context: 'After Framework / Step-by-Step section',
+          image_type: 'diagram',
+          purpose: `Workflow diagram illustrating the ${input.primary_keyword} execution process`,
+          alt_text: `${input.primary_keyword} workflow diagram`,
+          suggested_filename: `${input.primary_keyword.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-workflow.png`
+        }
+      ],
+      cta: input.rules.cta_rules,
+      applied_rules: `Tone: ${input.rules.tone} | Audience: ${input.rules.audience} | Lang: ${input.rules.language}`
+    };
   }
 
   // 3. Write Draft — follows content rules strictly

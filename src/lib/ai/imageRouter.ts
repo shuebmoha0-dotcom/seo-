@@ -321,11 +321,14 @@ export const ImageRouter = {
         geminiError = error;
         console.warn(`[Image Router] Gemini Image attempt ${attempt} failed: ${error.message}`);
 
-        if (attempt <= AI_CONFIG.MAX_RETRIES) {
+        const errMsg = (error?.message || '').toLowerCase();
+        const isAuthError = errMsg.includes('403') || errMsg.includes('401') || errMsg.includes('denied') || errMsg.includes('permission');
+        if (!isAuthError && attempt <= AI_CONFIG.MAX_RETRIES) {
           const delay = AI_CONFIG.INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
+        break;
       }
     }
 
