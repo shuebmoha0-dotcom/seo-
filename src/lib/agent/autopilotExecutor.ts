@@ -224,9 +224,15 @@ export class AutopilotExecutor {
               ? alternativeGaps.map((g, idx) => `${idx + 1}️⃣ *"${g.working_title}"*\n   ↳ _Keyword:_ \`${g.keyword}\` | _Category:_ ${g.target_category} (${g.estimated_volume}/mo, KD ${g.estimated_kd})`).join('\n\n')
               : '• Check your Content Planner for fresh, uncovered keyword opportunities.';
 
+            const siteBase = (website_url || `https://${website_domain}`).replace(/\/+$/, '');
+            const articleLink = dupResult.url && dupResult.url.startsWith('http')
+              ? dupResult.url
+              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupResult.existingTitle)}`;
+
             const blockSummary = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
               `Your website already has an article covering *"${targetKeyword}"*:\n` +
-              `👉 *"${dupResult.existingTitle}"* ${dupResult.url ? `([View Published Article](${dupResult.url}))` : ''}\n\n` +
+              `👉 *"${dupResult.existingTitle}"*\n` +
+              `🔗 *Article URL:* ${articleLink}\n\n` +
               `Writing another article on this topic would cause *search cannibalization* and burn AI tokens.\n\n` +
               `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
               `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;

@@ -70,12 +70,17 @@ export class SiteContentGapDetector {
               try {
                 const parsed = JSON.parse(d.revision_notes);
                 if (parsed.wordpress_post_url) wpUrl = parsed.wordpress_post_url;
+                if (parsed.link) wpUrl = wpUrl || parsed.link;
+                if (parsed.url) wpUrl = wpUrl || parsed.url;
               } catch (_) {}
             }
+            const fallbackSlug = (d.url_slug || '').replace(/^\/+/, '');
+            const resolvedUrl = wpUrl || (fallbackSlug ? `${siteUrl}/${fallbackSlug}` : `${siteUrl}/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+
             coveredMap.set(title.toLowerCase(), {
               title,
-              slug: d.url_slug || '',
-              url: wpUrl,
+              slug: fallbackSlug,
+              url: resolvedUrl,
               primary_keyword: d.primary_keyword,
               source: 'database_draft',
             });

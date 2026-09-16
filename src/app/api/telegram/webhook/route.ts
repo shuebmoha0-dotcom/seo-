@@ -689,9 +689,15 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
               ? gaps.map((g, idx) => `${idx + 1}️⃣ *"${g.working_title}"*\n   ↳ _Keyword:_ \`${g.keyword}\` | _Category:_ ${g.target_category} (${g.estimated_volume}/mo, KD ${g.estimated_kd})`).join('\n\n')
               : '• Check your Content Planner for fresh, uncovered keyword opportunities.';
 
+            const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
+            const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
+              ? dupCheck.url
+              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}`;
+
             const cancelMsg = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
               `Your website already published an article covering *"${targetTopic}"*:\n` +
-              `👉 *"${dupCheck.existingTitle}"* ${dupCheck.url ? `([View Published Article](${dupCheck.url}))` : ''}\n\n` +
+              `👉 *"${dupCheck.existingTitle}"*\n` +
+              `🔗 *Article URL:* ${articleLink}\n\n` +
               `Writing another article on this topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
               `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
               `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
@@ -720,7 +726,11 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         if (seed) {
           const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(seed, inventory);
           if (dupCheck.isDuplicate) {
-            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"*. Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
+            const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
+            const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
+              ? dupCheck.url
+              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}`;
+            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"* (${articleLink}). Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
           }
         }
 

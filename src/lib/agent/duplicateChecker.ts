@@ -127,12 +127,22 @@ export class DuplicateArticleChecker {
   public static findDuplicateInInventory(
     target: string,
     inventory: {
+      siteUrl?: string;
+      domain?: string;
       coveredItems?: Array<{ title: string; primary_keyword?: string; url?: string; slug?: string }>;
       coveredTitles?: string[];
       coveredKeywords?: string[];
     }
   ): { isDuplicate: boolean; existingTitle?: string; url?: string; reason?: string; overlap: number } {
     if (!target) return { isDuplicate: false, overlap: 0 };
+    const siteUrl = (inventory.siteUrl || (inventory.domain ? `https://${inventory.domain}` : '')).replace(/\/+$/, '');
+
+    const resolveUrl = (item?: { url?: string; slug?: string; title?: string }): string | undefined => {
+      if (item?.url && item.url.startsWith('http')) return item.url;
+      if (siteUrl && item?.slug) return `${siteUrl}/${item.slug.replace(/^\/+/, '')}`;
+      if (siteUrl && item?.title) return `${siteUrl}/${this.toSlug(item.title)}`;
+      return item?.url || undefined;
+    };
 
     // 1. Check coveredItems
     if (inventory.coveredItems && inventory.coveredItems.length > 0) {
@@ -142,7 +152,7 @@ export class DuplicateArticleChecker {
           return {
             isDuplicate: true,
             existingTitle: item.title,
-            url: item.url,
+            url: resolveUrl(item),
             reason: matchTitle.reason,
             overlap: matchTitle.overlap,
           };
@@ -153,7 +163,7 @@ export class DuplicateArticleChecker {
             return {
               isDuplicate: true,
               existingTitle: item.title || item.primary_keyword,
-              url: item.url,
+              url: resolveUrl(item),
               reason: matchKw.reason,
               overlap: matchKw.overlap,
             };
@@ -167,9 +177,11 @@ export class DuplicateArticleChecker {
       for (const title of inventory.coveredTitles) {
         const match = this.isTopicDuplicate(target, title);
         if (match.isDuplicate) {
+          const matchedItem = inventory.coveredItems?.find(i => i.title.toLowerCase() === title.toLowerCase());
           return {
             isDuplicate: true,
             existingTitle: title,
+            url: resolveUrl(matchedItem || { title }),
             reason: match.reason,
             overlap: match.overlap,
           };
@@ -182,9 +194,11 @@ export class DuplicateArticleChecker {
       for (const kw of inventory.coveredKeywords) {
         const match = this.isTopicDuplicate(target, kw);
         if (match.isDuplicate) {
+          const matchedItem = inventory.coveredItems?.find(i => (i.primary_keyword || '').toLowerCase() === kw.toLowerCase() || i.title.toLowerCase() === kw.toLowerCase());
           return {
             isDuplicate: true,
-            existingTitle: kw,
+            existingTitle: matchedItem?.title || kw,
+            url: resolveUrl(matchedItem || { title: kw }),
             reason: match.reason,
             overlap: match.overlap,
           };
