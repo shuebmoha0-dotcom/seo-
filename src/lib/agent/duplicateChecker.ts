@@ -85,40 +85,55 @@ export class DuplicateArticleChecker {
       return { isDuplicate: true, reason: 'Exact match', overlap: 1.0 };
     }
 
-    // Direct phrase containment (e.g. "cold email deliverability" inside "how to fix cold email deliverability")
-    if (normA.length >= 8 && normB.length >= 8 && (normA.includes(normB) || normB.includes(normA))) {
-      return { isDuplicate: true, reason: 'Direct phrase containment', overlap: 0.95 };
+    const slugA = this.toSlug(target);
+    const slugB = this.toSlug(existing);
+    if (slugA && slugB && slugA === slugB) {
+      return { isDuplicate: true, reason: 'Exact slug match', overlap: 1.0 };
     }
 
     const wordsA = this.extractCoreWords(target);
     const wordsB = this.extractCoreWords(existing);
     if (wordsA.size === 0 || wordsB.size === 0) return { isDuplicate: false, overlap: 0 };
 
+    // Stem plural words (e.g. "messages" -> "message", "templates" -> "template") for accurate comparison
+    const stemWord = (w: string) => w.replace(/ies$/, 'y').replace(/(es|s)$/, '');
+    const stemmedA = new Set(Array.from(wordsA).map(stemWord));
+    const stemmedB = new Set(Array.from(wordsB).map(stemWord));
+
     let intersection = 0;
-    for (const w of wordsA) {
-      if (wordsB.has(w)) intersection++;
+    for (const w of stemmedA) {
+      if (stemmedB.has(w)) intersection++;
     }
-    const union = new Set([...wordsA, ...wordsB]).size;
+    const union = new Set([...stemmedA, ...stemmedB]).size;
     const jaccard = union > 0 ? intersection / union : 0;
 
-    const subsetA = intersection / wordsA.size;
-    const subsetB = intersection / wordsB.size;
+    const subsetA = intersection / stemmedA.size;
+    const subsetB = intersection / stemmedB.size;
 
-    // Strict duplicate criteria:
-    // 1. Jaccard similarity >= 0.40
-    // 2. OR 65%+ of core words from either title are contained in the other
-    // 3. OR 3+ identical core words and 50%+ containment
-    const maxOverlap = Math.max(jaccard, subsetA, subsetB);
-
-    if (jaccard >= 0.40 || subsetA >= 0.65 || subsetB >= 0.65 || (intersection >= 3 && (subsetA >= 0.50 || subsetB >= 0.50))) {
+    // 1. High overlap criteria: >= 70% Jaccard or virtually all core words match (>= 80% bidirectional)
+    if (jaccard >= 0.70 || (subsetA >= 0.80 && subsetB >= 0.80)) {
       return {
         isDuplicate: true,
-        reason: `High topical overlap (${Math.round(maxOverlap * 100)}%) with "${existing}"`,
-        overlap: maxOverlap,
+        reason: `High topical overlap (${Math.round(Math.max(jaccard, subsetA, subsetB) * 100)}%) with "${existing}"`,
+        overlap: Math.max(jaccard, subsetA, subsetB),
       };
     }
 
-    return { isDuplicate: false, overlap: maxOverlap };
+    // 2. Direct phrase containment ONLY if the contained phrase is comprehensive (>= 4 core words AND >= 80% containment)
+    // NEVER trigger on 1-3 word generic phrases (like "cold email" or "seo")
+    if (normA.length >= 25 && normB.length >= 25 && (normA.includes(normB) || normB.includes(normA))) {
+      const minCoreWords = Math.min(stemmedA.size, stemmedB.size);
+      const maxSubset = Math.max(subsetA, subsetB);
+      if (minCoreWords >= 4 && maxSubset >= 0.80) {
+        return {
+          isDuplicate: true,
+          reason: `Direct phrase containment with "${existing}"`,
+          overlap: 0.90,
+        };
+      }
+    }
+
+    return { isDuplicate: false, overlap: Math.max(jaccard, subsetA, subsetB) };
   }
 
   /**
@@ -129,19 +144,21 @@ export class DuplicateArticleChecker {
     inventory: {
       siteUrl?: string;
       domain?: string;
-      coveredItems?: Array<{ title: string; primary_keyword?: string; url?: string; slug?: string }>;
+      coveredItems?: Array<{ title: string; primary_keyword?: string; url?: string; slug?: string; status?: string }>;
       coveredTitles?: string[];
       coveredKeywords?: string[];
     }
-  ): { isDuplicate: boolean; existingTitle?: string; url?: string; reason?: string; overlap: number } {
+  ): { isDuplicate: boolean; existingTitle?: string; url?: string; reason?: string; overlap: number; status?: string } {
     if (!target) return { isDuplicate: false, overlap: 0 };
     const siteUrl = (inventory.siteUrl || (inventory.domain ? `https://${inventory.domain}` : '')).replace(/\/+$/, '');
 
-    const resolveUrl = (item?: { url?: string; slug?: string; title?: string }): string | undefined => {
+    const resolveUrl = (item?: { url?: string; slug?: string; title?: string; status?: string }): string | undefined => {
       if (item?.url && item.url.startsWith('http')) return item.url;
-      if (siteUrl && item?.slug) return `${siteUrl}/${item.slug.replace(/^\/+/, '')}`;
-      if (siteUrl && item?.title) return `${siteUrl}/${this.toSlug(item.title)}`;
-      return item?.url || undefined;
+      if (item?.status === 'published') {
+        if (siteUrl && item?.slug) return `${siteUrl}/${item.slug.replace(/^\/+/, '')}`;
+        if (siteUrl && item?.title) return `${siteUrl}/${this.toSlug(item.title)}`;
+      }
+      return undefined;
     };
 
     // 1. Check coveredItems
@@ -155,6 +172,7 @@ export class DuplicateArticleChecker {
             url: resolveUrl(item),
             reason: matchTitle.reason,
             overlap: matchTitle.overlap,
+            status: item.status,
           };
         }
         if (item.primary_keyword) {
@@ -166,6 +184,7 @@ export class DuplicateArticleChecker {
               url: resolveUrl(item),
               reason: matchKw.reason,
               overlap: matchKw.overlap,
+              status: item.status,
             };
           }
         }
@@ -184,6 +203,7 @@ export class DuplicateArticleChecker {
             url: resolveUrl(matchedItem || { title }),
             reason: match.reason,
             overlap: match.overlap,
+            status: matchedItem?.status,
           };
         }
       }
@@ -201,6 +221,7 @@ export class DuplicateArticleChecker {
             url: resolveUrl(matchedItem || { title: kw }),
             reason: match.reason,
             overlap: match.overlap,
+            status: matchedItem?.status,
           };
         }
       }
@@ -217,6 +238,8 @@ export class DuplicateArticleChecker {
     primary_keyword?: string;
     working_title?: string;
     url_slug?: string;
+    exclude_draft_id?: string;
+    site_url?: string;
   }): Promise<DuplicateCheckResult> {
     const supabase = createAdminClient();
     const targetKw = this.normalize(params.primary_keyword);
@@ -224,10 +247,15 @@ export class DuplicateArticleChecker {
     const targetSlug = this.toSlug(params.url_slug || params.primary_keyword || params.working_title);
     const targetWords = this.extractCoreWords(`${params.working_title || ''} ${params.primary_keyword || ''}`);
 
-    // 1. Query existing content_drafts for the website
+    // 1. Query existing content_drafts (ONLY completed/published or ready drafts — NEVER writing or failed drafts!)
     let draftsQuery = supabase
       .from('content_drafts')
-      .select('id, working_title, primary_keyword, url_slug, status, website_id');
+      .select('id, working_title, primary_keyword, url_slug, status, website_id, revision_notes')
+      .in('status', ['published', 'ready_for_approval', 'approved']);
+
+    if (params.exclude_draft_id) {
+      draftsQuery = draftsQuery.neq('id', params.exclude_draft_id);
+    }
 
     if (params.website_id) {
       draftsQuery = draftsQuery.or(`website_id.eq.${params.website_id},website_id.is.null`);
@@ -237,6 +265,19 @@ export class DuplicateArticleChecker {
 
     if (drafts && drafts.length > 0) {
       for (const d of drafts) {
+        // Resolve URL if available
+        let dUrl: string | undefined;
+        if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(d.revision_notes);
+            if (parsed.wordpress_post_url) dUrl = parsed.wordpress_post_url;
+            if (parsed.link) dUrl = dUrl || parsed.link;
+          } catch (_) {}
+        }
+        if (!dUrl && params.site_url && d.url_slug) {
+          dUrl = `${params.site_url.replace(/\/+$/, '')}/${d.url_slug.replace(/^\/+/, '')}`;
+        }
+
         const dKw = this.normalize(d.primary_keyword);
         const dTitle = this.normalize(d.working_title);
         const dSlug = this.toSlug(d.url_slug || d.primary_keyword || d.working_title);
@@ -246,13 +287,14 @@ export class DuplicateArticleChecker {
           return {
             isDuplicate: true,
             confidence: 'exact',
-            reason: `An article targeting the exact primary keyword "${d.primary_keyword}" already exists: "${d.working_title}" (${d.status}).`,
+            reason: `An article targeting the primary keyword "${d.primary_keyword}" already exists: "${d.working_title}" ${dUrl ? `(${dUrl})` : `(${d.status})`}.`,
             matchedArticle: {
               id: d.id,
               title: d.working_title,
               slug: d.url_slug,
               primary_keyword: d.primary_keyword,
               status: d.status,
+              url: dUrl,
               source: 'content_drafts',
             },
           };
@@ -263,13 +305,14 @@ export class DuplicateArticleChecker {
           return {
             isDuplicate: true,
             confidence: 'exact',
-            reason: `An article with the exact URL slug "/${d.url_slug}" already exists: "${d.working_title}".`,
+            reason: `An article with URL slug "/${d.url_slug}" already exists: "${d.working_title}" ${dUrl ? `(${dUrl})` : ''}.`,
             matchedArticle: {
               id: d.id,
               title: d.working_title,
               slug: d.url_slug,
               primary_keyword: d.primary_keyword,
               status: d.status,
+              url: dUrl,
               source: 'content_drafts',
             },
           };
@@ -283,13 +326,14 @@ export class DuplicateArticleChecker {
           return {
             isDuplicate: true,
             confidence: 'high',
-            reason: `Topic already covered in draft/article "${d.working_title}". Writing this would cause SEO keyword cannibalization.`,
+            reason: `Topic already covered in article "${d.working_title}" ${dUrl ? `(${dUrl})` : ''}. Writing this would cause SEO keyword cannibalization.`,
             matchedArticle: {
               id: d.id,
               title: d.working_title,
               slug: d.url_slug,
               primary_keyword: d.primary_keyword,
               status: d.status,
+              url: dUrl,
               source: 'content_drafts',
             },
           };

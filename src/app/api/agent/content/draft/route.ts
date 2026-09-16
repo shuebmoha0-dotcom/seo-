@@ -106,9 +106,9 @@ export async function GET(request: Request) {
         // If it has no body and is older than 2 minutes, mark failed so it never hangs in UI
         const ageMs = Date.now() - new Date(d.created_at || 0).getTime();
         if (ageMs > 120000) {
-          currentStatus = 'failed';
+          currentStatus = 'needs_revision';
           supabase.from('content_drafts').update({
-            status: 'failed',
+            status: 'needs_revision',
             revision_notes: 'Drafting timed out. Click Generate Draft to retry with Claude Sonnet 5.'
           }).eq('id', d.id).then(() => {});
         }
@@ -376,12 +376,20 @@ export async function POST(request: Request) {
     }
 
     // 0. Anti-Duplication Guard: Prevent creating duplicate articles or cannibalizing keywords
+    let siteUrlResolved: string | undefined;
+    if (targetWebsiteId) {
+      const { data: webSiteRow } = await supabase.from('websites').select('url, domain').eq('id', targetWebsiteId).maybeSingle();
+      if (webSiteRow) {
+        siteUrlResolved = webSiteRow.url || (webSiteRow.domain ? `https://${webSiteRow.domain}` : undefined);
+      }
+    }
     if (!revision_notes && !body.force_duplicate) {
       const { DuplicateArticleChecker } = await import('@/lib/agent/duplicateChecker');
       const dupCheck = await DuplicateArticleChecker.check({
         website_id: targetWebsiteId,
         primary_keyword,
         working_title,
+        site_url: siteUrlResolved,
       });
 
       if (dupCheck.isDuplicate) {
@@ -401,7 +409,7 @@ export async function POST(request: Request) {
       try {
         const [pagesRes, draftsRes, webRes] = await Promise.all([
           supabase.from('pages').select('path, title, h1').eq('website_id', website_id).limit(15),
-          supabase.from('content_drafts').select('working_title, url_slug, wordpress_post_url').eq('website_id', website_id).neq('status', 'failed').limit(15),
+          supabase.from('content_drafts').select('working_title, url_slug, revision_notes').eq('website_id', website_id).in('status', ['published', 'ready_for_approval', 'approved']).limit(15),
           supabase.from('websites').select('url, domain').eq('id', website_id).maybeSingle()
         ]);
 
@@ -409,10 +417,19 @@ export async function POST(request: Request) {
 
         if (draftsRes.data) {
           for (const d of draftsRes.data) {
-            if (d.wordpress_post_url) {
-              resolvedInternalLinks.push(`[${d.working_title}](${d.wordpress_post_url})`);
-            } else if (d.url_slug) {
-              resolvedInternalLinks.push(`[${d.working_title}](${siteBase.replace(/\/$/, '')}/blog/${d.url_slug})`);
+            let dUrl: string | undefined;
+            if (d.revision_notes && typeof d.revision_notes === 'string' && d.revision_notes.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(d.revision_notes);
+                if (parsed.wordpress_post_url) dUrl = parsed.wordpress_post_url;
+                if (parsed.link) dUrl = dUrl || parsed.link;
+              } catch (_) {}
+            }
+            if (!dUrl && d.url_slug) {
+              dUrl = `${siteBase.replace(/\/$/, '')}/blog/${d.url_slug}`;
+            }
+            if (dUrl && d.working_title) {
+              resolvedInternalLinks.push(`[${d.working_title}](${dUrl})`);
             }
           }
         }
@@ -446,6 +463,7 @@ export async function POST(request: Request) {
         project_instructions: projectInstructions || undefined,
         project_memory: projectMemory || undefined,
         rules: defaultRules,
+        site_url: siteUrlResolved,
       },
       revision_notes
     );

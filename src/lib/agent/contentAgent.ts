@@ -33,6 +33,8 @@ export interface ContentInput {
   project_instructions?: string;
   project_memory?: string;
   rules: ContentRules;
+  draft_id?: string;
+  site_url?: string;
 }
 
 export interface ContentBrief {
@@ -599,6 +601,8 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
         website_id: input.website_id,
         primary_keyword: input.primary_keyword,
         working_title: input.working_title,
+        exclude_draft_id: input.draft_id,
+        site_url: input.site_url,
       });
 
       if (dupCheck.isDuplicate) {

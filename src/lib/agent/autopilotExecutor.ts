@@ -227,13 +227,17 @@ export class AutopilotExecutor {
             const siteBase = (website_url || `https://${website_domain}`).replace(/\/+$/, '');
             const articleLink = dupResult.url && dupResult.url.startsWith('http')
               ? dupResult.url
-              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupResult.existingTitle)}`;
+              : (dupResult.status === 'published' ? `${siteBase}/${DuplicateArticleChecker.toSlug(dupResult.existingTitle)}` : undefined);
 
-            const blockSummary = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
-              `Your website already has an article covering *"${targetKeyword}"*:\n` +
+            const proofLine = articleLink
+              ? `🔗 *Live Article Proof:* ${articleLink}\n\n`
+              : `📋 *Status in Content Planner:* Awaiting review / approved (${dupResult.status || 'draft'})\n\n`;
+
+            const blockSummary = `⚠️ *Topic Already Covered — Write Request Prevented*\n\n` +
+              `An article covering *"${targetKeyword}"* already exists for \`${website_domain}\`:\n` +
               `👉 *"${dupResult.existingTitle}"*\n` +
-              `🔗 *Article URL:* ${articleLink}\n\n` +
-              `Writing another article on this topic would cause *search cannibalization* and burn AI tokens.\n\n` +
+              proofLine +
+              `Writing another article on this exact topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
               `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
               `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
 
@@ -361,7 +365,9 @@ export class AutopilotExecutor {
               internal_linking_opportunities: candidateInternalLinks.slice(0, 6),
               rules: contentRules,
               project_instructions: projectInstructions,
-              project_memory: projectMemory
+              project_memory: projectMemory,
+              draft_id: preInsertedDraftId || undefined,
+              site_url: website_url || undefined,
             });
 
             let draftId = preInsertedDraftId;
@@ -477,15 +483,14 @@ export class AutopilotExecutor {
             console.error('[AutopilotExecutor] Draft generation failed:', err?.message || err);
             if (preInsertedDraftId) {
               try {
+                // Cleanly remove incomplete placeholder draft so no ghost ticket lingers
                 await supabase
                   .from('content_drafts')
-                  .update({
-                    status: 'failed',
-                    revision_notes: `Generation failed: ${err?.message || String(err)}`,
-                    updated_at: new Date().toISOString(),
-                  })
+                  .delete()
                   .eq('id', preInsertedDraftId);
-              } catch (_) {}
+              } catch (delErr) {
+                console.warn('[AutopilotExecutor] Failed to clean placeholder draft:', delErr);
+              }
             }
             throw err;
           }

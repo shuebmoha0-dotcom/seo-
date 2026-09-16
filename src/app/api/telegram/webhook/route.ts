@@ -692,13 +692,17 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
             const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
             const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
               ? dupCheck.url
-              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}`;
+              : (dupCheck.status === 'published' ? `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}` : undefined);
 
-            const cancelMsg = `⚠️ *Topic Already Covered — Write Request Cancelled*\n\n` +
-              `Your website already published an article covering *"${targetTopic}"*:\n` +
+            const proofLine = articleLink
+              ? `🔗 *Live Article Proof:* ${articleLink}\n\n`
+              : `📋 *Status in Content Planner:* Awaiting review / approved (${dupCheck.status || 'draft'})\n\n`;
+
+            const cancelMsg = `⚠️ *Topic Already Covered — Write Request Prevented*\n\n` +
+              `An article covering *"${targetTopic}"* already exists for \`${currentSite.domain}\`:\n` +
               `👉 *"${dupCheck.existingTitle}"*\n` +
-              `🔗 *Article URL:* ${articleLink}\n\n` +
-              `Writing another article on this topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
+              proofLine +
+              `Writing another article on this exact topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
               `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
               `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
 
@@ -729,8 +733,9 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
             const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
             const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
               ? dupCheck.url
-              : `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}`;
-            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"* (${articleLink}). Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
+              : (dupCheck.status === 'published' ? `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}` : undefined);
+            const proofText = articleLink ? ` (${articleLink})` : ` [in Content Planner: ${dupCheck.status}]`;
+            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"*${proofText}. Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
           }
         }
 

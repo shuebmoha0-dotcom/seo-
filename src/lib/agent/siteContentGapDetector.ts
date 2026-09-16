@@ -10,6 +10,7 @@ export interface CoveredItem {
   primary_keyword?: string;
   category?: string;
   source: 'wordpress' | 'database_draft' | 'database_page';
+  status?: string;
 }
 
 export interface SiteInventory {
@@ -49,12 +50,12 @@ export class SiteContentGapDetector {
     const coveredMap = new Map<string, CoveredItem>();
     const categories: Array<{ id?: number; name: string; slug: string; count?: number }> = [];
 
-    // A. Query Supabase content_drafts
+    // A. Query Supabase content_drafts (strictly published, ready_for_approval, or approved — NEVER writing or failed)
     try {
       let draftQuery = supabase
         .from('content_drafts')
         .select('id, working_title, primary_keyword, url_slug, status, revision_notes, website_id')
-        .neq('status', 'failed');
+        .in('status', ['published', 'ready_for_approval', 'approved']);
 
       if (websiteId) {
         draftQuery = draftQuery.eq('website_id', websiteId);
@@ -75,13 +76,15 @@ export class SiteContentGapDetector {
               } catch (_) {}
             }
             const fallbackSlug = (d.url_slug || '').replace(/^\/+/, '');
-            const resolvedUrl = wpUrl || (fallbackSlug ? `${siteUrl}/${fallbackSlug}` : `${siteUrl}/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`);
+            // Only provide a live URL if confirmed via wpUrl or if status is officially published
+            const resolvedUrl = wpUrl || (d.status === 'published' && fallbackSlug ? `${siteUrl}/${fallbackSlug}` : undefined);
 
             coveredMap.set(title.toLowerCase(), {
               title,
               slug: fallbackSlug,
               url: resolvedUrl,
               primary_keyword: d.primary_keyword,
+              status: d.status,
               source: 'database_draft',
             });
           }
