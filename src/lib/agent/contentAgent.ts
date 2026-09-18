@@ -589,7 +589,7 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               visualStyle = 'Modern editorial vector illustration with clean conceptual iconography, subtle textures, and rich color accents';
             }
 
-            // Enforce a strict 8-second race so image generation cannot stall the article pipeline
+            // Enforce a bounded 22-second race so image generation cannot stall the article pipeline
             const imgGenPromise = ImageRouter.generate({
               topic: brief.working_title,
               target_keyword: input.primary_keyword,
@@ -600,7 +600,7 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,
             });
-            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000));
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 40000));
             const generatedImage = await Promise.race([imgGenPromise, timeoutPromise]);
 
             if (generatedImage && generatedImage.url) {

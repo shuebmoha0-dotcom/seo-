@@ -23,7 +23,7 @@ export interface ImageGenerationRequest {
 export interface ImageGenerationResult {
   url: string;
   base64?: string;
-  provider: 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  provider: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
   model: string;
   metadata: {
     prompt_used: string;
@@ -35,7 +35,7 @@ export interface ImageGenerationResult {
 }
 
 export interface ImageProvider {
-  name: 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  name: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
   generateImage(prompt: string, dimensions?: string): Promise<{ url: string; base64?: string }>;
 }
 
@@ -52,6 +52,95 @@ export function buildInstantImagePrompt(request: ImageGenerationRequest): string
 export async function generateImagePrompt(request: ImageGenerationRequest, _context?: UsageContext): Promise<string> {
   return buildInstantImagePrompt(request);
 }
+
+/**
+ * 1.5. OpenAI Image Provider (Primary Image Provider - Fast, Cheap & High Quality)
+ */
+export const OpenAIImageProvider: ImageProvider = {
+  name: 'openai',
+  async generateImage(prompt: string, dimensions = '1536x1024'): Promise<{ url: string; base64?: string }> {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OPENAI_API_KEY is not configured.');
+    }
+
+    const model = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini';
+    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'low';
+
+    // Map requested dimensions to supported OpenAI sizes: 1024x1024, 1536x1024, 1024x1536, or auto
+    let size: '1024x1024' | '1536x1024' | '1024x1536' = '1536x1024';
+    if (dimensions === '1024x1024') {
+      size = '1024x1024';
+    } else if (dimensions.includes('1024x1536')) {
+      size = '1024x1536';
+    } else {
+      size = '1536x1024'; // Default to 3:2 landscape
+    }
+
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        prompt: `${prompt}. Clean editorial SaaS tech illustration, modern aesthetic, isometric perspective, elegant composition, high resolution, no text overlay, web quality.`,
+        n: 1,
+        size,
+        quality,
+      }),
+      signal: AbortSignal.timeout(25000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI Image API returned HTTP ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    const item = data.data?.[0];
+    if (!item?.b64_json && !item?.url) {
+      throw new Error('OpenAI image generation returned empty data.');
+    }
+
+    let publicUrl = item.url || '';
+    const base64Data = item.b64_json;
+
+    // Upload base64 to Supabase storage to get permanent public CDN URL
+    if (base64Data) {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const buffer = Buffer.from(base64Data, 'base64');
+        const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+
+        const { error } = await supabase.storage.from('content-images').upload(filename, buffer, {
+          contentType: 'image/png',
+          upsert: true,
+        });
+
+        if (!error) {
+          const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
+          if (urlData?.publicUrl) {
+            publicUrl = urlData.publicUrl;
+          }
+        }
+      } catch (uploadErr) {
+        console.warn('[ImageRouter] Upload to Supabase storage failed, using data URI fallback:', uploadErr);
+      }
+
+      if (!publicUrl) {
+        publicUrl = `data:image/png;base64,${base64Data}`;
+      }
+    }
+
+    return {
+      url: publicUrl,
+      base64: base64Data,
+    };
+  },
+};
 
 /**
  * 2. Gemini Image Provider (Google AI Studio)
@@ -301,7 +390,43 @@ export const ImageRouter = {
     // Enforce 16:9 dimensions
     const dimensions = request.dimensions || '1200x675';
 
-    // 2. Primary: Gemini via Google AI Studio (if key configured and not degraded)
+    // 2. Primary: OpenAI Image Provider (gpt-image-1-mini - Fast, Cheap, & Crisp Quality)
+    if (process.env.OPENAI_API_KEY && PROVIDER_HEALTH.openai_image.status !== 'degraded') {
+      try {
+        const openAiStart = Date.now();
+        console.log(`[Image Router] Generating editorial image via OpenAI (${AI_CONFIG.OPENAI_IMAGE_MODEL}) for "${request.topic}"...`);
+        const result = await OpenAIImageProvider.generateImage(prompt, dimensions);
+        recordProviderSuccess('openai_image');
+
+        await recordImageUsage({
+          provider: 'openai',
+          model: AI_CONFIG.OPENAI_IMAGE_MODEL,
+          status: 'success',
+          fallbackUsed: false,
+          durationMs: Date.now() - openAiStart,
+          context,
+        });
+
+        return {
+          url: result.url,
+          base64: result.base64,
+          provider: 'openai',
+          model: AI_CONFIG.OPENAI_IMAGE_MODEL,
+          metadata: {
+            prompt_used: prompt,
+            style: request.style,
+            duration_ms: Date.now() - startTime,
+            fallback_used: false,
+            timestamp: new Date().toISOString(),
+          },
+        };
+      } catch (openAiError: any) {
+        recordProviderFailure('openai_image', openAiError?.message || 'OpenAI image generation failed');
+        console.warn(`[Image Router] OpenAI Image failed, failing over to Gemini: ${openAiError?.message || openAiError}`);
+      }
+    }
+
+    // 3. Secondary: Gemini via Google AI Studio (if key configured and not degraded)
     const googleKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
     if (googleKey && PROVIDER_HEALTH.gemini_image.status !== 'degraded') {
       try {
@@ -424,7 +549,7 @@ export const ImageRouter = {
  * Helper to record image generation usage metrics in Supabase
  */
 async function recordImageUsage(data: {
-  provider: 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  provider: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
   model: string;
   status: 'success' | 'failed' | 'fallback';
   fallbackUsed: boolean;

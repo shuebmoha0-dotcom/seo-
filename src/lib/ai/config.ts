@@ -30,7 +30,11 @@ export const AI_CONFIG = {
   SONNET_MODEL: 'claude-sonnet-5' as const,
 
   // ── Image Models ────────────────────────────────────────────────────────────
-  // Gemini Image Generation via Google AI Studio (Primary Image Provider)
+  // OpenAI Image Generation (Primary Image Provider - Cheap & High Quality)
+  OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini',
+  OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'low') as 'low' | 'medium' | 'high' | 'auto',
+
+  // Gemini Image Generation via Google AI Studio (Fallback)
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
 
   // Leonardo AI (Fallback Image Provider)
@@ -56,6 +60,9 @@ export const PRICING_RATES: Record<string, ModelPricing> = {
 };
 
 export const IMAGE_PRICING_ESTIMATES: Record<string, number> = {
+  [AI_CONFIG.OPENAI_IMAGE_MODEL]: 0.008, // ~$0.008 per image (cheap & fast)
+  'gpt-image-1-mini': 0.008,
+  'gpt-image-1': 0.03,
   [AI_CONFIG.GEMINI_IMAGE_MODEL]: 0.03, // ~$0.030 per image
   'imagen-3.0-generate-002': 0.03,
   [AI_CONFIG.LEONARDO_IMAGE_MODEL]: 0.025, // ~$0.025 per image
@@ -73,9 +80,10 @@ export interface ProviderHealth {
 }
 
 // In-memory provider health tracking
-export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'gemini_image' | 'leonardo_image' | 'pollinations_image', ProviderHealth> = {
+export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'openai_image' | 'gemini_image' | 'leonardo_image' | 'pollinations_image', ProviderHealth> = {
   luna: { status: 'operational', consecutiveFailures: 0 },
   sonnet: { status: 'operational', consecutiveFailures: 0 },
+  openai_image: { status: 'operational', consecutiveFailures: 0 },
   gemini_image: { status: 'operational', consecutiveFailures: 0 },
   leonardo_image: { status: 'operational', consecutiveFailures: 0 },
   pollinations_image: { status: 'operational', consecutiveFailures: 0 },
