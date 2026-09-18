@@ -43,6 +43,19 @@ function safeBackground(fn: () => Promise<void>) {
   }
 }
 
+function computeMeasuredSeoScore(qa: any, wordCount: number): number {
+  if (!qa) return 75;
+  let score = 0;
+  if (qa.primary_keyword_present) score += 20;
+  if (qa.word_count_pass) score += 20;
+  else if (wordCount >= 800) score += 12;
+  if (qa.heading_structure_pass) score += 15;
+  if (qa.internal_links_present) score += 15;
+  if (qa.images_specified) score += 15;
+  if (qa.no_keyword_stuffing && qa.no_filler) score += 15;
+  return Math.min(100, Math.max(50, score));
+}
+
 export class AutopilotExecutor {
   /**
    * Dispatches and executes an immediate natural language SEO action
@@ -210,8 +223,8 @@ export class AutopilotExecutor {
         } else {
           // B. User specified a keyword/topic: check against site inventory for potential cannibalization
           const dupResult = DuplicateArticleChecker.findDuplicateInInventory(targetKeyword, siteInventory);
-          if (dupResult.isDuplicate) {
-            console.warn(`[AutopilotExecutor] BLOCKED write request on already covered topic: "${targetKeyword}" matches "${dupResult.existingTitle}"`);
+          if (dupResult.isDuplicate && (dupResult.url || dupResult.draftId)) {
+            console.warn(`[AutopilotExecutor] BLOCKED write request on verified existing topic: "${targetKeyword}" matches "${dupResult.existingTitle}"`);
 
             // Discover 3 fresh, uncovered content gap alternatives
             let alternativeGaps: any[] = [];
@@ -235,7 +248,7 @@ export class AutopilotExecutor {
 
             const proofLine = articleLink
               ? `🔗 *Live Article Proof:* ${articleLink}\n\n`
-              : `📋 *Status in Content Planner:* Awaiting review / approved (${dupResult.status || 'draft'})\n\n`;
+              : (dupResult.draftId ? `📋 *Content Planner Draft Proof:* [View in Content Planner](/content-planner) (Draft ID: \`${dupResult.draftId}\`)\n\n` : '');
 
             const blockSummary = `⚠️ *Topic Already Covered — Write Request Prevented*\n\n` +
               `An article covering *"${targetKeyword}"* already exists for \`${website_domain}\`:\n` +
@@ -265,6 +278,7 @@ export class AutopilotExecutor {
                 already_covered: true,
                 existing_title: dupResult.existingTitle,
                 existing_url: dupResult.url,
+                draft_id: dupResult.draftId,
                 alternatives: alternativeGaps,
               }
             };
@@ -483,13 +497,15 @@ export class AutopilotExecutor {
                 }
               } catch (_) {}
 
+              const measuredScore = computeMeasuredSeoScore(output.qa, output.word_count);
+
               for (const cId of targetChatIds) {
                 await telegram.sendApprovalPrompt(cId, {
                   executionId: draftId || 'completed',
                   taskTitle: output.working_title || workingTitle,
                   websiteDomain: website_domain,
-                  score: output.qa?.overall_status === 'pass' ? 95 : 78,
-                  wordCount: output.word_count || 1400,
+                  score: measuredScore,
+                  wordCount: output.word_count,
                 });
               }
             } catch (tErr) {
@@ -517,11 +533,12 @@ export class AutopilotExecutor {
         if (params.sync !== false) {
           try {
             const { output, draftId, targetKeyword: kw, keywordSource: kSrc } = await runDrafting();
+            const measuredScore = computeMeasuredSeoScore(output.qa, output.word_count);
             return {
               success: true,
               intent_type: 'immediate_action',
               action_type: 'write_article',
-              summary: `🎯 *Keyword Researched:* "${kw}" (${kSrc})\n🔗 *Internal Links Weaved:* ${candidateInternalLinks.slice(0, 3).length} live site URLs\n🎨 *Images Generated:* Featured visual created\n📝 *Article Drafted:* "${output.working_title || workingTitle}" (${output.word_count} words, SEO Score: ${output.qa?.overall_status === 'pass' ? 95 : 78}/100).\n\nReady for your approval to publish live!`,
+              summary: `🎯 *Keyword Researched:* "${kw}" (${kSrc})\n🔗 *Internal Links Weaved:* ${candidateInternalLinks.slice(0, 3).length} live site URLs\n🎨 *Images Generated:* Featured visual created\n📝 *Article Drafted:* "${output.working_title || workingTitle}" (${output.word_count} words, Measured SEO Score: ${measuredScore}/100).\n\nReady for your approval to publish live!`,
               link_url: '/content-planner',
               link_label: 'View in Content Planner',
               data: { draft_id: draftId, topic: workingTitle, output }
@@ -925,6 +942,8 @@ export class AutopilotExecutor {
           for (const s of scRows.slice(0, 3)) {
             briefing += `• *${s.query}*: #${Math.round(Number(s.position) || 0)} (${s.clicks || 0} clicks, ${s.impressions || 0} impressions)\n`;
           }
+        } else {
+          briefing += `\n🎯 *Search Console Performance:* No Search Console queries recorded yet for this domain. Connect Google Search Console in Integrations to track live search queries and clicks.\n`;
         }
 
         briefing += `\n💡 *Recommended Next Action:* Reply with *"Write an article about [topic]"* or *"Help me rank faster"* to accelerate search growth!`;
@@ -1018,11 +1037,25 @@ export class AutopilotExecutor {
         const indexableCount = (samplePages || []).filter((p: any) => p.indexability_signals?.is_indexable !== false).length;
         const totalSample = samplePages?.length || 0;
 
+        const hasServiceAccount = !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+        let hasOAuth = false;
+        if (!hasServiceAccount) {
+          const { data: creds } = await supabase
+            .from('integration_credentials')
+            .select('credential_type')
+            .eq('website_id', website_id)
+            .eq('credential_type', 'google_oauth_token')
+            .limit(1)
+            .maybeSingle();
+          hasOAuth = !!creds;
+        }
+        const isIndexingConfigured = hasServiceAccount || hasOAuth;
+
         let indexSummary = `🔍 *Google Indexability Check for ${website_domain}*\n\n`;
         indexSummary += `• *Sampled Pages:* ${totalSample}\n`;
         indexSummary += `• *Indexable Pages:* ${indexableCount} of ${totalSample} pages\n`;
         indexSummary += `• *Robots Directives:* 🟢 No site-wide noindex block detected\n`;
-        indexSummary += `• *Google Indexing API:* Connected & ready to push priority URL updates\n\n`;
+        indexSummary += `• *Google Indexing API:* ${isIndexingConfigured ? '🟢 Connected & ready to push priority URL updates' : '⚪ Not configured (Setup Google Service Account in Settings to enable automated indexing)'}\n\n`;
         indexSummary += `_Whenever an article is approved, we automatically offer priority Google Indexing & IndexNow submission!_`;
 
         return {

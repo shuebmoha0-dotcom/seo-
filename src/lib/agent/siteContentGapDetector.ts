@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DuplicateArticleChecker } from './duplicateChecker';
 
 export interface CoveredItem {
+  id?: string;
   title: string;
   slug: string;
   url?: string;
@@ -80,6 +81,7 @@ export class SiteContentGapDetector {
             const resolvedUrl = wpUrl || (d.status === 'published' && fallbackSlug ? `${siteUrl}/${fallbackSlug}` : undefined);
 
             coveredMap.set(title.toLowerCase(), {
+              id: d.id,
               title,
               slug: fallbackSlug,
               url: resolvedUrl,

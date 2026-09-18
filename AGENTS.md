@@ -45,7 +45,6 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Formatted View Default**: The Content Planner must always default to formatted article view (`📖 Formatted Article View`).
 - **Markdown Rendering**: Headings (H1–H4), blockquotes, lists, images, and tables must render cleanly without raw tags or split `![alt]\n(url)` markers.
 - **No Flash of Unparsed Content**: Never dump raw markdown or unstyled text onto the preview area.
-
 ## 8. COMMERCIAL MULTI-TENANT ARCHITECTURE & ZERO HARDCODED DOMAINS
 - **MANDATE**: This platform is a commercial SaaS product built for paying clients across any industry, niche, or CMS. `bizaigenius.com` is strictly a test website, NOT a hardcoded system assumption.
 - **PROHIBITION**: NEVER hardcode `bizaigenius.com`, cold email niches, specific author names, or test credentials into production routes, executors, or prompts.
@@ -53,6 +52,21 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
   - Every domain, URL, API call, category, WordPress job, and indexing request must be dynamically resolved from the active `website_id` / client website record.
   - Client niche and topic boundaries must be derived dynamically from the client's `project_memory`, `website_rules`, and live categories.
   - Every feature (indexing, crawling, drafting, scheduling, publishing) must work identically for any client website connected to the platform.
+
+## 9. ABSOLUTE GROUNDING & ZERO HALLUCINATION CONTRACT
+- **MANDATE**: Every agent, tool, and prompt must operate with 100% truthfulness and strict empirical grounding. Under no circumstance may any agent lie, fabricate metrics, hallucinate non-existent articles, simulate fake rankings, or claim an action succeeded when it did not.
+- **Strict Proof Requirement for Duplicate Prevention**:
+  - NEVER claim an article already exists or is in the Content Planner unless verified by an exact database draft ID or a live, confirmed HTTP 200 URL.
+  - If a matched item has neither a confirmed live URL nor an active database draft ID, it MUST NOT false-positive block fresh writing requests.
+  - Always provide the user with the exact proof link or draft ID when flagging duplicate intent.
+- **Transparent Handling of Missing Data**:
+  - If Google Search Console, Analytics, or Crawler data is empty or not yet synced for a client domain, state truthfully: "No Search Console performance data has been synced yet for this domain."
+  - NEVER invent numbers (e.g. do not simulate fake "7.4" baseline positions, fake impression numbers, or fake clicks).
+- **Verified Publishing State**:
+  - Never report that an article is published live on WordPress unless the WordPress API or connector returned a confirmed HTTP 200/201 response with the post URL. If queued as a background job, state: "Queued for WordPress publication".
+- **Empirical Scoring & Word Counts**:
+  - Word counts, reading times, and SEO scores must be measured directly from the actual generated article body. Never hardcode fake scores (e.g. 95/78) or guess word counts.
+
 
 
 

@@ -169,38 +169,6 @@ export class RankRecoveryEngine {
       }
     }
 
-    // If Search Console data is sparse, leverage tracked keywords
-    if (strikingList.length === 0 && keywordsData.length > 0) {
-      for (const kw of keywordsData.slice(0, 5)) {
-        const term = kw.term;
-        const vol = kw.volume || 480;
-        const simPos = 7.4; // Striking-distance baseline
-        strikingList.push({
-          keyword: term,
-          current_position: simPos,
-          impressions: vol,
-          clicks: Math.round(vol * 0.02),
-          ctr: 2.0,
-          page_url: `${siteUrl}/`,
-          potential_target_position: 2,
-          estimated_click_multiplier: '+380% clicks',
-          estimated_monthly_clicks_gain: Math.round(vol * 0.10),
-          root_opportunity: 'missing_subtopic',
-          headline: `Elevate "${term}" from Position #${simPos} to Page 1 Top 3`,
-          prescriptive_actions: {
-            title_hook_suggestion: `${term.charAt(0).toUpperCase() + term.slice(1)}: Complete 2026 Guide & Blueprint`,
-            meta_description_suggestion: `Master ${term} with practical examples, proven frameworks, and real-world results. Read now.`,
-            recommended_h2_subtopics: [
-              `Why ${term} Matters in 2026`,
-              `Key Strategies & Action Items`,
-              `Frequently Asked Questions About ${term}`,
-            ],
-            schema_type: 'FAQPage',
-          },
-        });
-      }
-    }
-
     // 3. Detect Ranking Drops (Pos >= 3 drop or significant traffic decline)
     const queryDateMap = new Map<string, { recentPos: number; pastPos: number; recentClicks: number; pastClicks: number }>();
     for (const r of scData) {
@@ -277,7 +245,7 @@ export class RankRecoveryEngine {
     const totalPotentialClicks = strikingList.reduce((acc, curr) => acc + curr.estimated_monthly_clicks_gain, 0);
     const avgPosition = scData.length > 0 
       ? Math.round((scData.reduce((acc, curr) => acc + (Number(curr.position) || 0), 0) / scData.length) * 10) / 10 
-      : 8.5;
+      : 0;
 
     const overallHealth: SiteGrowthAndRecoveryReport['overall_health'] = 
       detectedDrops.some(d => d.severity === 'critical') 

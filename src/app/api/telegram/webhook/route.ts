@@ -150,7 +150,7 @@ export async function POST(request: Request) {
 
           if (!siteBaseUrl) {
             const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
-            siteBaseUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : 'https://bizaigenius.com');
+            siteBaseUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : '');
           }
 
           if (!livePostUrl) {
@@ -209,21 +209,24 @@ export async function POST(request: Request) {
               } catch (_) {}
             }
             if (!targetUrl && d.url_slug) {
-              let domainBase = 'https://bizaigenius.com';
+              let domainBase = '';
               const { data: ws } = await supabase
                 .from('websites')
                 .select('url, domain')
                 .eq('id', draftWebsiteId || '')
                 .maybeSingle();
-              if (ws) domainBase = ws.url || `https://${ws.domain}`;
-              targetUrl = `${domainBase.replace(/\/$/, '')}/${d.url_slug}/`;
+              if (ws) domainBase = ws.url || (ws.domain ? `https://${ws.domain}` : '');
+              if (domainBase) targetUrl = `${domainBase.replace(/\/$/, '')}/${d.url_slug}/`;
             }
           }
         }
 
         if (!targetUrl) {
           const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
-          targetUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : 'https://bizaigenius.com');
+          const base = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : '');
+          if (base && executionId && executionId !== 'url') {
+            targetUrl = `${base.replace(/\/$/, '')}/${executionId}/`;
+          }
         }
 
         // Execute Google & IndexNow indexing submission

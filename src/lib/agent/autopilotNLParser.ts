@@ -156,7 +156,12 @@ INTENT CLASSIFICATION TAXONOMY:
    - Set intent_type: 'conversation_response', action_type: 'answer_question', craft an insightful 'response_message'.
 
 11. 'recurring_schedule':
-   - Explicit recurring schedules: "every day at 9am", "weekly report every Monday".`,
+   - Explicit recurring schedules: "every day at 9am", "weekly report every Monday".
+
+ABSOLUTE GROUNDING MANDATE (RULE 9):
+- NEVER fabricate traffic numbers, ranking positions, or crawl counts for "${params.domain}".
+- If the user asks about their specific site traffic, performance, or discoveries, ALWAYS classify as 'site_status_summary', 'growth_acceleration', or 'rank_recovery' so live database evidence is retrieved.
+- Never provide false or unverified claims. All tool actions must be grounded in reality.`,
         prompt: `User Input: "${rawPrompt}"\nTarget Domain: "${params.domain}"${contextResolvedTopic ? `\nResolved Topic from Context: "${contextResolvedTopic}"` : ''}${chatHistoryContext}`
       });
 

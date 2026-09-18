@@ -200,9 +200,11 @@ DIAGNOSTIC FRAMEWORK:
 5. Internal Link Starvation:
    - Dropped pages have few or zero internal links from top-traffic pages.
 
-OUTPUT MANDATE:
+OUTPUT MANDATE & ABSOLUTE GROUNDING CONTRACT (RULE 9):
 - Be specific, authoritative, and direct.
 - Pinpoint the exact root cause with data.
+- NEVER fabricate metrics, fake rank drops, ghost keywords, or technical errors that are not explicitly present in the EVIDENCE COLLECTED.
+- If Search Console data is empty or sparse, state truthfully that no Search Console query performance has been synced yet for this domain. Never invent fake impression numbers or positions.
 - Provide a numbered, step-by-step solution that tells the user (or our autonomous agent) exactly what to execute to recover rankings.`,
         prompt: `Diagnose the root cause of the ranking or traffic drop for "${domain}" and provide a concrete, step-by-step recovery plan.`
       });

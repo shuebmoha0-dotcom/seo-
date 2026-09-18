@@ -110,8 +110,8 @@ export class DuplicateArticleChecker {
     const subsetA = intersection / stemmedA.size;
     const subsetB = intersection / stemmedB.size;
 
-    // 1. High overlap criteria: >= 70% Jaccard or virtually all core words match (>= 80% bidirectional)
-    if (jaccard >= 0.70 || (subsetA >= 0.80 && subsetB >= 0.80)) {
+    // 1. High overlap criteria: >= 75% Jaccard or virtually all core words match (>= 85% bidirectional)
+    if (jaccard >= 0.75 || (subsetA >= 0.85 && subsetB >= 0.85)) {
       return {
         isDuplicate: true,
         reason: `High topical overlap (${Math.round(Math.max(jaccard, subsetA, subsetB) * 100)}%) with "${existing}"`,
@@ -119,12 +119,12 @@ export class DuplicateArticleChecker {
       };
     }
 
-    // 2. Direct phrase containment ONLY if the contained phrase is comprehensive (>= 4 core words AND >= 80% containment)
+    // 2. Direct phrase containment ONLY if the contained phrase is comprehensive (>= 4 core words AND >= 85% containment)
     // NEVER trigger on 1-3 word generic phrases (like "cold email" or "seo")
     if (normA.length >= 25 && normB.length >= 25 && (normA.includes(normB) || normB.includes(normA))) {
       const minCoreWords = Math.min(stemmedA.size, stemmedB.size);
       const maxSubset = Math.max(subsetA, subsetB);
-      if (minCoreWords >= 4 && maxSubset >= 0.80) {
+      if (minCoreWords >= 4 && maxSubset >= 0.85) {
         return {
           isDuplicate: true,
           reason: `Direct phrase containment with "${existing}"`,
@@ -137,18 +137,20 @@ export class DuplicateArticleChecker {
   }
 
   /**
-   * Scans a target keyword or title against the entire site inventory
+   * Scans a target keyword or title against the entire site inventory.
+   * Under Rule 9 (Absolute Grounding), isDuplicate: true is ONLY returned
+   * if verifiable proof exists (a live URL or verified content_drafts ID).
    */
   public static findDuplicateInInventory(
     target: string,
     inventory: {
       siteUrl?: string;
       domain?: string;
-      coveredItems?: Array<{ title: string; primary_keyword?: string; url?: string; slug?: string; status?: string }>;
+      coveredItems?: Array<{ id?: string; title: string; primary_keyword?: string; url?: string; slug?: string; status?: string; source?: string }>;
       coveredTitles?: string[];
       coveredKeywords?: string[];
     }
-  ): { isDuplicate: boolean; existingTitle?: string; url?: string; reason?: string; overlap: number; status?: string } {
+  ): { isDuplicate: boolean; existingTitle?: string; url?: string; draftId?: string; reason?: string; overlap: number; status?: string } {
     if (!target) return { isDuplicate: false, overlap: 0 };
     const siteUrl = (inventory.siteUrl || (inventory.domain ? `https://${inventory.domain}` : '')).replace(/\/+$/, '');
 
@@ -161,31 +163,48 @@ export class DuplicateArticleChecker {
       return undefined;
     };
 
+    // Helper: only claim duplicate if verifiable proof (live URL or draft ID) exists
+    const buildVerifiedResult = (
+      matchedItem: { id?: string; title: string; primary_keyword?: string; url?: string; slug?: string; status?: string; source?: string } | undefined,
+      matchResult: { isDuplicate: boolean; reason?: string; overlap: number },
+      fallbackTitle: string
+    ) => {
+      if (!matchResult.isDuplicate) return { isDuplicate: false, overlap: matchResult.overlap };
+      
+      const resolvedUrl = resolveUrl(matchedItem);
+      const draftId = matchedItem?.id;
+
+      // RULE 9 MANDATE: If neither a live URL nor a database draft ID exists,
+      // we do not have verifiable proof of this article. Never false-positive block.
+      if (!resolvedUrl && !draftId) {
+        console.warn(`[DuplicateArticleChecker] Ignored unverified duplicate match for "${fallbackTitle}" (no live URL or draft ID found)`);
+        return { isDuplicate: false, overlap: matchResult.overlap };
+      }
+
+      return {
+        isDuplicate: true,
+        existingTitle: matchedItem?.title || fallbackTitle,
+        url: resolvedUrl,
+        draftId,
+        reason: matchResult.reason,
+        overlap: matchResult.overlap,
+        status: matchedItem?.status,
+      };
+    };
+
     // 1. Check coveredItems
     if (inventory.coveredItems && inventory.coveredItems.length > 0) {
       for (const item of inventory.coveredItems) {
         const matchTitle = this.isTopicDuplicate(target, item.title);
         if (matchTitle.isDuplicate) {
-          return {
-            isDuplicate: true,
-            existingTitle: item.title,
-            url: resolveUrl(item),
-            reason: matchTitle.reason,
-            overlap: matchTitle.overlap,
-            status: item.status,
-          };
+          const verified = buildVerifiedResult(item, matchTitle, item.title);
+          if (verified.isDuplicate) return verified;
         }
         if (item.primary_keyword) {
           const matchKw = this.isTopicDuplicate(target, item.primary_keyword);
           if (matchKw.isDuplicate) {
-            return {
-              isDuplicate: true,
-              existingTitle: item.title || item.primary_keyword,
-              url: resolveUrl(item),
-              reason: matchKw.reason,
-              overlap: matchKw.overlap,
-              status: item.status,
-            };
+            const verified = buildVerifiedResult(item, matchKw, item.primary_keyword);
+            if (verified.isDuplicate) return verified;
           }
         }
       }
@@ -197,14 +216,8 @@ export class DuplicateArticleChecker {
         const match = this.isTopicDuplicate(target, title);
         if (match.isDuplicate) {
           const matchedItem = inventory.coveredItems?.find(i => i.title.toLowerCase() === title.toLowerCase());
-          return {
-            isDuplicate: true,
-            existingTitle: title,
-            url: resolveUrl(matchedItem || { title }),
-            reason: match.reason,
-            overlap: match.overlap,
-            status: matchedItem?.status,
-          };
+          const verified = buildVerifiedResult(matchedItem, match, title);
+          if (verified.isDuplicate) return verified;
         }
       }
     }
@@ -215,14 +228,8 @@ export class DuplicateArticleChecker {
         const match = this.isTopicDuplicate(target, kw);
         if (match.isDuplicate) {
           const matchedItem = inventory.coveredItems?.find(i => (i.primary_keyword || '').toLowerCase() === kw.toLowerCase() || i.title.toLowerCase() === kw.toLowerCase());
-          return {
-            isDuplicate: true,
-            existingTitle: matchedItem?.title || kw,
-            url: resolveUrl(matchedItem || { title: kw }),
-            reason: match.reason,
-            overlap: match.overlap,
-            status: matchedItem?.status,
-          };
+          const verified = buildVerifiedResult(matchedItem, match, kw);
+          if (verified.isDuplicate) return verified;
         }
       }
     }
@@ -350,18 +357,27 @@ export class DuplicateArticleChecker {
 
       if (pages && pages.length > 0) {
         const targetString = `${params.working_title || ''} ${params.primary_keyword || ''}`.trim();
+        const utilityPaths = new Set(['/', '/about', '/about-us', '/contact', '/contact-us', '/privacy', '/privacy-policy', '/terms', '/terms-of-service', '/login', '/signup']);
         for (const p of pages) {
-          const pageText = `${p.title || ''} ${p.h1 || ''}`.trim();
+          if (utilityPaths.has(p.path.toLowerCase().replace(/\/+$/, '') || '/')) continue;
+          const cleanTitle = (p.title || '').replace(/\s*[-|]\s*.*$/, '').trim();
+          const cleanH1 = (p.h1 || '').replace(/\s*[-|]\s*.*$/, '').trim();
+          const pageText = `${cleanTitle} ${cleanH1}`.trim();
+          if (!pageText) continue;
+
           const match = this.isTopicDuplicate(targetString, pageText);
 
           if (match.isDuplicate) {
+            const pageFullUrl = params.site_url && !p.path.startsWith('http')
+              ? `${params.site_url.replace(/\/+$/, '')}/${p.path.replace(/^\/+/, '')}`
+              : p.path;
             return {
               isDuplicate: true,
               confidence: 'high',
-              reason: `Topic is already covered on your live website at ${p.path} ("${p.title || p.h1}").`,
+              reason: `Topic is already covered on your live website at ${pageFullUrl} ("${cleanTitle || cleanH1}").`,
               matchedArticle: {
-                title: p.title || p.h1 || p.path,
-                url: p.path,
+                title: cleanTitle || cleanH1 || p.path,
+                url: pageFullUrl,
                 source: 'crawled_urls',
               },
             };
