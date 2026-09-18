@@ -650,6 +650,27 @@ export class AutopilotExecutor {
             priority: op.priority,
           }));
 
+        // Broadcast newly discovered keywords to Telegram Bot
+        try {
+          const { TelegramService } = await import('../telegram/telegramService');
+          const telegram = new TelegramService();
+          await telegram.broadcastDiscovery({
+            websiteId: website_id,
+            domain: website_domain,
+            type: 'new_keywords',
+            dedupKey: `${website_id}:kw:${topOpps.map(o => o.keyword).join(',')}`,
+            title: `New Keywords Discovered (${opportunities.length} opportunities)`,
+            fields: topOpps.slice(0, 3).map(op => ({
+              label: op.keyword,
+              value: `Vol: ${op.search_volume?.toLocaleString() || 'N/A'}/mo · KD: ${op.keyword_difficulty || 'Low'}`
+            })),
+            actionLabel: 'View Keywords',
+            actionUrl: '/keywords',
+          });
+        } catch (tErr) {
+          console.warn('[AutopilotExecutor] Keyword Telegram alert note:', tErr);
+        }
+
         return {
           success: true,
           intent_type: 'immediate_action',

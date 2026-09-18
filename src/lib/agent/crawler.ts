@@ -52,7 +52,8 @@ export class WebsiteCrawler {
       const h3: string[] = [];
       $('h3').each((_, el) => { h3.push($(el).text().trim()); });
 
-      const body_text = $('body').text().replace(/\s+/g, ' ').trim();
+      const raw_body = $('body').text().replace(/\s+/g, ' ').trim();
+      const body_text = raw_body.length > 5000 ? raw_body.slice(0, 5000) : raw_body;
 
       const internal_links: string[] = [];
       const external_links: string[] = [];

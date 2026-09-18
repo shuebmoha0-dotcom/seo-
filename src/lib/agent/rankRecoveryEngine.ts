@@ -3,6 +3,7 @@ import { LLMProvider } from '../tools/llm';
 import { z } from 'zod';
 import { DiagnosticAgent, DiagnosticFinding } from './diagnosticAgent';
 import { DuplicateArticleChecker } from './duplicateChecker';
+import { TelegramService } from '@/lib/telegram/telegramService';
 
 export interface StrikingDistanceOpportunity {
   keyword: string;
@@ -76,30 +77,30 @@ export class RankRecoveryEngine {
 
     console.log(`[RankRecoveryEngine] Starting Growth & Recovery scan for ${domain}...`);
 
-    // 1. Gather all live site data in parallel
+    // 1. Gather live site data in parallel with column pruning to conserve Render RAM
     const [scRes, kwRes, pagesRes, draftsRes] = await Promise.all([
       supabase
         .from('search_console_data')
-        .select('*')
+        .select('query, position, impressions, clicks, ctr, date, page_id')
         .eq('website_id', websiteId)
         .order('date', { ascending: false })
-        .limit(200),
-      supabase
-        .from('keywords')
-        .select('*')
-        .eq('website_id', websiteId)
         .limit(100),
       supabase
-        .from('pages')
-        .select('id, path, title, meta_description, h1, status_code, canonical_url, indexability_signals, last_crawled_at')
+        .from('keywords')
+        .select('term, volume, difficulty, intent')
         .eq('website_id', websiteId)
         .limit(50),
       supabase
+        .from('pages')
+        .select('id, path, title, meta_description, status_code, canonical_url, indexability_signals')
+        .eq('website_id', websiteId)
+        .limit(30),
+      supabase
         .from('content_drafts')
-        .select('id, working_title, primary_keyword, url_slug, status, created_at, revision_notes')
+        .select('id, working_title, primary_keyword, url_slug, status, created_at')
         .eq('website_id', websiteId)
         .order('created_at', { ascending: false })
-        .limit(30),
+        .limit(20),
     ]);
 
     const scData = scRes.data || [];
@@ -311,7 +312,9 @@ export class RankRecoveryEngine {
     const supabase = createAdminClient();
     let savedCount = 0;
 
-    // 1. Persist Rank Drop Recovery Actions
+    const telegram = new TelegramService();
+
+    // 1. Persist Rank Drop Recovery Actions & Broadcast to Bot
     for (const drop of report.detected_rank_drops) {
       try {
         const problem = `Ranking Drop on "${drop.keyword}": Slipped from #${drop.previous_position} to #${drop.current_position}`;
@@ -339,13 +342,35 @@ export class RankRecoveryEngine {
             status: 'pending_approval',
           });
           savedCount++;
+
+          // Broadcast alert to Telegram Bot subscribers
+          try {
+            await telegram.broadcastDiscovery({
+              websiteId,
+              domain: report.domain,
+              type: 'rank_drop',
+              dedupKey: `${websiteId}:drop:${drop.keyword.toLowerCase()}`,
+              title: `Ranking Drop Alert: "${drop.keyword}"`,
+              fields: [
+                { label: 'Position Shift', value: `Decreased from #${drop.previous_position} to #${drop.current_position} (-${drop.position_drop})` },
+                { label: 'Traffic Impact', value: `Lost ${drop.traffic_loss_pct}% clicks` },
+                { label: 'Root Cause', value: drop.primary_root_cause.replace(/_/g, ' ').toUpperCase() },
+                { label: 'Diagnosis', value: drop.root_cause_explanation },
+                { label: 'Recovery Step 1', value: drop.recovery_plan[0]?.description || 'Refresh content & re-index' },
+              ],
+              actionLabel: 'Recover Ranking',
+              actionUrl: '/rank-tracking',
+            });
+          } catch (tErr) {
+            console.warn('[RankRecoveryEngine] Drop Telegram alert note:', tErr);
+          }
         }
       } catch (err) {
         console.warn('[RankRecoveryEngine] Failed to save drop opportunity:', err);
       }
     }
 
-    // 2. Persist Striking-Distance Growth Actions
+    // 2. Persist Striking-Distance Growth Actions & Broadcast to Bot
     for (const opp of report.striking_distance_opportunities.slice(0, 5)) {
       try {
         const problem = `Striking-Distance Query: "${opp.keyword}" is at #${opp.current_position} (${opp.impressions.toLocaleString()} impressions)`;
@@ -373,6 +398,27 @@ export class RankRecoveryEngine {
             status: 'pending_approval',
           });
           savedCount++;
+
+          // Broadcast growth opportunity to Telegram Bot subscribers
+          try {
+            await telegram.broadcastDiscovery({
+              websiteId,
+              domain: report.domain,
+              type: 'striking_distance',
+              dedupKey: `${websiteId}:growth:${opp.keyword.toLowerCase()}`,
+              title: `Fast-Rank Growth Opportunity: "${opp.keyword}"`,
+              fields: [
+                { label: 'Current Position', value: `#${opp.current_position} (${opp.impressions.toLocaleString()} impressions)` },
+                { label: 'Target Position', value: `Top 3 (${opp.estimated_click_multiplier})` },
+                { label: 'Estimated Click Unlock', value: `+${opp.estimated_monthly_clicks_gain} clicks/month` },
+                { label: 'Recommended Title Hook', value: opp.prescriptive_actions.title_hook_suggestion || 'Update Title & Meta' },
+              ],
+              actionLabel: 'Deploy Booster',
+              actionUrl: '/rank-tracking',
+            });
+          } catch (tErr) {
+            console.warn('[RankRecoveryEngine] Growth Telegram alert note:', tErr);
+          }
         }
       } catch (err) {
         console.warn('[RankRecoveryEngine] Failed to save growth opportunity:', err);

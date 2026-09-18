@@ -91,7 +91,7 @@ export class DiagnosticAgent {
     try {
       const { data: drafts } = await supabase
         .from('content_drafts')
-        .select('working_title, primary_keyword, url_slug, status, created_at, revision_notes')
+        .select('working_title, primary_keyword, url_slug, status, created_at')
         .eq('website_id', websiteId)
         .order('created_at', { ascending: false })
         .limit(20);

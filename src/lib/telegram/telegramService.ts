@@ -14,6 +14,9 @@ export interface TelegramIntegrationConfig {
   last_command_at?: string;
 }
 
+// In-memory deduplication cache to prevent alert spam & unnecessary network traffic (capped to preserve Render RAM)
+const notifiedDiscoveries = new Map<string, number>();
+
 export class TelegramService {
   private token?: string;
   private isConfigured: boolean;
@@ -267,22 +270,46 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
   }
 
   /**
-   * Get all paired Telegram subscribers for a website
+   * Get all paired Telegram subscribers for a website, falling back to any connected subscribers
    */
-  async getSubscribers(websiteId: string): Promise<TelegramSubscriber[]> {
+  async getSubscribers(websiteId?: string): Promise<TelegramSubscriber[]> {
     try {
       const supabase = createAdminClient();
-      const { data } = await supabase
+      if (websiteId) {
+        const { data } = await supabase
+          .from('integrations')
+          .select('config')
+          .eq('website_id', websiteId)
+          .eq('provider', 'custom')
+          .maybeSingle();
+
+        if (data?.config?.type === 'telegram' && Array.isArray(data.config.subscribers) && data.config.subscribers.length > 0) {
+          return data.config.subscribers;
+        }
+      }
+
+      // Fallback: Check all custom integrations for any paired Telegram mobile users
+      const { data: allCustom } = await supabase
         .from('integrations')
         .select('config')
-        .eq('website_id', websiteId)
         .eq('provider', 'custom')
-        .single();
+        .limit(10);
 
-      if (data?.config?.type === 'telegram' && Array.isArray(data.config.subscribers)) {
-        return data.config.subscribers;
+      const allSubs: TelegramSubscriber[] = [];
+      const seenChats = new Set<string>();
+
+      for (const row of (allCustom || [])) {
+        if (row.config?.type === 'telegram' && Array.isArray(row.config.subscribers)) {
+          for (const sub of row.config.subscribers) {
+            if (sub.chat_id && !seenChats.has(sub.chat_id)) {
+              seenChats.add(sub.chat_id);
+              allSubs.push(sub);
+            }
+          }
+        }
       }
-      return [];
+
+      return allSubs;
     } catch {
       return [];
     }
@@ -329,7 +356,7 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
   }
 
   /**
-   * Broadcast a notification to all subscribers of a website
+   * Broadcast a notification to all subscribers of a website (or global fallback subscribers)
    */
   async notifyWebsiteSubscribers(
     websiteId: string,
@@ -342,5 +369,68 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
     for (const sub of subscribers) {
       await this.sendMessage(sub.chat_id, text, options);
     }
+  }
+
+  /**
+   * Proactively broadcast an SEO discovery to the bot (e.g. striking distance query, rank drop, new low-KD keywords, technical anomalies)
+   * Enforces in-memory deduplication and strict Render RAM management
+   */
+  async broadcastDiscovery(params: {
+    websiteId: string;
+    domain?: string;
+    type: 'striking_distance' | 'rank_drop' | 'new_keywords' | 'technical_issue' | 'content_opportunity';
+    dedupKey: string;
+    title: string;
+    fields: Array<{ label: string; value: string }>;
+    actionUrl?: string;
+    actionLabel?: string;
+  }): Promise<boolean> {
+    const now = Date.now();
+
+    // 1. Maintain lightweight deduplication cache (prune entries older than 24h & cap size at 200 to protect RAM)
+    if (notifiedDiscoveries.size > 200) {
+      for (const [key, time] of notifiedDiscoveries.entries()) {
+        if (now - time > 86400000) notifiedDiscoveries.delete(key);
+      }
+      if (notifiedDiscoveries.size > 200) {
+        notifiedDiscoveries.clear();
+      }
+    }
+
+    // 2. Check if this specific discovery was already sent in the last 24 hours
+    if (notifiedDiscoveries.has(params.dedupKey)) {
+      const lastSent = notifiedDiscoveries.get(params.dedupKey) || 0;
+      if (now - lastSent < 86400000) {
+        return false; // Skip redundant message, saves network & prevents spam
+      }
+    }
+
+    notifiedDiscoveries.set(params.dedupKey, now);
+
+    // 3. Format visual discovery card with emojis
+    const icon = params.type === 'striking_distance'
+      ? '⚡'
+      : params.type === 'rank_drop'
+        ? '🚨'
+        : params.type === 'new_keywords'
+          ? '🎯'
+          : '🛠️';
+
+    let msg = `${icon} *SEO Discovery Alert*\n`;
+    if (params.domain) {
+      msg += `🌐 *Site:* \`${params.domain}\`\n`;
+    }
+    msg += `📌 *${params.title}*\n\n`;
+
+    for (const f of params.fields) {
+      msg += `• *${f.label}:* ${f.value}\n`;
+    }
+
+    if (params.actionUrl) {
+      msg += `\n🔗 _View details in dashboard: ${params.actionUrl}_`;
+    }
+
+    await this.notifyWebsiteSubscribers(params.websiteId, msg);
+    return true;
   }
 }

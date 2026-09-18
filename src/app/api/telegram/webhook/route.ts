@@ -18,6 +18,9 @@ function isDuplicateUpdate(updateId?: number): boolean {
   for (const [id, time] of processedUpdates.entries()) {
     if (now - time > 300000) processedUpdates.delete(id);
   }
+  if (processedUpdates.size > 300) {
+    processedUpdates.clear();
+  }
   if (processedUpdates.has(updateId)) return true;
   processedUpdates.set(updateId, now);
   return false;
