@@ -14,6 +14,10 @@ export type AutopilotActionType =
   | 'seo_diagnostic'
   | 'rank_recovery'
   | 'growth_acceleration'
+  | 'site_status_summary'
+  | 'content_ideas'
+  | 'competitor_analysis'
+  | 'indexing_check'
   | 'answer_question';
 
 export interface AutopilotSchedule {
@@ -38,28 +42,47 @@ export interface ParsedAutopilotInstruction {
 
 export class AutopilotNLParser {
   /**
-   * Parse a natural language prompt into an executable instruction or a conversational response.
+   * Parse any natural language prompt (conversational, messy, slang, typos, commands, multi-turn)
+   * into a high-precision executable instruction or an expert consultative answer.
    */
   async parseInstruction(params: {
     prompt: string;
     domain: string;
     modeOverride?: 'auto' | 'immediate' | 'recurring';
     frequencyOverride?: string;
-    chatHistory?: { role: 'user' | 'assistant', content: string }[];
+    chatHistory?: { role: 'user' | 'assistant'; content: string }[];
   }): Promise<ParsedAutopilotInstruction> {
     const rawPrompt = params.prompt.trim();
     const modeOverride = params.modeOverride || 'auto';
-    const chatHistoryContext = params.chatHistory && params.chatHistory.length > 0 
+    const chatHistoryContext = params.chatHistory && params.chatHistory.length > 0
       ? `\n\nRecent Chat History:\n${params.chatHistory.map(h => `${h.role === 'user' ? 'User' : 'Agent'}: ${h.content}`).join('\n')}`
       : '';
 
-    // 1. Try LLM-driven deep understanding
+    // 1. Context-Aware Keyword / Topic Resolution from Conversation Memory
+    let contextResolvedTopic: string | undefined = undefined;
+    if (params.chatHistory && params.chatHistory.length > 0) {
+      if (/(about\s+that|about\s+it|write\s+it|draft\s+it|do\s+that|write\s+about\s+the\s+(first|second|third|last)|cover\s+that)/i.test(rawPrompt)) {
+        const lastAssistantMsg = [...params.chatHistory].reverse().find(m => m.role === 'assistant');
+        if (lastAssistantMsg) {
+          const quoted = lastAssistantMsg.content.match(/["'`]([^"'`]{3,60})["'`]/);
+          if (quoted) {
+            contextResolvedTopic = quoted[1];
+          } else {
+            const bullet = lastAssistantMsg.content.match(/[•\-\*]\s*([A-Za-z0-9\s]{3,50})/);
+            if (bullet) contextResolvedTopic = bullet[1].trim();
+          }
+        }
+      }
+    }
+
+    // 2. Try LLM-driven deep semantic understanding
     try {
       const { object } = await LLMProvider.generateObject({
         agent: 'MonitoringAgent',
+        complexity: 'simple',
         schema: z.object({
           intent_type: z.enum(['immediate_action', 'recurring_schedule', 'conversation_response']).describe(
-            "Use 'conversation_response' if the user is asking a general support question, SEO question, or chatting (e.g. 'How do I connect WordPress?', 'What is my score?'). Use 'immediate_action' for tasks like 'write an article' or 'audit site'. Use 'recurring_schedule' for 'daily audit'."
+            "Use 'immediate_action' for executable tasks (writing, auditing, keyword research, rank recovery, growth acceleration, site status, content ideas). Use 'recurring_schedule' for recurring requests ('daily audit'). Use 'conversation_response' for general questions ('what is canonical tag')."
           ),
           action_type: z.enum([
             'write_article',
@@ -72,49 +95,69 @@ export class AutopilotNLParser {
             'seo_diagnostic',
             'rank_recovery',
             'growth_acceleration',
+            'site_status_summary',
+            'content_ideas',
+            'competitor_analysis',
+            'indexing_check',
             'answer_question'
           ]),
-          goal: z.string().describe("Clear, concise goal statement based on the user's current prompt AND the chat history context if they are referencing something from before (e.g. 'make it longer' -> 'Make the article about email warmup longer')"),
-          topic: z.string().nullable().describe("Extracted topic or keyword focus if applicable (resolved using chat history if needed)"),
-          target_url: z.string().nullable().describe("Extracted target URL if mentioned"),
-          summary: z.string().describe("A professional, 1-sentence description of the interpreted instruction"),
-          frequency: z.enum(['daily', 'weekly', 'monthly', 'custom']).nullable().describe("Recurring cadence if applicable"),
-          time: z.string().nullable().describe("HH:mm 24-hour format if specified, or null"),
-          day_of_week: z.string().nullable().describe("e.g. 'Monday' if specified"),
+          goal: z.string().describe("Clear, concise goal statement resolving any vague pronouns using recent chat history."),
+          topic: z.string().nullable().describe("Extracted keyword or content topic if specified, or null."),
+          target_url: z.string().nullable().describe("Extracted URL if specified, or null."),
+          summary: z.string().describe("1-sentence professional summary of the instruction."),
+          frequency: z.enum(['daily', 'weekly', 'monthly', 'custom']).nullable(),
+          time: z.string().nullable(),
+          day_of_week: z.string().nullable(),
           day_of_month: z.number().nullable(),
-          response_message: z.string().nullable().describe("If intent_type is 'conversation_response', write a direct, helpful Markdown response to the user's question here. Use the persona of an expert AI SEO Consultant. Otherwise null.")
+          response_message: z.string().nullable().describe("If intent_type is 'conversation_response', write a direct, helpful, consultative answer formatted in pristine Markdown. Otherwise null.")
         }),
-        system: `You are an elite, knowledgeable AI SEO Consultant and Growth Architect for the website "${params.domain}".
-Your primary mission is to understand user natural language input with human-level nuance.
+        system: `You are an elite, human-level AI SEO Consultant and Autonomous Growth Architect for the website "${params.domain}".
+Your mission is to understand user natural language with human-level nuance, handling typos, conversational speech, questions, and vague follow-ups.
 
-CLASSIFICATION RULES:
-1. 'rank_recovery' (RECOVER DROPPED RANKINGS & RESTORE TRAFFIC):
-   - User asks to recover rankings, fix dropped positions, or run rank drop recovery (e.g. "recover my ranking", "help my rankings recover", "fix dropped rankings", "restore lost traffic", "why did ranking drop and how to recover").
-   - Set intent_type to 'immediate_action' and action_type to 'rank_recovery'.
+INTENT CLASSIFICATION TAXONOMY:
+1. 'site_status_summary':
+   - Questions about performance, traffic, overview, or discoveries: "how is my site doing?", "what's my traffic?", "what are my rankings?", "what did you find?", "give me a status update", "show stats", "any updates?".
+   - Set intent_type: 'immediate_action', action_type: 'site_status_summary'.
 
 2. 'growth_acceleration' (RANK FASTER & GET MORE CLICKS):
-   - User asks how to rank faster, boost rankings, get more clicks, find striking distance keywords or low-hanging fruit (e.g. "help me rank faster", "how to get more clicks", "boost my rankings", "get more clicks for [keyword]", "striking distance keywords").
-   - Set intent_type to 'immediate_action' and action_type to 'growth_acceleration'.
+   - Requests to rank faster, boost rankings, find striking distance queries (pos 4-20), or get more clicks: "how can I rank faster?", "how to get more clicks", "boost my rankings", "striking distance keywords", "low hanging fruit".
+   - Set intent_type: 'immediate_action', action_type: 'growth_acceleration'.
 
-3. 'seo_diagnostic' (FORENSIC INVESTIGATION FOR RANKINGS, TRAFFIC & PERFORMANCE DROPS):
-   - ANY question asking why rankings dropped, why traffic declined, or asking for a diagnosis/audit of lost search visibility (e.g. "why did my ranking drop?", "why is my traffic down?", "what happened to my positions?", "diagnose my site", "why am I not ranking for X?", "audit my drops").
-   - Set intent_type to 'immediate_action' and action_type to 'seo_diagnostic'.
+3. 'rank_recovery' (FORENSIC DROP DIAGNOSIS & RECOVERY):
+   - Questions or requests about lost rankings, dropped positions, or traffic decline: "why did my ranking drop?", "why is traffic down?", "how to recover my rankings?", "fix my dropped ranking", "what happened to my positions?".
+   - Set intent_type: 'immediate_action', action_type: 'rank_recovery'.
 
-4. 'conversation_response' (For general educational dialogue & chit-chat):
-   - General conceptual questions about SEO definitions, tools, or best practices (e.g. "what is bounce rate?", "what is a canonical tag?", "how does the content planner work?")
-   - Casual conversation, greetings, compliments, check-ins, or questions about the agent's capabilities (e.g. "hello", "who are you?", "thanks")
-   -> When intent_type is 'conversation_response', craft an insightful, authoritative, concise Markdown 'response_message'.
+4. 'content_ideas':
+   - Requests for article or content ideas: "what should I write next?", "give me post ideas", "suggest article topics", "what topics am I missing?".
+   - Set intent_type: 'immediate_action', action_type: 'content_ideas'.
 
-5. 'immediate_action' (FOR DIRECT COMMANDS):
-   - ONLY when the user gives a clear imperative command to EXECUTE a change or run a workflow right now:
-     • "write an article about [topic]" / "create a post on [topic]" -> action_type: 'write_article'
-     • "find keywords" / "discover keyword opportunities" -> action_type: 'keyword_research'
-     • "audit technical SEO" / "crawl my site" -> action_type: 'technical_audit'
-     • "run tasks" / "execute scheduled jobs" -> action_type: 'run_scheduled_tasks'
+5. 'competitor_analysis':
+   - Requests about competitors: "who are my competitors?", "audit my competitors", "scan competitors", "what are competitors doing?".
+   - Set intent_type: 'immediate_action', action_type: 'competitor_analysis'.
 
-6. 'recurring_schedule':
-   - ONLY when the user explicitly requests an automated recurring cadence (e.g. "every day at 9am", "weekly report every Monday").`,
-        prompt: `Current User Prompt: "${rawPrompt}"\nTarget Domain: "${params.domain}"${chatHistoryContext}`
+6. 'indexing_check':
+   - Questions about Google indexation: "is my site indexed?", "check indexing status", "submit URL to Google", "request indexing".
+   - Set intent_type: 'immediate_action', action_type: 'indexing_check'.
+
+7. 'write_article':
+   - Imperative or casual requests to create content: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]", "write about that" (resolve topic from chat history!).
+   - Set intent_type: 'immediate_action', action_type: 'write_article'.
+
+8. 'keyword_research':
+   - Finding search queries: "find keywords", "discover keyword opportunities", "give me low KD keywords", "what are people searching for?".
+   - Set intent_type: 'immediate_action', action_type: 'keyword_research'.
+
+9. 'technical_audit':
+   - Crawl and technical health: "audit technical SEO", "crawl my site", "check for 404 errors", "check broken links".
+   - Set intent_type: 'immediate_action', action_type: 'technical_audit'.
+
+10. 'conversation_response':
+   - Purely educational dialogue, general SEO definitions, compliments, or greetings: "what is canonical tag?", "how does bounce rate work?", "hello", "who are you?", "thank you".
+   - Set intent_type: 'conversation_response', action_type: 'answer_question', craft an insightful 'response_message'.
+
+11. 'recurring_schedule':
+   - Explicit recurring schedules: "every day at 9am", "weekly report every Monday".`,
+        prompt: `User Input: "${rawPrompt}"\nTarget Domain: "${params.domain}"${contextResolvedTopic ? `\nResolved Topic from Context: "${contextResolvedTopic}"` : ''}${chatHistoryContext}`
       });
 
       let intent_type: AutopilotIntentType = object.intent_type;
@@ -123,9 +166,9 @@ CLASSIFICATION RULES:
 
       const action_type = object.action_type || (intent_type === 'conversation_response' ? 'answer_question' : 'general_optimization');
       const goal = object.goal || rawPrompt;
-      const topic = object.topic || undefined;
+      const topic = object.topic || contextResolvedTopic || undefined;
       const target_url = object.target_url || undefined;
-      const summary = object.summary || (intent_type === 'conversation_response' ? `Consultation response for ${params.domain}` : `Execute ${action_type} for ${params.domain}`);
+      const summary = object.summary || `Execute ${action_type} for ${params.domain}`;
 
       let schedule: AutopilotSchedule | undefined = undefined;
       let nextRunAt: string | undefined = undefined;
@@ -171,154 +214,166 @@ CLASSIFICATION RULES:
       };
     } catch (err: any) {
       console.warn('[AutopilotNLParser] Fallback heuristic parsing:', err?.message || err);
-      return this.heuristicFallback(rawPrompt, params.domain, modeOverride, params.frequencyOverride);
+      return this.heuristicFallback(rawPrompt, params.domain, modeOverride, params.frequencyOverride, contextResolvedTopic);
     }
   }
 
   /**
-   * Deterministic fallback if LLM parse fails
+   * Ultra-robust deterministic fallback if LLM parse is slow or unavailable.
+   * Handles typos, slang, questions, and multi-turn patterns.
    */
   private heuristicFallback(
     prompt: string,
     domain: string,
     modeOverride: string,
-    frequencyOverride?: string
+    frequencyOverride?: string,
+    contextTopic?: string
   ): ParsedAutopilotInstruction {
     const lower = prompt.toLowerCase().trim();
 
-    // 1. Check for questions or conversational queries
-    const isQuestion = 
-      /^(what|how|why|when|where|who|which|can\s+you|could\s+you|tell\s+me|explain|do\s+you|is\s+there|are\s+there|should\s+i|would\s+you|give\s+me\s+advice|help|i\s+need\s+to\s+know)\b/i.test(lower) ||
-      lower.endsWith('?') ||
-      /^(hello|hi|hey|good\s+morning|good\s+afternoon|good\s+evening|greetings|howdy|sup|yo|thanks|thank\s+you|ok|okay|cool|great)\b/i.test(lower);
+    // 1. Explicit Action Matching (Highest Priority)
+    // A. Site Status & Discovery Summary
+    if (/(how.*(site|doing|progress)|status.*update|what.*(find|found|discover)|my.*(traffic|ranking|stats)|show.*(stats|traffic|rankings)|give me.*(report|update|status)|\/status)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'site_status_summary',
+        goal: prompt,
+        summary: `Generate real-time executive SEO briefing for ${domain}`,
+      };
+    }
 
-    // Explicit imperative commands that take priority over questions
-    const isImperativeWrite = /^(write|wrote|draft|create|generate|publish)\s+(an?\s+)?(article|blog|post|guide|content)\b/i.test(lower);
-    const isImperativeAudit = /^(audit|scan|crawl|check)\s+(my|the|our)?\s*(site|website|page|seo)\b/i.test(lower);
-    const isImperativeKeywords = /^(find|research|discover|get)\s+(me\s+)?(keywords|low\s+kd|opportunities)\b/i.test(lower);
+    // B. Rank Drop & Forensic Recovery
+    if (/(why.*(rank|drop|fall|traffic|declin|loss|lost|position)|recover.*(rank|ranking|drop|traffic|position)|fix.*(drop|ranking|rank)|help.*recover|why.*not ranking)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'rank_recovery',
+        goal: prompt,
+        summary: `Conduct forensic SEO drop investigation & recovery plan for ${domain}`,
+      };
+    }
 
-    if (isQuestion && !isImperativeWrite && !isImperativeAudit && !isImperativeKeywords) {
-      let response_message = `👋 I'm your AI SEO Consultant for *${domain}*.\n\nYou asked: _"${prompt}"_\n\nHow can I help you grow search traffic? You can ask me any SEO questions, analyze keywords, or tell me to write comprehensive articles!`;
+    // C. Fast-Rank Growth & Striking Distance
+    if (/(rank.*faster|get.*more.*clicks|boost.*(ranks?|rankings?|traffic|clicks)|striking.*distance|low.*hanging.*fruit|push.*to.*top\s*3|click.*accelerator)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'growth_acceleration',
+        goal: prompt,
+        summary: `Mine striking-distance queries (positions 4–20) for rapid ranking acceleration on ${domain}`,
+      };
+    }
 
-      if (/(how\s+to\s+use|how\s+do\s+i\s+use|what\s+is|explain|need\s+to\s+(know\s+)?how\s+to\s+use)\s+(the\s+)?content\s+planner/i.test(lower) || lower.includes('use content planner') || lower.includes('how to use content planner')) {
-        response_message = `📝 *How to Use the Content Planner:*\n\n1. **View Generated Articles:** Open \`/content-planner\` in your web dashboard to see all drafts with SEO scores, word counts, and featured images.\n2. **Generate from Telegram:** Simply tell me *\"Write an article about [topic]\"* right here. I will research keywords, weave internal links from live pages, generate featured graphics, and draft the post with Claude Sonnet 5.\n3. **One-Click Publishing:** When drafting finishes, you will receive an approval card here in Telegram. Tap *\"Approve & Publish Live\"* to push it directly to your WordPress site!\n4. **Real-Time Visibility:** Drafts display immediately without lag.`;
-      } else if (/^(hello|hi|hey|good\s+morning|good\s+evening|howdy)\b/i.test(lower)) {
-        response_message = `👋 Hello! I am your autonomous AI SEO Agent for *${domain}*.\n\nYou can chat with me naturally or assign tasks:\n\n• *\"Write an article about [topic]\"*\n• *\"Research top low-difficulty keywords\"*\n• *\"Audit technical SEO and page health\"*\n• *\"How do I use the Content Planner?\"*\n\nWhat would you like me to tackle today?`;
-      } else if (lower.includes('keyword')) {
-        response_message = `🎯 *Keyword Strategy for ${domain}:*\n\nTo drive qualified traffic, target search queries with monthly volume $\\ge$ 200 and Keyword Difficulty $\\le$ 35.\n\nWant me to research high-demand opportunities for your niche? Just say: *\"Find low competition keywords\"*.`;
-      } else if (lower.includes('rank') || lower.includes('traffic')) {
-        response_message = `📈 *Organic Growth Playbook for ${domain}:*\n\n1. Target low-KD long-tail keywords that competitors miss.\n2. Publish authoritative 1,200–1,600 word articles authored with Claude Sonnet 5.\n3. Weave internal links from existing articles to pass link equity.\n\nReady to publish? Text me: *\"Write an article about [topic]\"*!`;
+    // D. Content Ideas & What to Write Next
+    if (/(what.*(write|cover).*next|give.*(article|post|content).*ideas|suggest.*(topics?|articles?|ideas)|what.*topics?.*missing|content.*recommendations?)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'content_ideas',
+        goal: prompt,
+        summary: `Recommend top high-ROI content opportunities with zero cannibalization for ${domain}`,
+      };
+    }
+
+    // E. Competitor Analysis
+    if (/(who.*competitors?|audit.*competitors?|scan.*competitors?|analyze.*competitor|competitor.*(analysis|gaps|intel))/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'competitor_analysis',
+        goal: prompt,
+        summary: `Analyze competitor search footprint and content gaps for ${domain}`,
+      };
+    }
+
+    // F. Indexing Status & Google Search Console Verification
+    if (/(is.*(site|url|page).*indexed|check.*index(ing)?|submit.*google|request.*index(ing)?)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'indexing_check',
+        goal: prompt,
+        summary: `Check Google indexing signals and request priority re-crawl for ${domain}`,
+      };
+    }
+
+    // G. Write Article (handles typos: wrtie, craete, etc.)
+    const isWrite = /(wrtie|write|writ|draft|craete|create|make|generate|publish|post).*?(article|blog|post|guide|content|piece)/i.test(lower);
+    if (isWrite || contextTopic) {
+      let topic = contextTopic;
+      if (!topic) {
+        const cleanPrompt = prompt
+          .replace(/^(write|wrote|draft|create|generate|publish)\s+(an?\s+)?(article|blog|post|guide|content)?\s*(about|on|covering|for)?\s*/i, '')
+          .replace(/\s*(and\s+)?(post|publish)\s+it$/i, '')
+          .trim();
+        if (cleanPrompt && !/^(write|wrote|article|blog|post|guide|content|post\s+it)$/i.test(cleanPrompt)) {
+          topic = cleanPrompt;
+        } else {
+          const match = prompt.match(/(?:about|on|covering|topic|for)\s+["']?([^"'.?,]+)["']?/i);
+          if (match && match[1]) topic = match[1].trim();
+        }
       }
 
       return {
-        intent_type: 'conversation_response',
-        action_type: 'answer_question',
+        intent_type: 'immediate_action',
+        action_type: 'write_article',
         goal: prompt,
-        summary: `Conversational response for ${domain}`,
-        response_message
+        topic: topic || 'High-impact industry topic',
+        summary: `Draft comprehensive 1,200–1,600 word SEO article on "${topic || 'target topic'}" for ${domain}`,
       };
     }
 
-    // 2. Check for recurring schedule
-    let intent_type: AutopilotIntentType = 'immediate_action';
-    if (modeOverride === 'recurring') {
-      intent_type = 'recurring_schedule';
-    } else if (modeOverride === 'immediate') {
-      intent_type = 'immediate_action';
-    } else if (
-      lower.includes('every') ||
-      lower.includes('daily') ||
-      lower.includes('weekly') ||
-      lower.includes('monthly') ||
-      lower.includes('schedule') ||
-      lower.includes('recurring')
-    ) {
-      intent_type = 'recurring_schedule';
-    }
-
-    // 3. Determine action type for explicit commands
-    let action_type: AutopilotActionType = 'general_optimization';
-    const isRankRecovery = /recover.*(rank|ranking|drop|traffic|position)|fix.*(drop|ranking|rank)|help.*recover/i.test(lower);
-    const isGrowthAcceleration = /rank faster|get more clicks|boost.*(rank|ranking|traffic|clicks)|striking distance/i.test(lower);
-    const isDiagnostic = /why.*(rank|drop|fall|traffic|declin|loss|lost|position)|diagnos|what happened to my (rank|traffic)|why.*not ranking/i.test(lower);
-
-    if (isRankRecovery) {
-      intent_type = 'immediate_action';
-      action_type = 'rank_recovery';
-    } else if (isGrowthAcceleration) {
-      intent_type = 'immediate_action';
-      action_type = 'growth_acceleration';
-    } else if (isDiagnostic) {
-      intent_type = 'immediate_action';
-      action_type = 'seo_diagnostic';
-    } else if (/^(run|run\s+now|run\s+task|run\s+tasks|run\s+all|run\s+scheduled|execute|start)$/i.test(lower) || /^run\b/i.test(lower)) {
-      action_type = 'run_scheduled_tasks';
-    } else if (
-      isImperativeWrite ||
-      lower.includes('write an article') ||
-      lower.includes('write article') ||
-      lower.includes('wrote article') ||
-      lower.includes('create a post') ||
-      lower.includes('draft article')
-    ) {
-      action_type = 'write_article';
-    } else if (isImperativeKeywords || lower.includes('find keyword') || lower.includes('research keyword')) {
-      action_type = 'keyword_research';
-    } else if (isImperativeAudit || lower.includes('audit site') || lower.includes('crawl site')) {
-      action_type = 'technical_audit';
-    } else if (lower.includes('internal link') || lower.includes('link structure')) {
-      action_type = 'internal_linking';
-    } else if (lower.includes('on-page') || lower.includes('meta') || lower.includes('title tag') || lower.includes('heading')) {
-      action_type = 'on_page_seo';
-    }
-
-    // Extract topic
-    let topic: string | undefined = undefined;
-    const cleanPrompt = prompt
-      .replace(/^(write|wrote|draft|create|generate|publish)\s+(an?\s+)?(article|blog|post|guide|content)?\s*(about|on|covering|for)?\s*/i, '')
-      .replace(/\s*(and\s+)?(post|publish)\s+it$/i, '')
-      .trim();
-    if (cleanPrompt && !/^(write|wrote|article|blog|post|guide|content|post\s+it)$/i.test(cleanPrompt)) {
-      topic = cleanPrompt;
-    } else {
-      const aboutMatch = prompt.match(/(?:about|on|covering|topic|for)\s+["']?([^"'.?,]+)["']?/i);
-      if (aboutMatch && aboutMatch[1]) {
-        topic = aboutMatch[1].trim();
-      }
-    }
-
-    let schedule: AutopilotSchedule | undefined = undefined;
-    let nextRunAt: string | undefined = undefined;
-
-    if (intent_type === 'recurring_schedule') {
-      let freq: 'daily' | 'weekly' | 'monthly' | 'custom' = 'daily';
-      if (frequencyOverride && frequencyOverride !== 'auto') {
-        freq = frequencyOverride as any;
-      } else if (lower.includes('week') || lower.includes('monday') || lower.includes('friday')) {
-        freq = 'weekly';
-      } else if (lower.includes('month')) {
-        freq = 'monthly';
-      }
-
-      schedule = {
-        frequency: freq,
-        time: '09:00',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    // H. Keyword Research
+    if (/(find|get|research|discover|show|give).*?(keywords?|kws|search terms?|queries)/i.test(lower) || lower.includes('keyword')) {
+      const match = prompt.match(/(?:for|about|on|in)\s+["']?([^"'.?,]+)["']?/i);
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'keyword_research',
+        goal: prompt,
+        topic: match ? match[1].trim() : undefined,
+        summary: `Discover high-demand, low-KD keyword opportunities for ${domain}`,
       };
+    }
 
-      const nextDate = new Date();
-      nextDate.setDate(nextDate.getDate() + (freq === 'weekly' ? 7 : 1));
-      nextRunAt = nextDate.toISOString();
+    // I. Technical Audit & Crawl
+    if (/(audit|crawl|scan).*?(site|website|technical|seo|health|broken links?|errors?)/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'technical_audit',
+        goal: prompt,
+        summary: `Run technical SEO audit and crawler for ${domain}`,
+      };
+    }
+
+    // J. Recurring Schedules
+    if (modeOverride === 'recurring' || /(everyday|daily|every\s+day|every\s+morning|every\s+week|weekly|monthly)/i.test(lower)) {
+      const freq = lower.includes('week') ? 'weekly' : lower.includes('month') ? 'monthly' : 'daily';
+      return {
+        intent_type: 'recurring_schedule',
+        action_type: 'technical_audit',
+        goal: prompt,
+        summary: `Run ${freq} automated SEO audit for ${domain}`,
+        schedule: {
+          frequency: freq,
+          time: '09:00',
+          timezone: 'UTC',
+        },
+        next_run_at: new Date(Date.now() + 86400000).toISOString(),
+      };
+    }
+
+    // 2. Conversational Dialogue & Helpful Consultative Q&A
+    let response_message = `👋 I'm your AI SEO Consultant for *${domain}*.\n\nYou asked: _"${prompt}"_\n\nHow can I help you grow search traffic? You can ask me any SEO questions, analyze keywords, or tell me to write comprehensive articles!`;
+
+    if (/^(hello|hi|hey|good\s+morning|good\s+evening|howdy|sup|yo)\b/i.test(lower)) {
+      response_message = `👋 Hello! I am your Autonomous AI SEO Growth Agent for *${domain}*.\n\nYou can talk to me naturally or give me commands:\n\n• 📝 *"Write an article about [topic]"*\n• ⚡ *"How can I rank faster?"*\n• 🚨 *"Why did my ranking drop?"*\n• 🎯 *"Find low-competition keywords"*\n• 💡 *"What should I write next?"*\n• 📊 *"How is my site doing?"*\n\nWhat would you like to achieve today?`;
+    } else if (/(thank|thanks|cool|awesome|great|perfect|good job)/i.test(lower)) {
+      response_message = `🙌 You're very welcome! I'm constantly monitoring your search positions, click-through rates, and technical signals to help *${domain}* capture Page 1 rankings. Let me know what you'd like to work on next!`;
+    } else if (/(who.*(are you|made you)|what can you do)/i.test(lower)) {
+      response_message = `🤖 I am your Autonomous Commercial SEO Agent for *${domain}*. I am built with Claude Sonnet 5, live Google Search Console connectors, and an automated rank recovery engine.\n\nI autonomously:\n1. Write and publish 1,200–1,600 word articles with internal linking and diagrams\n2. Mine striking-distance queries (positions 4–20) for 8x click multipliers\n3. Perform forensic root-cause analysis when rankings drop\n4. Push instant Google Indexing requests.`;
     }
 
     return {
-      intent_type,
-      action_type,
+      intent_type: 'conversation_response',
+      action_type: 'answer_question',
       goal: prompt,
-      topic,
-      summary: `${intent_type === 'immediate_action' ? 'Immediate' : 'Scheduled'} ${action_type.replace('_', ' ')} for ${domain}`,
-      schedule,
-      next_run_at: nextRunAt
+      summary: `Consultative dialogue for ${domain}`,
+      response_message,
     };
   }
 }

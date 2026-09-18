@@ -452,10 +452,10 @@ Your agent will process the request in the background and ping you when finished
     const taskPrompt = rawText.replace(/^\/task\s+/i, '');
 
     try {
-      const isDailySchedule = /(everyday|daily|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt);
-      const isScanRequest = /(scan|audit|health|crawl|check\s+site|analyze\s+site|seo\s+report)/i.test(taskPrompt);
+      const isDailySchedule = /(everyday|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt) && /(every|daily|schedule)/i.test(taskPrompt);
+      const isExplicitCrawl = /^(\/scan|\/crawl|\/audit|crawl\s+now|scan\s+now)$/i.test(taskPrompt.trim());
 
-      if (isDailySchedule || isScanRequest) {
+      if (isExplicitCrawl) {
         // Send initial progress notice
         await telegram.sendMessage(
           chatId,
