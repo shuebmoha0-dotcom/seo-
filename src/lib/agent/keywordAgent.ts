@@ -120,6 +120,9 @@ export class KeywordAgent {
   // 3. AI-Powered Dynamic Keyword & Cluster Discovery Engine
   async discoverOpportunities(params: {
     domain: string;
+    websiteId?: string;
+    siteUrl?: string;
+    siteProfile?: import('./siteNicheProfiler').SiteNicheProfile;
     siteDescription?: string;
     seedTopic?: string;
     projectMemory?: string;
@@ -129,7 +132,25 @@ export class KeywordAgent {
     categories?: string[];
   }): Promise<{ clusters: KeywordCluster[]; opportunities: KeywordOpportunity[] }> {
     try {
-      const topic = params.seedTopic || params.domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ');
+      let profile = params.siteProfile;
+      if (!profile) {
+        try {
+          const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+          profile = await SiteNicheProfiler.profileSite({
+            websiteId: params.websiteId,
+            domain: params.domain,
+            siteUrl: params.siteUrl,
+          });
+        } catch (profErr) {
+          console.warn('[KeywordAgent] Profiler notice:', profErr);
+        }
+      }
+
+      const isEstablished = (params.mode ? params.mode === 'established' : profile?.authorityTier === 'established');
+      const primaryNiche = profile?.primaryNiche || params.seedTopic || params.domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ');
+      const coreOfferings = profile?.coreOfferings?.length ? profile.coreOfferings.join(', ') : primaryNiche;
+      const targetAudience = profile?.targetAudience || 'Core target customers and readers';
+      const negativeBoundaries = profile?.negativeBoundaries?.length ? profile.negativeBoundaries.join('; ') : 'Do not recommend unrelated cross-niche topics';
       
       const { object } = await LLMProvider.generateObject({
         agent: 'KeywordAgent',
@@ -159,9 +180,15 @@ export class KeywordAgent {
         }),
         prompt: `Conduct an in-depth SEO keyword research and topical clustering analysis for:
 Domain: "${params.domain}"
-Core Topic / Niche: "${topic}"
+Verified Primary Niche: "${primaryNiche}"
+Core Offerings & Solutions: "${coreOfferings}"
+Target Audience: "${targetAudience}"
 ${params.siteDescription ? `Site Description: ${params.siteDescription}` : ''}
-Mode: ${params.mode === 'established' ? 'Established site (optimize & scale)' : 'New site (low-competition long-tail & fast-win high-converting targets)'}
+Mode / Authority Tier: ${isEstablished ? 'Established site (authority backlink expansion, medium difficulty, high volume)' : 'New site (low competition, easy-to-rank long tail with verified search traffic)'}
+
+NEGATIVE NICHE BOUNDARIES (STRICT PROHIBITION):
+${negativeBoundaries}
+NEVER recommend keywords from unrelated niches (e.g. cold email, crypto, or unrelated tools unless this site is specifically in that industry).
 
 ${params.categories && params.categories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES:\n${params.categories.map(c => `• ${c}`).join('\n')}\n` : ''}
 ${params.existingArticles && params.existingArticles.length > 0 ? `ALREADY PUBLISHED ARTICLES (DO NOT CANNIBALIZE OR DUPLICATE):\n${params.existingArticles.slice(0, 30).map(t => `- "${t}"`).join('\n')}\n` : ''}
@@ -169,32 +196,36 @@ ${params.existingArticles && params.existingArticles.length > 0 ? `ALREADY PUBLI
 ${params.projectMemory ? `\n🧠 PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY:\n${params.projectMemory}\n` : ''}
 ${params.projectInstructions ? `\n📋 PROJECT CUSTOM INSTRUCTIONS:\n${params.projectInstructions}\n` : ''}
 
-${params.mode !== 'established' ? `
+${!isEstablished ? `
 CRITICAL MANDATE FOR NEW / LOW-AUTHORITY SITES:
-1. STRICT SEARCH DEMAND FLOOR (ZERO TOLERANCE FOR GHOST KEYWORDS):
-   - PROHIBITION: NEVER recommend keywords with very low search volume (under 200 searches/month) just because they have low competition or are "easy".
-   - Ranking #1 for a query that gets 0, 10, or 30 searches a month provides ZERO traffic and zero business revenue.
-   - MINIMUM VOLUME: Every primary keyword must have at least 400 to 2,500 searches/month. Every secondary long-tail keyword must have at least 200 to 1,200 searches/month.
-   - THE GOAL: High buyer intent + REAL traffic demand (250-2,500/mo) + low difficulty (KD <= 30).
-2. STRICT KEYWORD DIFFICULTY CAP:
-   - All keyword difficulties MUST be between 10 and 30 (KD <= 30). NEVER recommend competitive keywords (KD > 35) for a new domain.
-   - Target queries with solid search volume where Google Page 1 currently has weak, outdated content or forum discussions (Reddit, Quora).
-3. 3-5 WORD LONG-TAIL SPECIFICITY WITH HIGH CONVERSION INTENT:
-   - Phrases that actual buyers, practitioners, and decision-makers search (e.g. "how to automate cold email warmup with ai", "best b2b sales automation platforms for agencies").
-4. REAL TRAFFIC & ROI FOCUS:
-   - Never compromise search volume for the sake of an easy KD.
+1. EASY-TO-RANK KEYWORDS (KD 10–28, STRICTLY KD <= 30):
+   - This site is new with low domain authority and few/no backlinks. It cannot rank for competitive high-KD head terms.
+   - All keyword difficulties MUST be between 10 and 28 (KD <= 30). NEVER recommend competitive keywords (KD > 35).
+   - Target queries where Google Page 1 currently has weak, thin content, outdated articles, or forum threads (Reddit, Quora).
+2. STRICT SEARCH DEMAND FLOOR (ZERO TOLERANCE FOR GHOST KEYWORDS):
+   - PROHIBITION: NEVER recommend keywords with zero or negligible search volume (under 200 searches/month) just because they have KD 0 or are "easy".
+   - Ranking #1 for a keyword with 0, 10, or 30 searches brings ZERO clicks and zero business revenue.
+   - Every primary pillar keyword must have at least 400 to 2,500 searches/month.
+   - Every secondary long-tail keyword must have at least 250 to 1,200 searches/month.
+   - THE SWEET SPOT: High buyer intent + REAL traffic demand (250–2,500/mo) + easy difficulty (KD <= 30).
+3. 3-5 WORD LONG-TAIL SPECIFICITY:
+   - Specific questions, comparisons, troubleshooting guides, and actionable frameworks addressing real searchers in "${primaryNiche}".
 ` : `
-MANDATE FOR ESTABLISHED SITES:
-Balance high-volume competitive pillar terms (KD 40-70, volume 2,000-15,000) with supporting long-tail clusters to expand market share.
+MANDATE FOR ESTABLISHED SITES (WITH BACKLINKS & TOPICAL AUTHORITY):
+1. MEDIUM-DIFFICULTY HIGH-LEVERAGE TERMS (KD 30–55):
+   - This site has existing backlinks, indexed pages, and domain authority.
+   - Recommend MEDIUM-DIFFICULTY keywords (KD 30–55) with SUBSTANTIAL monthly search volume (1,000 to 15,000+/mo) to challenge competitor positions and capture market share.
+2. EXPAND TOPICAL CLUSTER DOMINANCE:
+   - Target core commercial head terms, category comparison hubs, and comprehensive pillar playbooks in "${primaryNiche}".
 `}
 
-Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS specifically aligned with this domain and topic.
+Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS strictly within "${primaryNiche}".
 For each cluster:
-1. Provide a clear cluster name (e.g. "Cold Sales Email Templates", "Email Deliverability & Warmup", "B2B Lead Generation Tactics").
-2. Provide a high-intent primary keyword (Pillar) with verified search demand (500 to 2,500/mo).
-3. Provide 3 to 5 long-tail secondary keywords (Supporting articles) with verified search demand (200 to 1,200/mo).
-4. Provide realistic estimated search volumes (MUST be >= 200), keyword difficulties strictly respecting the site maturity rules above (KD <= 30 for new sites), business relevance scores (80-100), and specific tactical evidence explaining the search intent and revenue potential.`,
-        system: 'You are an elite SEO strategist and growth intelligence architect who identifies fast-win, low-competition, high-converting keyword opportunities with verified search demand.'
+1. Provide a clear cluster name specifically relevant to "${primaryNiche}" (e.g. "[Core Solution] Practical Guides", "[Pain Point] Solutions", "[Solution Category] Comparisons").
+2. Provide a high-intent primary keyword (Pillar) with verified search demand (${isEstablished ? '1,500 to 10,000/mo, KD 30-55' : '500 to 2,500/mo, KD 12-28'}).
+3. Provide 3 to 5 long-tail secondary keywords (Supporting articles) with verified search demand (${isEstablished ? '800 to 4,000/mo, KD 25-45' : '250 to 1,200/mo, KD 10-25'}).
+4. Provide realistic estimated search volumes (MUST be >= 200 for new sites, >= 1,000 for established), keyword difficulties strictly matching the authority tier rules above, business relevance scores (85-100), and specific tactical evidence explaining the search intent and revenue potential.`,
+        system: `You are an elite SEO strategist and growth intelligence architect who identifies high-converting, on-niche keyword opportunities strictly tailored to "${primaryNiche}".`
       });
 
       const existingTitles = params.existingArticles || [];
@@ -230,10 +261,12 @@ For each cluster:
         if (nonDuplicateOpps.length === 0) continue;
 
         const clusterOpps: KeywordOpportunity[] = nonDuplicateOpps.map((op: any) => {
-          const enforcedVol = Math.max(op.search_volume || 350, 200);
-          const enforcedKd = params.mode !== 'established'
-            ? Math.min(Math.max(op.keyword_difficulty || 20, 10), 30)
-            : (op.keyword_difficulty || 35);
+          const enforcedVol = isEstablished
+            ? Math.max(op.search_volume || 1500, 800)
+            : Math.max(op.search_volume || 450, 250);
+          const enforcedKd = isEstablished
+            ? Math.min(Math.max(op.keyword_difficulty || 38, 28), 55)
+            : Math.min(Math.max(op.keyword_difficulty || 20, 10), 30);
 
           return {
             ...op,
@@ -276,7 +309,7 @@ For each cluster:
       return {
         clusters: [
           {
-            name: `${params.seedTopic || 'Core'} Strategies`,
+            name: `${params.seedTopic || 'Core'} Guides & Strategies`,
             primary_keyword: params.seedTopic || `${params.domain.split('.')[0]} guide`,
             secondary_keywords: [`best ${params.seedTopic || 'strategies'}`, `how to use ${params.seedTopic || 'tools'}`],
             search_intent: 'informational',
@@ -294,13 +327,13 @@ For each cluster:
     const topic = seed || domain.split('.')[0].replace(/[-_]/g, ' ');
     return [
       {
-        keyword: `${topic} templates that get responses`,
-        cluster: `${topic} Templates`,
+        keyword: `${topic} practical guide and best practices`,
+        cluster: `${topic} Guides`,
         is_primary: true,
         search_intent: 'commercial_investigation',
         content_type: 'blog_article',
-        search_volume: 1400,
-        keyword_difficulty: 24,
+        search_volume: 1200,
+        keyword_difficulty: 22,
         business_relevance: 95,
         competition: 'low',
         current_position: null,
@@ -308,19 +341,19 @@ For each cluster:
         recommended_action: 'create_new_page',
         priority: 'high',
         confidence: 'high',
-        evidence: 'High commercial intent and low competition long-tail.',
+        evidence: 'High-intent problem-solving query with proven search demand.',
         cannibalization_warning: false,
       },
       {
-        keyword: `how to optimize ${topic}`,
-        cluster: `${topic} Optimization`,
+        keyword: `how to choose the right ${topic} solution`,
+        cluster: `${topic} Evaluation`,
         is_primary: true,
         search_intent: 'informational',
         content_type: 'blog_article',
-        search_volume: 2100,
-        keyword_difficulty: 32,
+        search_volume: 850,
+        keyword_difficulty: 25,
         business_relevance: 90,
-        competition: 'medium',
+        competition: 'low',
         current_position: null,
         existing_url: null,
         recommended_action: 'create_new_page',
@@ -333,10 +366,10 @@ For each cluster:
   }
 
   // Generate low-competition quick-win opportunities for new sites
-  generateNewSiteOpportunities(siteType: SiteType, description: string): KeywordOpportunity[] {
-    const topic = description
+  generateNewSiteOpportunities(siteType: SiteType, description: string, siteProfile?: import('./siteNicheProfiler').SiteNicheProfile): KeywordOpportunity[] {
+    const topic = siteProfile?.primaryNiche || (description
       ? description.split(' ').slice(0, 3).join(' ')
-      : siteType === 'saas' ? 'software' : 'business';
+      : siteType === 'saas' ? 'software' : 'business');
 
     return [
       {

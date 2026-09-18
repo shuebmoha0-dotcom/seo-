@@ -128,13 +128,26 @@ export async function POST(request: Request) {
 
     const agent = new KeywordAgent();
 
-    // 2. Run AI-driven topical clustering and discovery
+    // 2. Profile site niche and authority tier dynamically
+    const { SiteNicheProfiler } = await import('@/lib/agent/siteNicheProfiler');
+    const siteProfile = await SiteNicheProfiler.profileSite({
+      websiteId: website_id,
+      domain: website.domain,
+      siteUrl: website.url,
+    });
+
+    const effectiveMode = (mode === 'new' || mode === 'established') ? mode : siteProfile.authorityTier;
+
+    // 3. Run AI-driven topical clustering and discovery
     const { clusters, opportunities } = await agent.discoverOpportunities({
       domain: website.domain,
+      websiteId: website_id,
+      siteUrl: website.url,
+      siteProfile,
       seedTopic: seed_topic,
       projectMemory,
       projectInstructions,
-      mode: mode || 'new',
+      mode: effectiveMode,
     });
 
     // 3. Save clusters and opportunities to Supabase

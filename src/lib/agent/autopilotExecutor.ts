@@ -182,9 +182,18 @@ export class AutopilotExecutor {
         if (isGeneric) {
           // A. Discover high-impact content gaps that the site has NOT covered yet
           try {
-            console.log(`[AutopilotExecutor] Running intelligent content gap detection for ${website_domain}...`);
+            const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+            const siteProfile = await SiteNicheProfiler.profileSite({
+              websiteId: website_id,
+              domain: website_domain,
+              siteUrl: website_url,
+            });
+
+            console.log(`[AutopilotExecutor] Running intelligent content gap detection for ${website_domain} (${siteProfile.primaryNiche})...`);
             const gaps = await SiteContentGapDetector.findContentGaps({
               inventory: siteInventory,
+              websiteId: website_id,
+              siteProfile,
               projectMemory,
               projectInstructions,
               limit: 3,
@@ -571,9 +580,16 @@ export class AutopilotExecutor {
         const seedTopic = instruction.topic || undefined;
         console.log(`[AutopilotExecutor] Running intelligent site inventory crawl & keyword discovery for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
 
+        // 1. Profile site niche and authority tier (new vs established)
+        const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+        const siteProfile = await SiteNicheProfiler.profileSite({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
         // Map existing content & categories to prevent cannibalization
         const inventory = preloadedInventory || await (async () => {
-          console.log(`[AutopilotExecutor] Running intelligent site inventory crawl & keyword discovery for "${website_domain}" with seed "${seedTopic || 'none'}"...`);
           return SiteContentGapDetector.getSiteInventory({
             websiteId: website_id,
             domain: website_domain,
@@ -584,10 +600,13 @@ export class AutopilotExecutor {
         const keywordAgent = new KeywordAgent();
         const { clusters, opportunities } = await keywordAgent.discoverOpportunities({
           domain: website_domain,
-          seedTopic,
+          websiteId: website_id,
+          siteUrl: website_url,
+          siteProfile,
+          seedTopic: seedTopic || (instruction.goal ? instruction.goal : undefined),
           projectMemory,
           projectInstructions,
-          mode: 'new',
+          mode: siteProfile.authorityTier,
           existingArticles: inventory.coveredTitles,
           categories: inventory.categories.map(c => c.name),
         });
@@ -692,10 +711,12 @@ export class AutopilotExecutor {
           success: true,
           intent_type: 'immediate_action',
           action_type: 'keyword_research',
-          summary: `Mapped ${inventory.coveredTitles.length} existing articles and ${inventory.categories.length} categories on ${website_domain}. Discovered ${clusters.length} topical clusters and ${opportunities.length} keyword opportunities with zero cannibalization (Demand >= 200/mo, KD <= 30).`,
+          summary: `Analyzed site niche "${siteProfile.primaryNiche}" (${siteProfile.authorityTier.toUpperCase()} site with ${siteProfile.authorityMetrics.pageCount} pages, ${siteProfile.authorityMetrics.backlinkCount} backlinks). Mapped ${inventory.coveredTitles.length} existing articles and ${inventory.categories.length} categories on ${website_domain}. Discovered ${clusters.length} topical clusters and ${opportunities.length} targeted keyword opportunities (${siteProfile.authorityTier === 'established' ? 'Medium KD 30-55, Vol 1,000-15,000+' : 'Easy KD 10-28, Vol 250-2,500 with real search demand'}).`,
           link_url: '/keywords',
           link_label: 'View Discovered Keywords',
           data: {
+            niche: siteProfile.primaryNiche,
+            authority_tier: siteProfile.authorityTier,
             existing_articles_mapped: inventory.coveredTitles.length,
             categories_analyzed: inventory.categories.length,
             clusters_count: clusters.length,
@@ -963,15 +984,24 @@ export class AutopilotExecutor {
       if (instruction.action_type === 'content_ideas') {
         console.log(`[AutopilotExecutor] Generating high-ROI content ideas for "${website_domain}"...`);
         const { SiteContentGapDetector } = await import('./siteContentGapDetector');
+        const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+
+        const siteProfile = await SiteNicheProfiler.profileSite({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
         const inventory = preloadedInventory || await SiteContentGapDetector.getSiteInventory({
           websiteId: website_id,
           domain: website_domain,
           siteUrl: website_url,
         });
 
-        const gaps = await SiteContentGapDetector.findContentGaps({ inventory, limit: 3 });
+        const gaps = await SiteContentGapDetector.findContentGaps({ inventory, siteProfile, limit: 3 });
 
-        let ideasSummary = `💡 *Top High-ROI Content Opportunities for ${website_domain}:*\n\n`;
+        let ideasSummary = `💡 *Top High-ROI Content Opportunities for ${website_domain}*\n`;
+        ideasSummary += `🎯 *Niche:* ${siteProfile.primaryNiche} (${siteProfile.authorityTier === 'established' ? 'Authority site' : 'New / Early-stage site'})\n\n`;
         if (gaps.length > 0) {
           gaps.forEach((g, idx) => {
             ideasSummary += `${idx + 1}️⃣ *"${g.working_title}"*\n`;
@@ -980,7 +1010,7 @@ export class AutopilotExecutor {
           });
           ideasSummary += `_Reply with "Write an article about [Topic]" to start drafting immediately with Claude Sonnet 5!_`;
         } else {
-          ideasSummary += `• Target long-tail search queries in your niche with KD <= 30\n• Check your /keywords page for discovered topical clusters\n\nReply with *"Find keywords"* to discover brand new search queries!`;
+          ideasSummary += `_No immediate content gaps detected. All existing primary categories are actively covered._`;
         }
 
         return {

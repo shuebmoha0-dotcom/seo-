@@ -196,14 +196,34 @@ export class SiteContentGapDetector {
    */
   static async findContentGaps(params: {
     inventory: SiteInventory;
+    websiteId?: string;
+    siteProfile?: import('./siteNicheProfiler').SiteNicheProfile;
     projectMemory?: string;
     projectInstructions?: string;
     limit?: number;
   }): Promise<ContentGapOpportunity[]> {
-    const { inventory, projectMemory, projectInstructions, limit = 5 } = params;
+    const { inventory, websiteId, projectMemory, projectInstructions, limit = 5 } = params;
+
+    let profile = params.siteProfile;
+    if (!profile) {
+      try {
+        const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+        profile = await SiteNicheProfiler.profileSite({
+          websiteId,
+          domain: inventory.domain,
+          siteUrl: inventory.siteUrl,
+        });
+      } catch (_) {}
+    }
 
     const coveredTitlesSample = inventory.coveredTitles.slice(0, 30);
     const categoryList = inventory.categories.map(c => `• ${c.name} (${c.count || 0} existing articles)`).join('\n');
+
+    const isEstablished = profile?.authorityTier === 'established';
+    const kdMin = profile?.keywordStrategy?.kdMin || (isEstablished ? 30 : 10);
+    const kdMax = profile?.keywordStrategy?.kdMax || (isEstablished ? 55 : 30);
+    const volMin = profile?.keywordStrategy?.volumeMin || (isEstablished ? 1000 : 250);
+    const volMax = profile?.keywordStrategy?.volumeMax || (isEstablished ? 20000 : 2500);
 
     try {
       const { object } = await LLMProvider.generateObject({
@@ -216,13 +236,24 @@ export class SiteContentGapDetector {
             target_category: z.string(),
             gap_type: z.enum(['missing_pillar', 'under_served_category', 'comparison_gap', 'how_to_guide', 'buyer_intent']),
             search_intent: z.enum(['informational', 'commercial', 'transactional']),
-            estimated_volume: z.number().default(850),
-            estimated_kd: z.number().default(22),
+            estimated_volume: z.number().default(isEstablished ? 1800 : 850),
+            estimated_kd: z.number().default(isEstablished ? 38 : 22),
             gap_rationale: z.string(),
           })),
         }),
         system: `You are an elite SEO Growth Architect and Topical Authority Engineer.
-Your task is to conduct an intelligent CONTENT GAP ANALYSIS for the commercial client website "${inventory.domain}".
+Your task is to conduct an intelligent CONTENT GAP ANALYSIS strictly tailored for the commercial client website "${inventory.domain}".
+
+EXACT CLIENT NICHE & PRODUCT PROFILE:
+• Primary Niche: ${profile?.primaryNiche || inventory.domain}
+• Core Offerings / Solutions: ${profile?.coreOfferings?.join(', ') || 'Domain specific services and products'}
+• Target Audience: ${profile?.targetAudience || 'Target customers and searchers'}
+${profile?.negativeBoundaries?.length ? `• OUT-OF-SCOPE BOUNDARIES (DO NOT RECOMMEND): ${profile.negativeBoundaries.join('; ')}` : ''}
+
+AUTHORITY TIER & DIFFICULTY TARGETING:
+• Authority Level: ${isEstablished ? 'ESTABLISHED SITE (with backlink equity and indexed authority)' : 'NEW / EARLY STAGE SITE (low domain authority)'}
+• Target Keyword Difficulty: ${isEstablished ? `MEDIUM (KD ${kdMin}–${kdMax})` : `EASY TO RANK (KD ${kdMin}–${kdMax}, strictly KD <= 30)`}
+• Search Demand Floor: REAL TRAFFIC ONLY (${volMin.toLocaleString()} to ${volMax.toLocaleString()}/mo) — ZERO tolerance for ghost keywords (< 200/mo).
 
 VERIFIED SITE CATEGORIES & COVERAGE:
 ${categoryList || '• General Industry Topics'}
@@ -230,20 +261,15 @@ ${categoryList || '• General Industry Topics'}
 ALREADY PUBLISHED ARTICLES (DO NOT DUPLICATE OR CANNIBALIZE):
 ${coveredTitlesSample.length > 0 ? coveredTitlesSample.map(t => `- "${t}"`).join('\n') : '• No published articles detected yet.'}
 
-CLIENT NICHE CONTEXT & BRAND MEMORY:
-${projectMemory ? projectMemory.slice(0, 400) : `Commercial niche for ${inventory.domain}`}
+${projectMemory ? `CLIENT BRAND MEMORY:\n${projectMemory.slice(0, 400)}\n` : ''}
 ${projectInstructions ? `Instructions: ${projectInstructions.slice(0, 200)}` : ''}
 
-STRICT ANTI-CANNIBALIZATION MANDATE:
-1. NEVER suggest a topic or keyword that is already covered by any of the published articles listed above.
-2. If the site already has a "Cold Email Follow Up Templates" post, DO NOT suggest another follow-up template article.
-3. Identify TRUE CONTENT GAPS:
-   - Under-served categories with 0 or few articles (${inventory.thinCategories.join(', ') || 'categories needing depth'}).
-   - Missing technical guides, comparison frameworks, tool reviews, or step-by-step implementation playbooks.
-4. DEMAND FLOOR:
-   - Every keyword must have realistic search demand (>= 250 to 2,500/mo) and low difficulty (KD <= 30).
-   - Zero ghost keywords.`,
-        prompt: `Generate ${limit} distinct, high-impact CONTENT GAP opportunities that this website has NOT covered yet. Each opportunity must directly expand the site's topical authority without cannibalizing existing posts.`
+STRICT ANTI-CANNIBALIZATION & RELEVANCE MANDATE:
+1. Stay 100% strictly within the website's primary niche ("${profile?.primaryNiche || inventory.domain}"). Never recommend unrelated industries.
+2. NEVER suggest a topic or keyword that is already covered by any published article above.
+3. If the site already has a guide on a specific subtopic, DO NOT suggest another variation of that same concept.
+4. Identify TRUE CONTENT GAPS in under-served categories (${inventory.thinCategories.join(', ') || 'categories needing depth'}).`,
+        prompt: `Generate ${limit} distinct, high-impact CONTENT GAP opportunities that directly expand topical authority for "${profile?.primaryNiche || inventory.domain}" without cannibalizing existing posts.`
       });
 
       // Filter out any accidental overlaps using DuplicateArticleChecker
