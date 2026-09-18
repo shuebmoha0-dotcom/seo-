@@ -6,6 +6,7 @@ export type AutopilotIntentType = 'immediate_action' | 'recurring_schedule' | 'c
 export type AutopilotActionType =
   | 'write_article'
   | 'keyword_research'
+  | 'backlink_discovery'
   | 'technical_audit'
   | 'internal_linking'
   | 'on_page_seo'
@@ -87,6 +88,7 @@ export class AutopilotNLParser {
           action_type: z.enum([
             'write_article',
             'keyword_research',
+            'backlink_discovery',
             'technical_audit',
             'internal_linking',
             'on_page_seo',
@@ -135,27 +137,31 @@ INTENT CLASSIFICATION TAXONOMY:
    - Requests about competitors: "who are my competitors?", "audit my competitors", "scan competitors", "what are competitors doing?".
    - Set intent_type: 'immediate_action', action_type: 'competitor_analysis'.
 
-6. 'indexing_check':
+6. 'backlink_discovery' (BACKLINKS & LINK PROSPECTING):
+   - Requests to find backlinks, link building targets, outreach prospects: "find for me backlink", "find backlinks", "get backlinks", "backlinks for my site", "link opportunities", "where can I get links?".
+   - Set intent_type: 'immediate_action', action_type: 'backlink_discovery'.
+
+7. 'indexing_check':
    - Questions about Google indexation: "is my site indexed?", "check indexing status", "submit URL to Google", "request indexing".
    - Set intent_type: 'immediate_action', action_type: 'indexing_check'.
 
-7. 'write_article':
+8. 'write_article':
    - Imperative or casual requests to create content: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]", "write about that" (resolve topic from chat history!).
    - Set intent_type: 'immediate_action', action_type: 'write_article'.
 
-8. 'keyword_research':
+9. 'keyword_research':
    - Finding search queries: "find keywords", "discover keyword opportunities", "give me low KD keywords", "what are people searching for?".
    - Set intent_type: 'immediate_action', action_type: 'keyword_research'.
 
-9. 'technical_audit':
+10. 'technical_audit':
    - Crawl and technical health: "audit technical SEO", "crawl my site", "check for 404 errors", "check broken links".
    - Set intent_type: 'immediate_action', action_type: 'technical_audit'.
 
-10. 'conversation_response':
+11. 'conversation_response':
    - Purely educational dialogue, general SEO definitions, compliments, or greetings: "what is canonical tag?", "how does bounce rate work?", "hello", "who are you?", "thank you".
    - Set intent_type: 'conversation_response', action_type: 'answer_question', craft an insightful 'response_message'.
 
-11. 'recurring_schedule':
+12. 'recurring_schedule':
    - Explicit recurring schedules: "every day at 9am", "weekly report every Monday".
 
 ABSOLUTE GROUNDING MANDATE (RULE 9):
@@ -284,6 +290,16 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
         action_type: 'competitor_analysis',
         goal: prompt,
         summary: `Analyze competitor search footprint and content gaps for ${domain}`,
+      };
+    }
+
+    // E2. Backlink Discovery & Link Building
+    if (/(find|get|discover|search|prospect|acquire|where).*?(backlinks?|links?|prospects?|outreach)|backlink/i.test(lower)) {
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'backlink_discovery',
+        goal: prompt,
+        summary: `Discover high-authority backlink prospects and digital PR targets for ${domain}`,
       };
     }
 
