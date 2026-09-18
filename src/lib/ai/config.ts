@@ -30,9 +30,9 @@ export const AI_CONFIG = {
   SONNET_MODEL: 'claude-sonnet-5' as const,
 
   // ── Image Models ────────────────────────────────────────────────────────────
-  // OpenAI Image Generation (Primary Image Provider - Cheap & High Quality)
+  // OpenAI Image Generation (Primary Image Provider - Balanced Medium Quality)
   OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini',
-  OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'low') as 'low' | 'medium' | 'high' | 'auto',
+  OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'medium') as 'low' | 'medium' | 'high' | 'auto',
 
   // Gemini Image Generation via Google AI Studio (Fallback)
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',

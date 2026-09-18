@@ -65,7 +65,7 @@ export const OpenAIImageProvider: ImageProvider = {
     }
 
     const model = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini';
-    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'low';
+    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'medium';
 
     // Map requested dimensions to supported OpenAI sizes: 1024x1024, 1536x1024, 1024x1536, or auto
     let size: '1024x1024' | '1536x1024' | '1024x1536' = '1536x1024';
