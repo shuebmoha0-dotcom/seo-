@@ -5,6 +5,7 @@ export type AutopilotIntentType = 'immediate_action' | 'recurring_schedule' | 'c
 
 export type AutopilotActionType =
   | 'write_article'
+  | 'generate_images'
   | 'keyword_research'
   | 'backlink_discovery'
   | 'technical_audit'
@@ -62,10 +63,10 @@ export class AutopilotNLParser {
     // 1. Context-Aware Keyword / Topic Resolution from Conversation Memory
     let contextResolvedTopic: string | undefined = undefined;
     if (params.chatHistory && params.chatHistory.length > 0) {
-      if (/(about\s+that|about\s+it|write\s+it|draft\s+it|do\s+that|write\s+about\s+the\s+(first|second|third|last)|cover\s+that)/i.test(rawPrompt)) {
+      if (/(about\s+that|about\s+it|write\s+it|draft\s+it|do\s+that|write\s+about\s+the\s+(first|second|third|last)|cover\s+that|already\s+written|recreate\s+images?|add\s+images?|generate\s+images?|no\s+images?|for\s+it)/i.test(rawPrompt)) {
         const lastAssistantMsg = [...params.chatHistory].reverse().find(m => m.role === 'assistant');
         if (lastAssistantMsg) {
-          const quoted = lastAssistantMsg.content.match(/["'`]([^"'`]{3,60})["'`]/);
+          const quoted = lastAssistantMsg.content.match(/["'`]([^"'`]{3,80})["'`]/);
           if (quoted) {
             contextResolvedTopic = quoted[1];
           } else {
@@ -87,6 +88,7 @@ export class AutopilotNLParser {
           ),
           action_type: z.enum([
             'write_article',
+            'generate_images',
             'keyword_research',
             'backlink_discovery',
             'technical_audit',
@@ -141,12 +143,19 @@ INTENT CLASSIFICATION TAXONOMY:
    - Requests to find backlinks, link building targets, outreach prospects: "find for me backlink", "find backlinks", "get backlinks", "backlinks for my site", "link opportunities", "where can I get links?".
    - Set intent_type: 'immediate_action', action_type: 'backlink_discovery'.
 
-7. 'indexing_check':
+7. 'generate_images' (IMAGE CREATION / RE-CREATION FOR ARTICLES):
+   - Requests to generate, recreate, include, or attach images/visuals to an article or topic:
+     "recreate images", "it already written but has no images please recreate images", "generate images for that", "add images to article", "make hero image for [topic]", "include images again".
+   - CRITICAL: Never set 'write_article' if the user says the article is already written, or asks only for images!
+   - Set intent_type: 'immediate_action', action_type: 'generate_images'.
+
+8. 'indexing_check':
    - Questions about Google indexation: "is my site indexed?", "check indexing status", "submit URL to Google", "request indexing".
    - Set intent_type: 'immediate_action', action_type: 'indexing_check'.
 
-8. 'write_article':
-   - Imperative or casual requests to create content: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]", "write about that" (resolve topic from chat history!).
+9. 'write_article':
+   - Imperative or casual requests to create brand new content: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]".
+   - DO NOT use if the user states the article is already written or only asks for images.
    - Set intent_type: 'immediate_action', action_type: 'write_article'.
 
 9. 'keyword_research':
@@ -313,9 +322,25 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
       };
     }
 
+    // F2. Image Generation & Re-creation for Articles
+    const isImageGen = /(recreate|generate|create|make|add|include).*?(images?|visuals?|pictures?|graphics?|photos?)|has\s+no\s+images?|missing\s+images?|no\s+images?|recreate\s+image/i.test(lower);
+    if (isImageGen) {
+      const topic = contextTopic || prompt
+        .replace(/^(it('?s)?\s+)?(already\s+written|written)?\s*(but\s+)?(has\s+no\s+images?|missing\s+images?)?\s*(please\s+)?(recreate|generate|create|make|add|include)?\s*(images?|visuals?|pictures?)?\s*(for|about|on)?\s*/i, '')
+        .trim();
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'generate_images',
+        goal: prompt,
+        topic: topic || 'Target Article',
+        summary: `Generate and embed high-resolution 16:9 visual assets into "${topic || 'article'}" for ${domain}`,
+      };
+    }
+
     // G. Write Article (handles typos: wrtie, craete, etc.)
-    const isWrite = /(wrtie|write|writ|draft|craete|create|make|generate|publish|post).*?(article|blog|post|guide|content|piece)/i.test(lower);
-    if (isWrite || contextTopic) {
+    const isExplicitWrite = /(wrtie|write|writ|draft|craete|create|make|generate|publish|post)\s+(an?\s+)?(article|blog|post|guide|content|piece)/i.test(lower);
+    const isContextWrite = contextTopic && /(write\s+it|draft\s+it|cover\s+that|post\s+it|do\s+that)/i.test(lower);
+    if ((isExplicitWrite || isContextWrite) && !lower.includes('already written') && !lower.includes('already wrote')) {
       let topic = contextTopic;
       if (!topic) {
         const cleanPrompt = prompt

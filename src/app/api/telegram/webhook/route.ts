@@ -643,6 +643,13 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'keyword_research';
       }
 
+      // Route image generation / recreation requests directly to generate_images to prevent re-drafting already written articles!
+      const isImageRequest = /(recreate|generate|create|make|add|include).*?(images?|visuals?|pictures?|graphics?|photos?)|has\s+no\s+images?|missing\s+images?|no\s+images?|recreate\s+image/i.test(taskPrompt);
+      if (isImageRequest) {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'generate_images';
+      }
+
       // E. Conversational Response (Greetings, Questions, Explanations)
       if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
         let answer = parsed.response_message;
@@ -766,6 +773,12 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           `🎯 *Researching Uncovered Keywords for \`${currentSite.domain}\`...* ⏳${coveredNotice}`,
           { parse_mode: 'Markdown' }
         );
+      } else if (parsed.action_type === 'generate_images') {
+        await telegram.sendMessage(
+          chatId,
+          `🎨 *Visual Asset Generation Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Article:* "${parsed.topic || parsed.goal}"\n\n1️⃣ Generating 16:9 widescreen hero visual via OpenAI\n2️⃣ Creating contextual editorial diagram\n3️⃣ Attaching visual assets to your existing article & syncing to WordPress\n\n_Generating visual assets now..._ ⏳`,
+          { parse_mode: 'Markdown' }
+        );
       } else {
         await telegram.sendMessage(
           chatId,
@@ -807,6 +820,12 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           await telegram.sendMessage(
             chatId,
             execResult.summary,
+            { parse_mode: 'Markdown' }
+          );
+        } else if (parsed.action_type === 'generate_images') {
+          await telegram.sendMessage(
+            chatId,
+            `${execResult.summary}${execResult.link_url ? `\n\n[Open Article](${execResult.link_url})` : ''}`,
             { parse_mode: 'Markdown' }
           );
         } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {

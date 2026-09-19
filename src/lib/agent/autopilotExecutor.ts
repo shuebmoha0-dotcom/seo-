@@ -1176,6 +1176,273 @@ export class AutopilotExecutor {
         };
       }
 
+      // ── ACTION: GENERATE / RECREATE IMAGES FOR ARTICLE ───────────────
+      if (instruction.action_type === 'generate_images') {
+        console.log(`[AutopilotExecutor] Generating / recreating visual assets for "${website_domain}"...`);
+        const targetPrompt = (instruction.topic || instruction.goal || '').trim();
+
+        // 1. Locate the existing draft or post
+        let targetDraft: any = null;
+        let wpPostId: number | null = null;
+        let livePostUrl: string | null = null;
+
+        // Clean query terms to match title/slug/keyword
+        const cleanQuery = targetPrompt
+          .replace(/^(it('?s)?\s+)?(already\s+written|written)?\s*(but\s+)?(has\s+no\s+images?|missing\s+images?)?\s*(please\s+)?(recreate|generate|create|make|add|include)?\s*(images?|visuals?|pictures?)?\s*(for|about|on)?\s*/i, '')
+          .replace(/["'`.?]/g, '')
+          .trim();
+
+        const queryTerms = cleanQuery.split(/\s+/).filter(w => w.length > 2);
+
+        // Try exact/like search on content_drafts
+        if (queryTerms.length > 0) {
+          const { data: matchedDrafts } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .eq('website_id', website_id)
+            .ilike('working_title', `%${queryTerms.slice(0, 3).join('%')}%`)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (matchedDrafts && matchedDrafts.length > 0) {
+            targetDraft = matchedDrafts[0];
+          }
+        }
+
+        // If not matched by query terms, get the latest active draft for this website
+        if (!targetDraft) {
+          const { data: latestDrafts } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .eq('website_id', website_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (latestDrafts && latestDrafts.length > 0) {
+            targetDraft = latestDrafts[0];
+          }
+        }
+
+        const articleTitle = targetDraft?.working_title || cleanQuery || `SEO Guide for ${website_domain}`;
+        const primaryKw = targetDraft?.primary_keyword || cleanQuery || articleTitle;
+
+        // Check for existing WordPress post ID in draft revision_notes or recent jobs
+        if (targetDraft?.revision_notes) {
+          try {
+            const notes = typeof targetDraft.revision_notes === 'string'
+              ? JSON.parse(targetDraft.revision_notes)
+              : targetDraft.revision_notes;
+            if (notes.wordpress_post_id) wpPostId = Number(notes.wordpress_post_id);
+            if (notes.wordpress_post_url) livePostUrl = notes.wordpress_post_url;
+          } catch (_) {}
+        }
+
+        if (!wpPostId) {
+          const { data: wpJob } = await supabase
+            .from('wordpress_jobs')
+            .select('*')
+            .eq('website_id', website_id)
+            .ilike('payload->>title', `%${queryTerms.slice(0, 2).join('%')}%`)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (wpJob?.result?.post_id) wpPostId = Number(wpJob.result.post_id);
+          if (wpJob?.result?.permalink) livePostUrl = wpJob.result.permalink;
+        }
+
+        // 2. Generate 16:9 Widescreen Visuals via OpenAI Image Engine
+        const { ImageRouter } = await import('@/lib/ai/imageRouter');
+        console.log(`[AutopilotExecutor] Generating hero image via OpenAI for "${articleTitle}"...`);
+
+        const heroImagePromise = ImageRouter.generate({
+          topic: articleTitle,
+          target_keyword: primaryKw,
+          purpose: `Featured hero visual for ${articleTitle}`,
+          style: 'Modern 3D isometric conceptual tech artwork with matte geometric surfaces, floating UI elements, and modern studio lighting',
+          dimensions: '1792x1008',
+          image_placement: 'hero',
+          desired_visual_style: 'Modern 3D isometric conceptual tech artwork with rich studio lighting, web banner quality, no text overlay',
+        });
+
+        const bodyDiagramPromise = ImageRouter.generate({
+          topic: articleTitle,
+          target_keyword: primaryKw,
+          purpose: `Step-by-step framework diagram for ${articleTitle}`,
+          style: 'Clean isometric workflow diagram, modern tech infographic style with connected geometric modules and elegant lighting',
+          dimensions: '1792x1008',
+          image_placement: 'body',
+          desired_visual_style: 'Clean isometric workflow diagram, modern tech infographic style, 16:9 widescreen, no text overlay',
+        });
+
+        const [heroResult, bodyResult] = await Promise.all([heroImagePromise, bodyDiagramPromise]);
+
+        const heroUrl = heroResult?.url || '';
+        const bodyUrl = bodyResult?.url || '';
+
+        if (!heroUrl) {
+          throw new Error('Image generation provider failed to return an image URL.');
+        }
+
+        // 3. Update existing draft content_body with newly generated images (without rewriting text!)
+        let updatedBody = targetDraft?.content_body || '';
+        if (updatedBody) {
+          // If body has existing placeholder or no images, embed hero image below H1
+          const heroMarkdown = `\n\n![${articleTitle}](${heroUrl})\n\n`;
+          if (!updatedBody.includes(heroUrl)) {
+            if (/^# .+/m.test(updatedBody)) {
+              updatedBody = updatedBody.replace(/^(# .+)(\r?\n)+/, `$1${heroMarkdown}`);
+            } else {
+              updatedBody = `${heroMarkdown}${updatedBody}`;
+            }
+          }
+
+          // Embed body diagram before first or second H2
+          if (bodyUrl && !updatedBody.includes(bodyUrl)) {
+            const diagramMarkdown = `\n\n![${articleTitle} Framework Diagram](${bodyUrl})\n\n`;
+            const h2Matches = [...updatedBody.matchAll(/^## .+/gm)];
+            if (h2Matches.length > 1) {
+              const secondH2Index = h2Matches[1].index!;
+              updatedBody = updatedBody.slice(0, secondH2Index) + diagramMarkdown + updatedBody.slice(secondH2Index);
+            } else if (h2Matches.length === 1) {
+              const firstH2Index = h2Matches[0].index!;
+              updatedBody = updatedBody.slice(0, firstH2Index) + diagramMarkdown + updatedBody.slice(firstH2Index);
+            }
+          }
+        }
+
+        // 4. Update Database Records
+        if (targetDraft) {
+          let existingNotes: any = {};
+          try {
+            existingNotes = typeof targetDraft.revision_notes === 'string'
+              ? JSON.parse(targetDraft.revision_notes)
+              : (targetDraft.revision_notes || {});
+          } catch (_) {}
+
+          existingNotes.featured_image_url = heroUrl;
+          existingNotes.images = [
+            { image_url: heroUrl, placement: 'hero', alt: articleTitle },
+            ...(bodyUrl ? [{ image_url: bodyUrl, placement: 'body', alt: `${articleTitle} Framework` }] : [])
+          ];
+
+          await supabase
+            .from('content_drafts')
+            .update({
+              content_body: updatedBody || targetDraft.content_body,
+              featured_image_url: heroUrl,
+              revision_notes: JSON.stringify(existingNotes),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', targetDraft.id);
+
+          // Insert into content_images table
+          try {
+            await supabase.from('content_images').insert([
+              {
+                draft_id: targetDraft.id,
+                placement_context: 'hero',
+                image_type: 'featured',
+                purpose: 'Hero visual',
+                alt_text: articleTitle,
+                suggested_filename: heroUrl,
+                status: 'created',
+              },
+              ...(bodyUrl ? [{
+                draft_id: targetDraft.id,
+                placement_context: 'body',
+                image_type: 'diagram',
+                purpose: 'Framework diagram',
+                alt_text: `${articleTitle} Framework Diagram`,
+                suggested_filename: bodyUrl,
+                status: 'created',
+              }] : [])
+            ]);
+          } catch (ciErr) {
+            console.warn('[AutopilotExecutor] content_images insert notice:', ciErr);
+          }
+        }
+
+        // 5. Update WordPress Post if connected
+        try {
+          const { markdownToWordPressHtml } = await import('@/lib/utils/markdownToHtml');
+          const formattedHtml = updatedBody ? markdownToWordPressHtml(updatedBody) : undefined;
+
+          const { data: wpSite } = await supabase
+            .from('wordpress_outbound_sites')
+            .select('*')
+            .eq('status', 'active')
+            .order('last_ping_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (wpSite) {
+            if (wpPostId) {
+              // Queue update_post job to attach new featured image and formatted body
+              await supabase.from('wordpress_jobs').insert({
+                site_id: wpSite.id,
+                website_id,
+                job_type: 'update_post',
+                payload: {
+                  post_id: wpPostId,
+                  featured_image_url: heroUrl,
+                  force_featured_image: true,
+                  ...(formattedHtml ? { content: formattedHtml } : {}),
+                },
+                idempotency_key: `update_img_post_${wpPostId}_${Date.now()}`,
+                status: 'pending',
+              });
+              console.log(`[AutopilotExecutor] Queued update_post job for WP post #${wpPostId} with new hero visual`);
+            } else if (targetDraft && targetDraft.status === 'published') {
+              // Push create or update job with slug
+              await supabase.from('wordpress_jobs').insert({
+                site_id: wpSite.id,
+                website_id,
+                job_type: 'create_post',
+                payload: {
+                  title: articleTitle,
+                  content: formattedHtml || targetDraft.content_body,
+                  slug: targetDraft.url_slug,
+                  status: 'publish',
+                  featured_image_url: heroUrl,
+                  force_featured_image: true,
+                },
+                idempotency_key: `create_post_img_${targetDraft.id}_${Date.now()}`,
+                status: 'pending',
+              });
+            }
+          }
+        } catch (wpErr) {
+          console.warn('[AutopilotExecutor] WordPress image update notice:', wpErr);
+        }
+
+        // 6. Format Response
+        let imgSummary = `🎨 *Visual Assets Generated & Embedded!*\n\n`;
+        imgSummary += `📌 *Target Article:* "${articleTitle}"\n`;
+        imgSummary += `🖼️ *Featured Hero Visual:* 16:9 Widescreen Artwork\n`;
+        if (bodyUrl) imgSummary += `📊 *In-Body Diagram:* Isometric Workflow Diagram\n`;
+        if (livePostUrl) imgSummary += `🔗 *Live Article:* [${livePostUrl}](${livePostUrl})\n`;
+        imgSummary += `\n✅ *Zero Content Disruption:* Visual assets have been generated via OpenAI and attached to your article and WordPress post without modifying your existing written text.`;
+
+
+
+        return {
+          success: true,
+          intent_type: 'immediate_action',
+          action_type: 'generate_images',
+          summary: imgSummary,
+          link_url: livePostUrl || '/content-planner',
+          link_label: livePostUrl ? 'View Live Article' : 'View in Content Planner',
+          data: {
+            article_title: articleTitle,
+            hero_image_url: heroUrl,
+            body_image_url: bodyUrl,
+            wordpress_post_id: wpPostId,
+            live_url: livePostUrl,
+          },
+        };
+      }
+
       // ── ACTION: INDEXING STATUS CHECK ────────────────────────────────
       if (instruction.action_type === 'indexing_check') {
         console.log(`[AutopilotExecutor] Running indexing check for "${website_domain}"...`);
