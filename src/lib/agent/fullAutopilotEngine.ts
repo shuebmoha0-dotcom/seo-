@@ -173,29 +173,33 @@ export class FullAutopilotEngine {
       last_cycle_status: 'active_running',
     };
 
+    const dbScheduleType = cadence === 'twice_weekly' ? 'custom' : cadence;
+
     if (existingTask) {
-      await supabase
+      const { error: updateErr } = await supabase
         .from('tasks')
         .update({
           status: 'active',
-          schedule_type: cadence,
+          schedule_type: dbScheduleType,
           schedule_config: updatedConfig,
           next_run_at: nextRunAt,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existingTask.id);
+      if (updateErr) throw new Error(`Failed to update autopilot task: ${updateErr.message}`);
     } else {
-      await supabase.from('tasks').insert({
+      const { error: insertErr } = await supabase.from('tasks').insert({
         project_id: website.project_id,
         user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
         name: 'Zero-Touch Full Autopilot',
         natural_language_instruction: '24/7 continuous autonomous SEO engine: finding unwritten keywords, drafting via Claude Sonnet 5, generating visuals, publishing to WordPress, and fixing technical SEO.',
         status: 'active',
-        schedule_type: cadence,
+        schedule_type: dbScheduleType,
         schedule_config: updatedConfig,
         timezone: 'UTC',
         next_run_at: nextRunAt,
       });
+      if (insertErr) throw new Error(`Failed to insert autopilot task: ${insertErr.message}`);
     }
 
     // Also sync scheduled_agent_configs table
