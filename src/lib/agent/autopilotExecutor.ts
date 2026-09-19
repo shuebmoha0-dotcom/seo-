@@ -69,6 +69,8 @@ export class AutopilotExecutor {
     user_id?: string;
     sync?: boolean;
     chat_id?: string | number;
+    draft_id?: string;
+    edit_instructions?: string;
     siteInventory?: import('./siteContentGapDetector').SiteInventory;
   }): Promise<AutopilotExecutionResult> {
     const { instruction, website_id, website_domain, website_url, siteInventory: preloadedInventory } = params;
@@ -1440,6 +1442,210 @@ export class AutopilotExecutor {
             wordpress_post_id: wpPostId,
             live_url: livePostUrl,
           },
+        };
+      }
+
+      // ── ACTION: EDIT ARTICLE (SURGICAL MODIFICATION VIA CLAUDE SONNET 5) ─
+      if (instruction.action_type === 'edit_article') {
+        console.log(`[AutopilotExecutor] Resolving target draft to edit for "${website_domain}"...`);
+        let targetDraft: any = null;
+        const targetDraftId = params.draft_id;
+
+        if (targetDraftId) {
+          const { data: d } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .eq('id', targetDraftId)
+            .maybeSingle();
+          targetDraft = d;
+        }
+
+        if (!targetDraft && instruction.topic) {
+          const cleanQuery = instruction.topic.replace(/^(edit|update|modify|revise)\s+/i, '').trim();
+          const { data: d } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .eq('website_id', website_id)
+            .ilike('working_title', `%${cleanQuery}%`)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          targetDraft = d;
+        }
+
+        if (!targetDraft) {
+          // Fetch the most recent draft for this website
+          const { data: d } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .eq('website_id', website_id)
+            .order('updated_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          targetDraft = d;
+        }
+
+        if (!targetDraft) {
+          return {
+            success: false,
+            intent_type: 'immediate_action',
+            action_type: 'edit_article',
+            summary: `No existing article or draft was found for ${website_domain} to edit. Ask me to write an article first!`,
+          };
+        }
+
+        // Check if the user's edit request is solely about images/visuals
+        const isPureImageEdit = /(recreate|generate|add|fix|include|replace).*?(images?|visuals?|pictures?)/i.test(instruction.goal) &&
+          !/(text|paragraph|section|intro|conclusion|faq|heading|words?|rewrite)/i.test(instruction.goal);
+
+        if (isPureImageEdit) {
+          console.log(`[AutopilotExecutor] Edit request is purely visual; delegating to generate_images for "${targetDraft.working_title}"...`);
+          return this.executeImmediateAction({
+            ...params,
+            instruction: {
+              ...instruction,
+              action_type: 'generate_images',
+              topic: targetDraft.working_title,
+            },
+          });
+        }
+
+        const editInstructionText = instruction.goal || params.edit_instructions || 'Enhance article depth, flow, and scannability.';
+        console.log(`[AutopilotExecutor] Applying surgical edits to draft #${targetDraft.id} ("${targetDraft.working_title}") via Claude Sonnet 5...`);
+
+        const { LLMProvider } = await import('@/lib/tools/llm');
+        const editResponse = await LLMProvider.generateText({
+          agent: 'ContentAgent',
+          complexity: 'complex',
+          system: `You are an elite SEO editor and professional copywriter for "${website_domain}".
+You are modifying an existing article according to the user's specific edit instructions.
+
+STRICT EDITING RULES:
+1. NEVER rewrite the entire article from scratch if only specific changes or additions are requested.
+2. Keep all existing untouched sections, data points, internal links, and tone intact.
+3. Apply the user's requested edits surgically (e.g. adding FAQs, updating introduction, expanding a section, adjusting tone, adding comparison tables).
+4. ZERO TABLE OF CONTENTS (STRICTLY PROHIBITED): Under no circumstances should you generate a "Table of Contents", "## Table of Contents", or bullet lists of anchor links.
+5. Keep all markdown headings (H2, H3), lists, bold emphasis, and embedded markdown images ![alt](url) intact.
+6. Output ONLY the complete revised article in pristine Markdown. Do NOT include meta-commentary, reflection blocks, or conversational greetings.`,
+          prompt: `User Edit Request: "${editInstructionText}"
+
+Current Article Title: ${targetDraft.working_title}
+Primary Keyword: ${targetDraft.primary_keyword || ''}
+
+Current Article Content:
+${targetDraft.content_body || ''}`
+        });
+
+        const revisedBody = editResponse.text.trim();
+        const wordCount = revisedBody.replace(/<[^>]*>/g, ' ').replace(/[#*`_~\[\]()]/g, ' ').trim().split(/\s+/).filter(Boolean).length;
+        const newVersion = (targetDraft.version || 1) + 1;
+
+        // Update database draft
+        await supabase
+          .from('content_drafts')
+          .update({
+            content_body: revisedBody,
+            word_count: wordCount,
+            version: newVersion,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', targetDraft.id);
+
+        // Record revision history
+        try {
+          await supabase.from('content_versions').insert({
+            draft_id: targetDraft.id,
+            version_number: newVersion,
+            content_body: revisedBody,
+            word_count: wordCount,
+            status: targetDraft.status || 'ready_for_approval',
+            change_summary: editInstructionText.slice(0, 200),
+          });
+        } catch (_) {}
+
+        // If post has been published to WordPress or has a post ID, push update_post job
+        let wpPostId: number | null = null;
+        let livePostUrl = '';
+        if (targetDraft.revision_notes && typeof targetDraft.revision_notes === 'string') {
+          try {
+            const parsed = JSON.parse(targetDraft.revision_notes);
+            if (parsed.wordpress_post_url) livePostUrl = parsed.wordpress_post_url;
+            if (parsed.wordpress_post_id) wpPostId = Number(parsed.wordpress_post_id);
+          } catch (_) {}
+        }
+
+        try {
+          const { markdownToWordPressHtml } = await import('@/lib/utils/markdownToHtml');
+          const formattedHtml = markdownToWordPressHtml(revisedBody);
+
+          const { data: wpSite } = await supabase
+            .from('wordpress_outbound_sites')
+            .select('*')
+            .eq('status', 'active')
+            .order('last_ping_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (wpSite) {
+            if (wpPostId) {
+              await supabase.from('wordpress_jobs').insert({
+                site_id: wpSite.id,
+                website_id,
+                job_type: 'update_post',
+                payload: {
+                  post_id: wpPostId,
+                  content: formattedHtml,
+                  title: targetDraft.working_title,
+                },
+                idempotency_key: `edit_update_post_${wpPostId}_${Date.now()}`,
+                status: 'pending',
+              });
+              console.log(`[AutopilotExecutor] Queued update_post for live WP post #${wpPostId}`);
+
+              // Ping WordPress to sync
+              const siteUrl = wpSite.site_url.replace(/\/+$/, '');
+              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+            }
+          }
+        } catch (wpErr) {
+          console.warn('[AutopilotExecutor] WP update notice for edit:', wpErr);
+        }
+
+        // Send Telegram confirmation or approval prompt
+        let editSummary = `✏️ *Article Successfully Updated!*\n\n`;
+        editSummary += `📌 *Title:* "${targetDraft.working_title}"\n`;
+        editSummary += `📝 *New Word Count:* ${wordCount} words\n`;
+        editSummary += `🎯 *Edit Applied:* "${editInstructionText.slice(0, 100)}"\n`;
+        if (livePostUrl) editSummary += `🔗 *Live URL:* ${livePostUrl}\n`;
+        editSummary += `\n✅ Modifications applied surgically via Claude Sonnet 5 without rewriting unchanged sections.`;
+
+        // If in Telegram and draft is still waiting for approval, re-send the approval prompt with updated card
+        if (params.chat_id && targetDraft.status !== 'published') {
+          try {
+            const { TelegramService } = await import('../telegram/telegramService');
+            const telegram = new TelegramService();
+            await telegram.sendApprovalPrompt(params.chat_id, {
+              executionId: targetDraft.id,
+              taskTitle: targetDraft.working_title,
+              websiteDomain: website_domain,
+              score: targetDraft.rankmath_score || 85,
+              wordCount,
+            });
+          } catch (_) {}
+        }
+
+        return {
+          success: true,
+          intent_type: 'immediate_action',
+          action_type: 'edit_article',
+          summary: editSummary,
+          link_url: livePostUrl || `/content-planner?draft_id=${targetDraft.id}`,
+          link_label: livePostUrl ? 'View Live Article' : 'View in Content Planner',
+          data: {
+            draft_id: targetDraft.id,
+            word_count: wordCount,
+            title: targetDraft.working_title,
+          }
         };
       }
 

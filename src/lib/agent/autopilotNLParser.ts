@@ -5,6 +5,7 @@ export type AutopilotIntentType = 'immediate_action' | 'recurring_schedule' | 'c
 
 export type AutopilotActionType =
   | 'write_article'
+  | 'edit_article'
   | 'generate_images'
   | 'keyword_research'
   | 'backlink_discovery'
@@ -63,7 +64,7 @@ export class AutopilotNLParser {
     // 1. Context-Aware Keyword / Topic Resolution from Conversation Memory
     let contextResolvedTopic: string | undefined = undefined;
     if (params.chatHistory && params.chatHistory.length > 0) {
-      if (/(about\s+that|about\s+it|write\s+it|draft\s+it|do\s+that|write\s+about\s+the\s+(first|second|third|last)|cover\s+that|already\s+written|recreate\s+images?|add\s+images?|generate\s+images?|no\s+images?|for\s+it)/i.test(rawPrompt)) {
+      if (/(about\s+that|about\s+it|write\s+it|draft\s+it|do\s+that|write\s+about\s+the\s+(first|second|third|last)|cover\s+that|already\s+written|recreate\s+images?|add\s+images?|generate\s+images?|no\s+images?|for\s+it|edit\s+it|edit\s+that|edit\s+the\s+article|edit\s+the\s+previous|edit\s+the\s+last|update\s+the\s+article)/i.test(rawPrompt)) {
         const lastAssistantMsg = [...params.chatHistory].reverse().find(m => m.role === 'assistant');
         if (lastAssistantMsg) {
           const quoted = lastAssistantMsg.content.match(/["'`]([^"'`]{3,80})["'`]/);
@@ -84,10 +85,11 @@ export class AutopilotNLParser {
         complexity: 'simple',
         schema: z.object({
           intent_type: z.enum(['immediate_action', 'recurring_schedule', 'conversation_response']).describe(
-            "Use 'immediate_action' for executable tasks (writing, auditing, keyword research, rank recovery, growth acceleration, site status, content ideas). Use 'recurring_schedule' for recurring requests ('daily audit'). Use 'conversation_response' for general questions ('what is canonical tag')."
+            "Use 'immediate_action' for executable tasks (writing, editing, auditing, keyword research, rank recovery, growth acceleration, site status, content ideas). Use 'recurring_schedule' for recurring requests ('daily audit'). Use 'conversation_response' for general questions ('what is canonical tag')."
           ),
           action_type: z.enum([
             'write_article',
+            'edit_article',
             'generate_images',
             'keyword_research',
             'backlink_discovery',
@@ -149,16 +151,22 @@ INTENT CLASSIFICATION TAXONOMY:
    - CRITICAL: Never set 'write_article' if the user says the article is already written, or asks only for images!
    - Set intent_type: 'immediate_action', action_type: 'generate_images'.
 
-8. 'indexing_check':
+8. 'edit_article' (EDIT, UPDATE, OR MODIFY AN EXISTING ARTICLE):
+   - Requests to edit, revise, update, or expand an already written article, draft, or post:
+     "edit the previous article", "edit the last article", "edit post [topic]: [instructions]", "update conclusion", "add FAQ section to article", "modify the article", "change tone to casual", "shorten intro", "it looks good but please edit [change]".
+   - CRITICAL: Never set 'write_article' if the user asks to edit, update, modify, or add to an existing article or draft.
+   - Set intent_type: 'immediate_action', action_type: 'edit_article'.
+
+9. 'indexing_check':
    - Questions about Google indexation: "is my site indexed?", "check indexing status", "submit URL to Google", "request indexing".
    - Set intent_type: 'immediate_action', action_type: 'indexing_check'.
 
-9. 'write_article':
-   - Imperative or casual requests to create brand new content: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]".
-   - DO NOT use if the user states the article is already written or only asks for images.
+10. 'write_article':
+   - Imperative or casual requests to create brand new content from scratch: "write an article about [topic]", "draft a post on [topic]", "create a guide for [topic]".
+   - DO NOT use if the user states the article is already written, asks to edit the article, or only asks for images.
    - Set intent_type: 'immediate_action', action_type: 'write_article'.
 
-9. 'keyword_research':
+11. 'keyword_research':
    - Finding search queries: "find keywords", "discover keyword opportunities", "give me low KD keywords", "what are people searching for?".
    - Set intent_type: 'immediate_action', action_type: 'keyword_research'.
 
@@ -334,6 +342,30 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
         goal: prompt,
         topic: topic || 'Target Article',
         summary: `Generate and embed high-resolution 16:9 visual assets into "${topic || 'article'}" for ${domain}`,
+      };
+    }
+
+    // F3. Edit / Update Existing Article
+    const isEditArticle = /(edit|update|modify|revise|change|shorten|expand|add\s+to|add\s+faq|improve).*?(previous|last|recent|existing)?\s*(article|post|draft|piece|content)/i.test(lower) ||
+      /^(edit|update|modify|revise)\s+(the\s+)?(previous|last|recent|article|post|draft)/i.test(lower) ||
+      /^(edit|update|modify|revise)\s*:/i.test(lower);
+    if (isEditArticle) {
+      const isPureImg = /(image|visual|photo|picture|graphic)/i.test(lower) && !/(text|paragraph|section|words?|content|intro|conclusion|faq|heading)/i.test(lower);
+      if (isPureImg) {
+        return {
+          intent_type: 'immediate_action',
+          action_type: 'generate_images',
+          goal: prompt,
+          topic: contextTopic || 'Target Article',
+          summary: `Recreate and attach high-resolution visual assets for "${contextTopic || 'article'}"`,
+        };
+      }
+      return {
+        intent_type: 'immediate_action',
+        action_type: 'edit_article',
+        goal: prompt,
+        topic: contextTopic || undefined,
+        summary: `Edit existing article according to instructions: "${prompt.slice(0, 80)}"`,
       };
     }
 

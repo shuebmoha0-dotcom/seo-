@@ -10,6 +10,8 @@ import { WebsiteCrawler } from '@/lib/agent/crawler';
 
 // In-memory deduplication cache for Telegram update_ids to prevent retry collisions
 const processedUpdates = new Map<number, number>();
+// In-memory session tracking for active article edits triggered via Telegram buttons
+const pendingArticleEdits = new Map<string, string>(); // chatId -> draftId
 
 function isDuplicateUpdate(updateId?: number): boolean {
   if (!updateId) return false;
@@ -24,6 +26,16 @@ function isDuplicateUpdate(updateId?: number): boolean {
   if (processedUpdates.has(updateId)) return true;
   processedUpdates.set(updateId, now);
   return false;
+}
+
+function safeBackground(fn: () => Promise<void>) {
+  setImmediate(async () => {
+    try {
+      await fn();
+    } catch (err: any) {
+      console.error('[Telegram Webhook Background Error]:', err?.message || err);
+    }
+  });
 }
 
 export async function POST(request: Request) {
@@ -269,6 +281,77 @@ export async function POST(request: Request) {
             `❌ *Action Rejected.*\n\nNo changes were deployed to your website.`
           );
         }
+      } else if (action === 'recreate_images' && executionId) {
+        const { data: targetDraft } = await supabase
+          .from('content_drafts')
+          .select('id, working_title, website_id')
+          .eq('id', executionId)
+          .maybeSingle();
+
+        if (chatId && messageId) {
+          await telegram.editMessageText(
+            chatId,
+            messageId,
+            `🎨 *Recreating Visual Assets...*\n\nGenerating new widescreen 16:9 hero image and workflow diagram for *"${targetDraft?.working_title || 'Article'}"* via OpenAI. Please wait ~10 seconds...`
+          );
+        }
+
+        if (targetDraft) {
+          let domain = '';
+          const { data: ws } = await supabase
+            .from('websites')
+            .select('domain')
+            .eq('id', targetDraft.website_id)
+            .maybeSingle();
+          domain = ws?.domain || '';
+
+          const executor = new AutopilotExecutor();
+          await executor.executeImmediateAction({
+            instruction: {
+              intent_type: 'immediate_action',
+              action_type: 'generate_images',
+              goal: `Recreate images for ${targetDraft.working_title}`,
+              topic: targetDraft.working_title,
+              summary: `Recreate images for ${targetDraft.working_title}`,
+            },
+            website_id: targetDraft.website_id,
+            website_domain: domain,
+            chat_id: chatId,
+            draft_id: executionId,
+          });
+
+          const { data: refreshedDraft } = await supabase
+            .from('content_drafts')
+            .select('id, working_title, word_count, rankmath_score')
+            .eq('id', executionId)
+            .maybeSingle();
+
+          if (chatId) {
+            await telegram.sendApprovalPrompt(chatId, {
+              executionId: refreshedDraft?.id || executionId,
+              taskTitle: refreshedDraft?.working_title || targetDraft.working_title,
+              websiteDomain: domain,
+              score: refreshedDraft?.rankmath_score || 85,
+              wordCount: refreshedDraft?.word_count || 1400,
+            });
+          }
+        }
+      } else if (action === 'edit_article' && executionId) {
+        const { data: targetDraft } = await supabase
+          .from('content_drafts')
+          .select('id, working_title')
+          .eq('id', executionId)
+          .maybeSingle();
+
+        if (chatId) {
+          pendingArticleEdits.set(chatId.toString(), executionId);
+
+          await telegram.sendMessage(
+            chatId,
+            `✏️ *Editing Article: "${targetDraft?.working_title || 'Draft'}"*\n\nPlease reply directly to this message with your edits:\n• e.g. *"Add 3 FAQ questions at the bottom"*\n• e.g. *"Shorten the introduction and make the tone punchy"*\n• e.g. *"Add a section about [concept]"*\n\n_Your edits will be applied surgically via Claude Sonnet 5 without rewriting unchanged sections._`,
+            { parse_mode: 'Markdown' }
+          );
+        }
       }
 
       return NextResponse.json({ ok: true });
@@ -436,11 +519,14 @@ _Send any task prompt to start writing or auditing!_`,
         `🤖 *SEO Agent Mobile Commands*
 
 • \`/status\` — Site health, active tasks, latest post
+• \`/autopilot\` — Zero-touch full autopilot status & controls
 • \`/help\` — Show this help message
 
 💬 *Natural Language Tasks:*
 Just text what you want your agent to do:
 • _"Write an article about 5 best marketing automation tools"_
+• _"Edit the previous article: add 3 FAQs"_
+• _"Turn on full autopilot"_
 • _"Run a competitor scan on our niche"_
 • _"Audit technical SEO and check for broken links"_
 • _"Find backlink opportunities for us"_
@@ -448,6 +534,75 @@ Just text what you want your agent to do:
 Your agent will process the request in the background and ping you when finished!`,
         { parse_mode: 'Markdown' }
       );
+      return NextResponse.json({ ok: true });
+    }
+
+    // C2. Handle /autopilot commands
+    if (rawText.startsWith('/autopilot')) {
+      const subCmd = rawText.replace(/^\/autopilot\s*/i, '').trim().toLowerCase();
+      const { FullAutopilotEngine } = await import('@/lib/agent/fullAutopilotEngine');
+
+      if (subCmd === 'on' || subCmd === 'enable' || subCmd === 'start') {
+        const config = await FullAutopilotEngine.enable({
+          website_id: currentSite.id,
+          cadence: 'twice_weekly',
+          auto_publish: true,
+          auto_fix_technical: true,
+        });
+
+        await telegram.sendMessage(
+          chatId,
+          `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Website:* \`${currentSite.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Touch Needed)\n• *Cadence:* Twice Weekly Continuous Cycles\n• *Auto-Publish:* Enabled (Direct live sync to WordPress)\n• *Auto-Fix Technical SEO:* Enabled\n\n_Operating continuously for months without stopping. Send \`/autopilot off\` to pause or \`/autopilot run\` to trigger an immediate cycle._`,
+          { parse_mode: 'Markdown' }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      if (subCmd === 'off' || subCmd === 'pause' || subCmd === 'stop') {
+        await FullAutopilotEngine.disable(currentSite.id);
+        await telegram.sendMessage(
+          chatId,
+          `⏸️ *Zero-Touch Full Autopilot Paused*\n\nAutonomous operations for \`${currentSite.domain}\` are paused. Send \`/autopilot on\` to resume anytime.`,
+          { parse_mode: 'Markdown' }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      if (subCmd === 'run' || subCmd === 'now' || subCmd === 'cycle') {
+        await telegram.sendMessage(
+          chatId,
+          `⚡ *Launching On-Demand Autonomous Cycle for \`${currentSite.domain}\`...* ⏳\n\n1️⃣ Profiling authority & topic footprint\n2️⃣ Identifying unwritten high-ROI keyword\n3️⃣ Drafting via Claude Sonnet 5 & generating visuals\n4️⃣ Auto-publishing & auditing technical SEO...`,
+          { parse_mode: 'Markdown' }
+        );
+
+        // Safe background execution
+        safeBackground(async () => {
+          try {
+            await FullAutopilotEngine.runAutonomousCycle(currentSite.id, { force: true });
+          } catch (e: any) {
+            console.error('[Autopilot Webhook Run Error]:', e);
+          }
+        });
+
+        return NextResponse.json({ ok: true });
+      }
+
+      // Default: Status
+      const status = await FullAutopilotEngine.getStatus(currentSite.id);
+      let statusMsg = `🤖 *Zero-Touch Full Autopilot Status*\n\n`;
+      statusMsg += `🌐 *Website:* \`${currentSite.domain}\`\n`;
+      statusMsg += `⚡ *State:* ${status.enabled ? '🟢 RUNNING 24/7 AUTONOMOUSLY' : '⏸️ PAUSED'}\n`;
+      statusMsg += `⏱️ *Cadence:* ${status.cadence.replace('_', ' ').toUpperCase()}\n`;
+      statusMsg += `📝 *Auto-Publish:* ${status.auto_publish ? '✅ Yes (Direct Live)' : '❌ No (Manual Approval)'}\n`;
+      statusMsg += `🛠️ *Auto-Fix Tech SEO:* ${status.auto_fix_technical ? '✅ Yes' : '❌ No'}\n`;
+      statusMsg += `📊 *Articles Published:* ${status.stats.total_articles_published}\n`;
+      statusMsg += `🔧 *Fixes Applied:* ${status.stats.total_fixes_applied}\n`;
+      if (status.next_run_at) {
+        statusMsg += `⏳ *Next Scheduled Run:* ${new Date(status.next_run_at).toLocaleString()}\n`;
+      }
+      statusMsg += `\n*Quick Controls:*\n• \`/autopilot on\` — Activate 24/7 Zero-Touch Mode\n• \`/autopilot off\` — Pause Autopilot\n• \`/autopilot run\` — Trigger an immediate autonomous cycle`;
+
+      await telegram.sendMessage(chatId, statusMsg, { parse_mode: 'Markdown' });
       return NextResponse.json({ ok: true });
     }
 
@@ -650,6 +805,24 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'generate_images';
       }
 
+      // Route active pending article edit if user previously tapped [✏️ Edit Article]
+      let activeEditingDraftId: string | undefined = undefined;
+      if (pendingArticleEdits.has(chatId)) {
+        activeEditingDraftId = pendingArticleEdits.get(chatId);
+        pendingArticleEdits.delete(chatId);
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'edit_article';
+      }
+
+      // Route edit / modify requests directly to edit_article to prevent re-drafting already written articles!
+      const isEditRequest = /(edit|update|modify|revise|change|shorten|expand|add\s+to|add\s+faq|improve).*?(previous|last|recent|existing)?\s*(article|post|draft|piece|content)/i.test(taskPrompt) ||
+        /^(edit|update|modify|revise)\s+(the\s+)?(previous|last|recent|article|post|draft)/i.test(taskPrompt) ||
+        /^(edit|update|modify|revise)\s*:/i.test(taskPrompt);
+      if (isEditRequest && parsed.action_type !== 'generate_images') {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'edit_article';
+      }
+
       // E. Conversational Response (Greetings, Questions, Explanations)
       if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
         let answer = parsed.response_message;
@@ -779,6 +952,12 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           `🎨 *Visual Asset Generation Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Article:* "${parsed.topic || parsed.goal}"\n\n1️⃣ Generating 16:9 widescreen hero visual via OpenAI\n2️⃣ Creating contextual editorial diagram\n3️⃣ Attaching visual assets to your existing article & syncing to WordPress\n\n_Generating visual assets now..._ ⏳`,
           { parse_mode: 'Markdown' }
         );
+      } else if (parsed.action_type === 'edit_article') {
+        await telegram.sendMessage(
+          chatId,
+          `✏️ *Article Revision Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Instruction:* "${parsed.goal}"\n\n1️⃣ Locating article draft in memory\n2️⃣ Applying surgical updates via Claude Sonnet 5\n3️⃣ Keeping untouched sections and flow intact\n4️⃣ Updating WordPress post and Content Planner\n\n_Editing article now..._ ⏳`,
+          { parse_mode: 'Markdown' }
+        );
       } else {
         await telegram.sendMessage(
           chatId,
@@ -802,6 +981,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
           user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
           sync: true,
           chat_id: chatId,
+          draft_id: activeEditingDraftId,
           siteInventory: sharedInventory || undefined,
         }),
         timeoutPromise

@@ -160,6 +160,10 @@ Tap a button below to execute or reject directly from your phone:`;
           { text: '✅ Approve & Publish Live', callback_data: `approve:${data.executionId}` },
           { text: '❌ Reject', callback_data: `reject:${data.executionId}` },
         ],
+        [
+          { text: '🎨 Recreate Images', callback_data: `recreate_images:${data.executionId}` },
+          { text: '✏️ Edit Article', callback_data: `edit_article:${data.executionId}` },
+        ],
       ],
     };
 

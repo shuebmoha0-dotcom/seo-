@@ -30,6 +30,106 @@ export default function AutopilotPage() {
     link_label?: string;
   } | null>(null);
 
+  // Full Autopilot State
+  const [fullAutopilot, setFullAutopilot] = useState<any>(null);
+  const [loadingFullAutopilot, setLoadingFullAutopilot] = useState(false);
+  const [updatingAutopilot, setUpdatingAutopilot] = useState(false);
+  const [runningFullCycle, setRunningFullCycle] = useState(false);
+  const [autopilotGoal, setAutopilotGoal] = useState('Grow organic search traffic and establish niche topical authority');
+  const [selectedCadence, setSelectedCadence] = useState<'daily' | 'twice_weekly' | 'weekly'>('twice_weekly');
+  const [autoPublishToggle, setAutoPublishToggle] = useState(true);
+  const [autoFixToggle, setAutoFixToggle] = useState(true);
+
+  const fetchFullAutopilot = async () => {
+    if (!currentWebsite) {
+      setFullAutopilot(null);
+      return;
+    }
+    try {
+      setLoadingFullAutopilot(true);
+      const res = await fetch(`/api/autopilot/full?website_id=${currentWebsite.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status) {
+          setFullAutopilot(data.status);
+          setAutopilotGoal(data.status.goal || 'Grow organic search traffic and establish niche topical authority');
+          setSelectedCadence(data.status.cadence || 'twice_weekly');
+          setAutoPublishToggle(data.status.auto_publish !== false);
+          setAutoFixToggle(data.status.auto_fix_technical !== false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load full autopilot:', err);
+    } finally {
+      setLoadingFullAutopilot(false);
+    }
+  };
+
+  const handleToggleFullAutopilot = async (overrideEnable?: boolean) => {
+    if (!currentWebsite) return;
+    setUpdatingAutopilot(true);
+    const shouldEnable = overrideEnable !== undefined ? overrideEnable : !fullAutopilot?.enabled;
+
+    try {
+      if (!shouldEnable) {
+        const res = await fetch(`/api/autopilot/full?website_id=${currentWebsite.id}`, { method: 'DELETE' });
+        if (res.ok) {
+          const data = await res.json();
+          setFullAutopilot(data.status);
+          setStatusFeedback({ message: 'Zero-Touch Full Autopilot paused.', ok: true });
+        }
+      } else {
+        const res = await fetch('/api/autopilot/full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            website_id: currentWebsite.id,
+            goal: autopilotGoal,
+            cadence: selectedCadence,
+            auto_publish: autoPublishToggle,
+            auto_fix_technical: autoFixToggle,
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFullAutopilot(data.status);
+          setStatusFeedback({ message: '🚀 Zero-Touch Full Autopilot activated! Autonomous operations are now running 24/7.', ok: true });
+        }
+      }
+      await fetchTasks(true);
+    } catch (err) {
+      console.error(err);
+      setStatusFeedback({ message: 'Failed to update Autopilot status.', ok: false });
+    } finally {
+      setUpdatingAutopilot(false);
+    }
+  };
+
+  const handleRunFullCycleNow = async () => {
+    if (!currentWebsite) return;
+    setRunningFullCycle(true);
+    setStatusFeedback(null);
+    try {
+      const res = await fetch('/api/autopilot/full/run-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ website_id: currentWebsite.id })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setStatusFeedback({ message: `Autonomous cycle completed! ${data.result?.summary || 'Published article and audited site.'}`, ok: true });
+        await fetchFullAutopilot();
+        await fetchTasks(true);
+      } else {
+        setStatusFeedback({ message: data.error || 'Autonomous cycle failed.', ok: false });
+      }
+    } catch (err: any) {
+      setStatusFeedback({ message: 'Network error while running autonomous cycle.', ok: false });
+    } finally {
+      setRunningFullCycle(false);
+    }
+  };
+
   const fetchTasks = async (silent = false) => {
     if (!currentWebsite) {
       setTasks([]);
@@ -55,6 +155,7 @@ export default function AutopilotPage() {
 
   useEffect(() => {
     fetchTasks();
+    fetchFullAutopilot();
   }, [currentWebsite?.id]);
 
   // Polling watchdog: poll every 3 seconds if any task is executing in the background
@@ -357,6 +458,245 @@ export default function AutopilotPage() {
                   </div>
                 </div>
               )}
+
+              {/* ═══════════════════════════════════════════════════════════════════ */}
+              {/* ── ZERO-TOUCH FULL AUTOPILOT MODE (MONTHS OF CONTINUOUS RUNS) ──── */}
+              {/* ═══════════════════════════════════════════════════════════════════ */}
+              <div className={`relative overflow-hidden bg-gradient-to-br from-indigo-50/50 via-white to-emerald-50/30 border-2 ${
+                fullAutopilot?.enabled 
+                  ? 'border-emerald-500/40 shadow-emerald-500/5 ring-1 ring-emerald-500/20' 
+                  : 'border-neutral-200 shadow-xs'
+              } rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm transition-all`}>
+                
+                {/* Decorative background glow */}
+                <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                {fullAutopilot?.enabled && (
+                  <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+                )}
+
+                {/* Top Header Bar */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${
+                        fullAutopilot?.enabled ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
+                      } shadow-sm`}>
+                        <Zap className="w-5 h-5" />
+                      </div>
+                      <h2 className="text-xl font-bold tracking-tight text-neutral-900">
+                        Zero-Touch Full Autopilot Mode
+                      </h2>
+                      <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
+                        fullAutopilot?.enabled 
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                          : 'bg-neutral-100 text-neutral-600 border border-neutral-200'
+                      }`}>
+                        <span className={`w-2 h-2 rounded-full ${
+                          fullAutopilot?.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'
+                        }`} />
+                        {fullAutopilot?.enabled ? 'Running 24/7 Autonomously • 0 Human Needed' : 'Paused • 1-Click Activate'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-600 leading-relaxed max-w-2xl font-medium">
+                      Continuous, end-to-end autonomous engine: discovers high-ROI keywords, writes 1,200–1,600 word articles via Claude Sonnet 5, generates visual assets via OpenAI, publishes directly to WordPress, and auto-repairs technical SEO issues for months without human bottlenecks.
+                    </p>
+                  </div>
+
+                  {/* Actions & Master Toggle */}
+                  <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleRunFullCycleNow}
+                      disabled={runningFullCycle || !currentWebsite}
+                      className="bg-white hover:bg-neutral-50 disabled:opacity-50 text-neutral-800 border border-neutral-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-2xs hover:shadow-xs"
+                    >
+                      {runningFullCycle ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <Play className="w-3.5 h-3.5 text-indigo-600" />}
+                      <span>{runningFullCycle ? 'Running Autonomous Cycle...' : 'Run Cycle Now 🚀'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFullAutopilot()}
+                      disabled={updatingAutopilot || loadingFullAutopilot}
+                      className={`text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-xs ${
+                        fullAutopilot?.enabled
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                    >
+                      {updatingAutopilot ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : fullAutopilot?.enabled ? (
+                        <CheckCircle className="w-3.5 h-3.5" />
+                      ) : (
+                        <Zap className="w-3.5 h-3.5" />
+                      )}
+                      <span>{fullAutopilot?.enabled ? 'Autopilot Active (Click to Pause)' : 'Activate Zero-Touch Autopilot'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Real-time Metrics Dashboard Strip */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
+                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
+                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                      <span>Articles Published</span>
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                    </div>
+                    <div className="text-xl font-black text-neutral-900">
+                      {fullAutopilot?.stats?.total_articles_published ?? 0}
+                    </div>
+                    <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                      Direct Live to WordPress
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
+                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                      <span>Tech SEO Fixes</span>
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    </div>
+                    <div className="text-xl font-black text-neutral-900">
+                      {fullAutopilot?.stats?.total_fixes_applied ?? 0}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5">
+                      Meta tags & broken links
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
+                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                      <span>Cycles Run</span>
+                      <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
+                    </div>
+                    <div className="text-xl font-black text-neutral-900">
+                      {fullAutopilot?.stats?.total_cycles_completed ?? 0}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5">
+                      Continuous operation
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
+                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
+                      <span>Next Execution</span>
+                      <Clock className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                    <div className="text-xs font-bold text-neutral-900 truncate">
+                      {fullAutopilot?.next_run_at 
+                        ? new Date(fullAutopilot.next_run_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
+                        : fullAutopilot?.enabled ? 'Within 24h' : 'When Activated'}
+                    </div>
+                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5 capitalize">
+                      Cadence: {selectedCadence.replace('_', ' ')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Autopilot Strategy & Execution Controls */}
+                <div className="bg-white/80 border border-neutral-200/90 rounded-2xl p-5 shadow-2xs space-y-4 relative z-10">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Goal Input */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
+                        <span>Autonomous Strategic Goal</span>
+                        <span className="text-[10px] text-neutral-400 font-normal">Guides keyword & article selection</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={autopilotGoal}
+                        onChange={(e) => setAutopilotGoal(e.target.value)}
+                        placeholder="e.g. Grow organic search traffic and establish niche topical authority"
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                      />
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {[
+                          'Topical Authority in Niche',
+                          'Target Striking-Distance Keywords (Pos 4-20)',
+                          'High-Intent Buyer Queries',
+                        ].map((preset, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => setAutopilotGoal(preset)}
+                            className="text-[10px] bg-neutral-100 hover:bg-neutral-200 text-neutral-600 px-2 py-0.5 rounded-md transition-colors"
+                          >
+                            + {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Cadence Selector */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
+                        <span>Publishing & Optimization Cadence</span>
+                        <span className="text-[10px] text-emerald-600 font-bold">2 Posts / Week Recommended</span>
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'daily', label: 'Daily (7/wk)' },
+                          { id: 'twice_weekly', label: 'Twice Weekly (2/wk)' },
+                          { id: 'weekly', label: 'Weekly (1/wk)' },
+                        ].map((cad) => (
+                          <button
+                            key={cad.id}
+                            type="button"
+                            onClick={() => setSelectedCadence(cad.id as any)}
+                            className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
+                              selectedCadence === cad.id
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border-neutral-200'
+                            }`}
+                          >
+                            {cad.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Autonomy Feature Switches */}
+                  <div className="pt-2 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-6">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoPublishToggle}
+                          onChange={(e) => setAutoPublishToggle(e.target.checked)}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-neutral-300"
+                        />
+                        <span className="text-xs font-bold text-neutral-800">
+                          Auto-Publish Live to WordPress
+                        </span>
+                        <span className="text-[10px] text-neutral-500">(0 Human Approval Needed)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoFixToggle}
+                          onChange={(e) => setAutoFixToggle(e.target.checked)}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-neutral-300"
+                        />
+                        <span className="text-xs font-bold text-neutral-800">
+                          Auto-Fix Technical SEO
+                        </span>
+                        <span className="text-[10px] text-neutral-500">(Continuous Crawl & Repair)</span>
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFullAutopilot(true)}
+                      disabled={updatingAutopilot}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors self-end sm:self-auto"
+                    >
+                      Update Autopilot Strategy →
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               {/* Natural Language Task Input */}
               <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-6 shadow-xs space-y-4">

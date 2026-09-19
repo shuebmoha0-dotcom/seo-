@@ -77,37 +77,50 @@ async function handleCronExecution(request: Request) {
             .select()
             .single();
 
-          // Execute task via ScheduleAgent
+          // Execute task via FullAutopilotEngine if configured for Zero-Touch Full Autopilot
+          const isFullAutopilot = task.schedule_config?.full_autopilot === true || task.name === 'Zero-Touch Full Autopilot';
           const goal = task.name || task.natural_language_instruction;
           let summary = '';
-          try {
-            const runResult = await agent.executeRun({
-              website_id: websiteId,
-              website_url: `https://${domain}`,
-              trigger_type: 'schedule',
-              config: {
+
+          if (isFullAutopilot) {
+            try {
+              const { FullAutopilotEngine } = await import('@/lib/agent/fullAutopilotEngine');
+              const cycleRes = await FullAutopilotEngine.runAutonomousCycle(websiteId);
+              summary = cycleRes.summary;
+            } catch (autoErr: any) {
+              summary = `Autonomous cycle error: ${autoErr?.message || autoErr}`;
+            }
+          } else {
+            // Execute task via ScheduleAgent
+            try {
+              const runResult = await agent.executeRun({
                 website_id: websiteId,
-                frequency,
-                schedule_time: task.schedule_config?.time || '09:00',
-                timezone: task.timezone || 'UTC',
-                status: 'active',
-                daily_budget_usd: 10,
-                monthly_budget_usd: 100,
-                current_daily_spend_usd: 0,
-                current_monthly_spend_usd: 0,
-                max_tasks_per_run: 5,
-                max_crawl_urls: 20,
-                notify_on_run_complete: true,
-                notify_on_opportunity: true,
-                notify_on_approval_required: true,
-                notify_on_technical_error: false,
-                notify_on_failure: true,
-              },
-              project_instructions: goal,
-            });
-            summary = runResult.summary || `Autonomous operation completed for ${domain}.`;
-          } catch (agentErr: any) {
-            summary = `Autonomous optimization cycle completed for ${domain}. Crawled pages and evaluated SEO opportunities.`;
+                website_url: `https://${domain}`,
+                trigger_type: 'schedule',
+                config: {
+                  website_id: websiteId,
+                  frequency,
+                  schedule_time: task.schedule_config?.time || '09:00',
+                  timezone: task.timezone || 'UTC',
+                  status: 'active',
+                  daily_budget_usd: 10,
+                  monthly_budget_usd: 100,
+                  current_daily_spend_usd: 0,
+                  current_monthly_spend_usd: 0,
+                  max_tasks_per_run: 5,
+                  max_crawl_urls: 20,
+                  notify_on_run_complete: true,
+                  notify_on_opportunity: true,
+                  notify_on_approval_required: true,
+                  notify_on_technical_error: false,
+                  notify_on_failure: true,
+                },
+                project_instructions: goal,
+              });
+              summary = runResult.summary || `Autonomous operation completed for ${domain}.`;
+            } catch (agentErr: any) {
+              summary = `Autonomous optimization cycle completed for ${domain}. Crawled pages and evaluated SEO opportunities.`;
+            }
           }
 
           const completedAt = new Date().toISOString();
