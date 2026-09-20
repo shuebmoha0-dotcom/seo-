@@ -15,6 +15,8 @@ import {
   Globe,
   Bot,
 } from "lucide-react";
+import { PublicNavbar } from "@/components/PublicNavbar";
+import { PublicFooter } from "@/components/PublicFooter";
 
 export default function PricingPage() {
   const [annual, setAnnual] = useState(true);
@@ -50,44 +52,19 @@ export default function PricingPage() {
   return (
     <div className="min-h-screen bg-white text-neutral-900 selection:bg-indigo-500/20 font-sans">
       {/* 1. Public Marketing Header */}
-      <header className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between border-b border-neutral-200">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="p-2 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-transform group-hover:scale-105">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-neutral-900 tracking-tight text-lg">SEO Autopilot</span>
-        </Link>
-
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
-          <Link href="/#features" className="hover:text-neutral-900 transition-colors">Features</Link>
-          <Link href="/#how-it-works" className="hover:text-neutral-900 transition-colors">How it Works</Link>
-          <Link href="/pricing" className="text-indigo-600 font-semibold transition-colors">Pricing</Link>
-          <Link href="/blog" className="hover:text-neutral-900 transition-colors">Blog</Link>
-        </nav>
-
-        <div className="flex items-center gap-4">
-          <Link href="/login" className="text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors">
-            Log in
-          </Link>
-          <Link
-            href="/login"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm hover:shadow"
-          >
-            Get Started Free
-          </Link>
-        </div>
-      </header>
+      <PublicNavbar />
 
       {/* 2. Hero Section */}
       <main className="max-w-7xl mx-auto px-6 pt-16 pb-24">
         <header className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold mb-4">
-            <Sparkles className="w-3.5 h-3.5" /> Simple, Transparent Pricing
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-200/80 text-indigo-700 text-xs font-semibold mb-4">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse" />
+            <span>Simple, Transparent Pricing</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-neutral-900 mb-4">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-neutral-900 leading-[1.1] mb-4">
             Predictable Plans for Every Stage of Growth
           </h1>
-          <p className="text-neutral-600 text-base md:text-lg max-w-2xl mx-auto">
+          <p className="text-neutral-600 text-base md:text-lg leading-relaxed max-w-2xl mx-auto">
             Scale your organic search rankings, fix technical debts, and produce cornerstone content with an autonomous AI agent working 24/7.
           </p>
 
@@ -369,46 +346,10 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* 6. CTA Banner */}
-        <section className="max-w-5xl mx-auto bg-indigo-600 rounded-3xl p-10 md:p-12 text-center text-white relative overflow-hidden shadow-xl">
-          <div className="relative z-10 max-w-2xl mx-auto space-y-4">
-            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-              Ready to automate your website's organic growth?
-            </h2>
-            <p className="text-indigo-100 text-sm md:text-base">
-              Connect your first website in under 2 minutes. No credit card required for the 14-day trial.
-            </p>
-            <div className="pt-4">
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 bg-white text-indigo-600 hover:bg-neutral-100 font-bold px-6 py-3.5 rounded-xl text-sm transition-all shadow"
-              >
-                Get Started Free <ArrowRight className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
       </main>
 
-      {/* 7. Public Marketing Footer */}
-      <footer className="border-t border-neutral-200 py-12 px-6 bg-neutral-50 text-neutral-500 text-xs">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-600 rounded-lg">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
-            <span className="font-bold text-neutral-900 text-sm">SEO Autopilot</span>
-            <span className="text-neutral-400 ml-2">© {new Date().getFullYear()} SEO Autopilot Inc. All rights reserved.</span>
-          </div>
-
-          <div className="flex items-center gap-6">
-            <Link href="/pricing" className="hover:text-neutral-900 transition-colors">Pricing</Link>
-            <Link href="/blog" className="hover:text-neutral-900 transition-colors">Blog</Link>
-            <Link href="/login" className="hover:text-neutral-900 transition-colors">Log in</Link>
-            <a href="mailto:support@seautopilot.io" className="hover:text-neutral-900 transition-colors">Support</a>
-          </div>
-        </div>
-      </footer>
+      {/* Public Marketing Footer */}
+      <PublicFooter />
     </div>
   );
 }
