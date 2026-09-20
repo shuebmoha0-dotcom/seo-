@@ -31,9 +31,8 @@ export default function LandingPage() {
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-500">
           <a href="#features" className="hover:text-neutral-900 transition-colors">Features</a>
           <a href="#how-it-works" className="hover:text-neutral-900 transition-colors">How it Works</a>
-          <a href="#pricing" className="hover:text-neutral-900 transition-colors">Pricing</a>
-          <a href="#resources" className="hover:text-neutral-900 transition-colors">Resources</a>
-          <a href="#company" className="hover:text-neutral-900 transition-colors">Company</a>
+          <Link href="/pricing" className="hover:text-neutral-900 transition-colors">Pricing</Link>
+          <Link href="/blog" className="hover:text-neutral-900 transition-colors">Blog</Link>
         </nav>
 
         <div className="flex items-center gap-4">
@@ -314,7 +313,16 @@ export default function LandingPage() {
             <div key={heading}>
               <h4 className="font-semibold text-neutral-900 mb-3">{heading}</h4>
               <ul className="space-y-2">
-                {links.map(l => <li key={l}><a href="#" className="hover:text-neutral-900 transition-colors">{l}</a></li>)}
+                {links.map((l) => (
+                  <li key={l}>
+                    <Link
+                      href={l === "Blog" ? "/blog" : l === "Pricing" ? "/pricing" : "#"}
+                      className="hover:text-neutral-900 transition-colors"
+                    >
+                      {l}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
