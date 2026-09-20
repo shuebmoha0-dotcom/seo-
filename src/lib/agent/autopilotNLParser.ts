@@ -141,8 +141,10 @@ INTENT CLASSIFICATION TAXONOMY:
    - Requests about competitors: "who are my competitors?", "audit my competitors", "scan competitors", "what are competitors doing?".
    - Set intent_type: 'immediate_action', action_type: 'competitor_analysis'.
 
-6. 'backlink_discovery' (BACKLINKS & LINK PROSPECTING):
-   - Requests to find backlinks, link building targets, outreach prospects: "find for me backlink", "find backlinks", "get backlinks", "backlinks for my site", "link opportunities", "where can I get links?".
+6. 'backlink_discovery' (BACKLINKS, LINK PROSPECTING & COMPETITOR LINK SPYING):
+   - Requests to find backlinks, link opportunities, spy on competitor links, or explain where and how to get backlinks:
+     "find for me backlink", "find backlinks", "get backlinks", "backlinks for my site", "link opportunities", "where can I get links?",
+     "where to get it exactly and how to exactly", "spy how competitor get links and explain how to get them", "competitor backlinks", "how to get backlinks".
    - Set intent_type: 'immediate_action', action_type: 'backlink_discovery'.
 
 7. 'generate_images' (IMAGE CREATION / RE-CREATION FOR ARTICLES):

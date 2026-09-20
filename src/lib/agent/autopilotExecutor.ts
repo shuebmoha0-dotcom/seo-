@@ -1106,6 +1106,7 @@ export class AutopilotExecutor {
         console.log(`[AutopilotExecutor] Running backlink prospect discovery for "${website_domain}"...`);
         let prospects: any[] = [];
         let nicheTopic = 'industry and digital technology';
+        let blSummary = '';
 
         try {
           const { SiteNicheProfiler } = await import('./siteNicheProfiler');
@@ -1118,12 +1119,29 @@ export class AutopilotExecutor {
             nicheTopic = siteProfile.primaryNiche;
           }
 
+          let competitorDomains: string[] = [];
+          try {
+            const { data: dbComps } = await supabase
+              .from('competitors')
+              .select('domain')
+              .eq('website_id', website_id)
+              .limit(5);
+            if (dbComps && dbComps.length > 0) {
+              competitorDomains = dbComps.map((c: any) => c.domain);
+            }
+          } catch (compErr) {
+            console.warn('[AutopilotExecutor] Competitor fetch notice:', compErr);
+          }
+
           const { BacklinkAgent } = await import('./backlinkAgent');
           const backlinkAgent = new BacklinkAgent();
-          const rawProspects = await backlinkAgent.discoverProspectsDirect(website_domain, nicheTopic);
+          const [rawProspects, competitorIntel] = await Promise.all([
+            backlinkAgent.discoverProspectsDirect(website_domain, nicheTopic),
+            backlinkAgent.spyCompetitorBacklinks(website_domain, nicheTopic, competitorDomains),
+          ]);
 
           if (rawProspects && rawProspects.length > 0) {
-            prospects = rawProspects.slice(0, 6);
+            prospects = rawProspects.slice(0, 5);
             for (const p of prospects) {
               try {
                 await supabase.from('backlink_prospects').upsert({
@@ -1143,40 +1161,67 @@ export class AutopilotExecutor {
               }
             }
           }
+
+          blSummary = `🎯 *Backlink Opportunities & Competitor Spy Blueprint for ${website_domain}*\n`;
+          blSummary += `📂 *Niche Focus:* \`${nicheTopic}\`\n\n`;
+
+          // ── PART 1: WHERE & HOW TO GET HIGH-AUTHORITY BACKLINKS ──────────
+          if (prospects.length > 0) {
+            blSummary += `📍 *PART 1: WHERE & HOW TO GET BACKLINKS (STEP-BY-STEP)*\n\n`;
+            for (let i = 0; i < prospects.length; i++) {
+              const p = prospects[i];
+              const oppTitle = p.opportunity_title || (
+                p.category === 'resource_page' ? 'Curated Resource & Directory Listing'
+                : p.category === 'guest_contribution' ? 'Guest Thought Leadership Feature'
+                : p.category === 'unlinked_mention' ? 'Brand Citation & Mention Claim'
+                : 'Competitor Alternative & Comparison Listing'
+              );
+
+              blSummary += `${i + 1}️⃣ *${oppTitle}*\n`;
+              blSummary += `   🏢 *Target Site:* [${p.domain}](${p.url}) · Authority: \`${p.quality_score || 85}/100\`\n`;
+              if (p.target_location) {
+                blSummary += `   📍 *Where on Site:* ${p.target_location}\n`;
+              }
+              if (p.how_to_acquire && p.how_to_acquire.length > 0) {
+                blSummary += `   🛠️ *How to Get It Exactly:*\n`;
+                for (const step of p.how_to_acquire) {
+                  blSummary += `      ${step}\n`;
+                }
+              }
+              if (p.target_anchor) {
+                blSummary += `   🔗 *Recommended Anchor:* \`${p.target_anchor}\`\n`;
+              }
+              if (p.pitch_hook) {
+                blSummary += `   ✉️ *Outreach Hook:* _"${p.pitch_hook}"_\n`;
+              }
+              const actionLink = p.contact_page || p.url;
+              blSummary += `   ⚡ *Action Link:* [Open Target Hub](${actionLink})\n\n`;
+            }
+          }
+
+          // ── PART 2: COMPETITOR BACKLINK SPY & STEAL BLUEPRINT ───────────
+          if (competitorIntel && competitorIntel.length > 0) {
+            blSummary += `🕵️‍♂️ *PART 2: COMPETITOR BACKLINK SPY & STEAL BLUEPRINT*\n\n`;
+            for (let i = 0; i < competitorIntel.slice(0, 3).length; i++) {
+              const c = competitorIntel[i];
+              blSummary += `⚔️ *Target ${i + 1}: How \`${c.competitor_domain}\` Got Backlinks on \`${c.referring_site}\`*\n`;
+              blSummary += `   🔗 *Referring Source:* [${c.referring_site}](${c.referring_url}) · Authority: \`${c.source_authority}/100\`\n`;
+              blSummary += `   💡 *How They Got It:* ${c.how_competitor_got_it}\n`;
+              blSummary += `   🎯 *How YOU Can Steal / Replicate It:*\n`;
+              blSummary += `      📍 *Placement:* ${c.how_you_can_steal_it.exact_placement}\n`;
+              if (c.how_you_can_steal_it.step_by_step_guide) {
+                for (const s of c.how_you_can_steal_it.step_by_step_guide) {
+                  blSummary += `      ${s}\n`;
+                }
+              }
+              blSummary += `      ✉️ *Pitch Angle:* _"${c.how_you_can_steal_it.angle_to_pitch}"_\n`;
+              blSummary += `   ⚡ *Replication Endpoint:* [Open Submission Page](${c.replicate_url})\n\n`;
+            }
+          }
+
+          blSummary += `💡 *Next Action:* Review and launch personalized outreach campaigns directly from your Backlinks Manager.`;
         } catch (blErr) {
           console.warn('[AutopilotExecutor] Backlink prospecting error:', blErr);
-        }
-
-        let blSummary = `🎯 *High-Value Backlink Opportunities for ${website_domain}*\n`;
-        blSummary += `📂 *Niche Focus:* \`${nicheTopic}\`\n\n`;
-
-        if (prospects.length > 0) {
-          for (let i = 0; i < prospects.length; i++) {
-            const p = prospects[i];
-            const oppTitle = p.opportunity_title || (
-              p.category === 'resource_page' ? 'Curated Resource & Directory Listing'
-              : p.category === 'guest_contribution' ? 'Guest Thought Leadership Feature'
-              : p.category === 'unlinked_mention' ? 'Brand Citation & Mention Claim'
-              : 'Competitor Alternative & Comparison Listing'
-            );
-
-            blSummary += `${i + 1}️⃣ *${oppTitle}*\n`;
-            blSummary += `   🏢 *Target Site:* [${p.domain}](${p.url}) · Authority: \`${p.quality_score || 85}/100\`\n`;
-            if (p.opportunity_angle) {
-              blSummary += `   🎯 *The Angle:* ${p.opportunity_angle}\n`;
-            }
-            if (p.linkable_asset) {
-              blSummary += `   🎁 *Asset to Pitch:* \`${p.linkable_asset}\`\n`;
-            }
-            if (p.pitch_hook) {
-              blSummary += `   ✉️ *Pitch Hook:* _"${p.pitch_hook}"_\n`;
-            }
-            const actionLink = p.contact_page || p.url;
-            blSummary += `   ⚡ *Action Link:* [Open Target Hub](${actionLink})\n\n`;
-          }
-          blSummary += `💡 *Next Action:* All opportunities are saved to your Backlinks Manager with 1-click personalized email drafting.`;
-        } else {
-          blSummary += `Scanned industry platforms for *${nicheTopic}*. View discovered prospects and launch outreach directly in your Backlinks Manager.`;
         }
 
         return {
