@@ -38,8 +38,8 @@ export interface AddWebsitePayload {
   url: string;
   name?: string;
   project_id?: string;
-  platform?: 'wordpress' | 'custom_saas' | 'github' | 'other';
-  connection_type?: 'wordpress' | 'custom_api' | 'github' | 'none';
+  platform?: 'wordpress' | 'custom_saas' | 'github' | 'platform_blog' | 'other';
+  connection_type?: 'wordpress' | 'custom_api' | 'github' | 'platform_blog' | 'none';
   wordpress_config?: {
     username: string;
     app_password: string;
@@ -388,6 +388,29 @@ export class WebsiteService {
         }
       } catch (err: any) {
         console.error('[WebsiteService] GitHub setup error:', err);
+      }
+    } else if (payload.connection_type === 'platform_blog' || payload.platform === 'platform_blog') {
+      try {
+        const { data: blogInt } = await supabase
+          .from('integrations')
+          .upsert({
+            website_id: website.id,
+            provider: 'platform_blog',
+            display_name: 'Platform Blog (Native Engine)',
+            status: 'connected',
+            status_message: 'Connected to Native Platform Blog Engine (/blog)',
+            config: { site_url: normalizedUrl, blog_path: '/blog' },
+            capabilities: ['CREATE_DRAFT', 'UPDATE_CONTENT', 'UPDATE_METADATA', 'PUBLISH_CONTENT', 'UPLOAD_MEDIA'],
+            last_tested_at: new Date().toISOString(),
+            last_success_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'website_id,provider' })
+          .select('id')
+          .single();
+
+        integrationResult = blogInt;
+      } catch (err: any) {
+        console.error('[WebsiteService] Platform Blog setup error:', err);
       }
     }
 

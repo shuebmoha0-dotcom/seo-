@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
+import { CustomSaaSClient } from '@/lib/connectors/customSaaSClient';
 import { decryptCredential } from '@/lib/utils/encryption';
 import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
 
@@ -74,66 +75,189 @@ export async function POST(request: Request) {
       }
     }
 
-    let wpPostResult: { id?: number; link?: string; status?: string } | null = null;
+    let wpPostResult: { id?: number | string; link?: string; status?: string } | null = null;
     let pushError: string | null = null;
 
-    // When approved/published, execute live sync to WordPress
+    // When approved/published, execute live auto-post to Platform Blog, Custom API, or WordPress
     if ((action === 'approve' || action === 'publish') && updatedDraft) {
-      // 1. Direct REST API execution via WordPressClient
-      try {
-        let integrationQuery = supabase
-          .from('integrations')
-          .select('*')
-          .eq('provider', 'wordpress')
-          .eq('status', 'connected');
-
-        if (updatedDraft.website_id) {
-          integrationQuery = integrationQuery.eq('website_id', updatedDraft.website_id);
+      let siteDomain = '';
+      let sitePlatform = '';
+      if (updatedDraft.website_id) {
+        const { data: wRec } = await supabase
+          .from('websites')
+          .select('domain, url, platform')
+          .eq('id', updatedDraft.website_id)
+          .maybeSingle();
+        if (wRec) {
+          sitePlatform = wRec.platform || '';
+          siteDomain = wRec.url || (wRec.domain ? `https://${wRec.domain}` : '');
         }
+      }
 
-        const { data: integration } = await integrationQuery.maybeSingle();
+      // Query connected integrations for this website
+      const { data: allIntegrations } = await supabase
+        .from('integrations')
+        .select('*')
+        .eq('website_id', updatedDraft.website_id)
+        .eq('status', 'connected');
 
-        if (integration) {
+      const isPlatformBlog = sitePlatform === 'platform_blog' || 
+        allIntegrations?.some(i => i.provider === 'platform_blog') ||
+        siteDomain.includes('seo-hazel-eight.vercel.app') ||
+        siteDomain.includes('localhost');
+
+      const customApiInt = allIntegrations?.find(i => i.provider === 'custom_api');
+
+      // ── Execution Mode A: Native Platform Blog (Agent Itself) ──────────
+      if (isPlatformBlog) {
+        try {
+          let featuredImageUrl = updatedDraft.featured_image_url || '';
+          if (!featuredImageUrl && updatedDraft.content_body) {
+            const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+            if (imgMatch) featuredImageUrl = imgMatch[1];
+          }
+
+          const readingTime = `${Math.max(3, Math.ceil((updatedDraft.word_count || 1200) / 220))} min read`;
+          const blogCategory = updatedDraft.topic_cluster || 'AI Agents';
+
+          const { data: postRecord, error: blogErr } = await supabase
+            .from('platform_blog_posts')
+            .upsert({
+              slug: updatedDraft.url_slug,
+              title: updatedDraft.working_title,
+              content: updatedDraft.content_body,
+              excerpt: updatedDraft.meta_description || updatedDraft.working_title,
+              category: blogCategory,
+              author_name: 'SEO Autopilot Editorial Team',
+              author_role: 'Autonomous Content Agent',
+              reading_time: readingTime,
+              cover_image: featuredImageUrl || undefined,
+              cover_image_alt: updatedDraft.working_title,
+              meta_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
+              meta_description: cleanMetaString(updatedDraft.meta_description || ''),
+              keywords: [updatedDraft.primary_keyword, ...(updatedDraft.secondary_keywords || [])].filter(Boolean),
+              status: 'published',
+              published_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'slug' })
+            .select('id, slug')
+            .single();
+
+          if (!blogErr && postRecord) {
+            const origin = siteDomain ? siteDomain.replace(/\/$/, '') : '';
+            const liveUrl = `${origin}/blog/${postRecord.slug}`;
+            wpPostResult = {
+              id: postRecord.id,
+              link: liveUrl,
+              status: 'published',
+            };
+            console.log(`[Content Approval] Native Platform Blog post auto-posted live -> ${liveUrl}`);
+          }
+        } catch (blogPubErr: any) {
+          console.error('[Content Approval] Platform Blog publication failed:', blogPubErr);
+        }
+      }
+
+      // ── Execution Mode B: Custom SaaS / REST API Webhook ───────────────
+      if (!wpPostResult && customApiInt) {
+        try {
           const { data: creds } = await supabase
             .from('integration_credentials')
             .select('encrypted_value, credential_type')
-            .eq('integration_id', integration.id)
-            .in('credential_type', ['agent_connector', 'app_password', 'botcreds'])
+            .eq('integration_id', customApiInt.id)
             .maybeSingle();
 
-          if (creds?.encrypted_value) {
-            const applicationPassword = decryptCredential(creds.encrypted_value);
-            const client = new WordPressClient({
-              siteUrl: integration.config?.site_url,
-              username: integration.config?.username,
-              applicationPassword,
-              apiKey: applicationPassword,
-              authMethod: integration.config?.auth_method || creds.credential_type,
-              seoPlugin: integration.config?.seo_plugin || 'none',
+          if (creds?.encrypted_value && customApiInt.config?.api_base_url) {
+            const apiKey = decryptCredential(creds.encrypted_value);
+            const customClient = new CustomSaaSClient({
+              site_url: siteDomain || customApiInt.config.site_url || 'https://example.com',
+              api_base_url: customApiInt.config.api_base_url,
+              auth_type: customApiInt.config.auth_type || 'bearer_token',
+              api_key: apiKey,
+              header_name: customApiInt.config.header_name,
+              content_endpoint: customApiInt.config.content_endpoint,
+              publish_endpoint: customApiInt.config.publish_endpoint,
             });
 
-            const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
-
-            const post = await client.createPost({
+            const draftRes = await customClient.createDraft({
               title: updatedDraft.working_title,
-              content: formattedHtmlContent,
+              content: updatedDraft.content_body,
               slug: updatedDraft.url_slug,
-              status: 'publish',
-              seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
-              meta_description: cleanMetaString(updatedDraft.meta_description || ''),
+              excerpt: updatedDraft.meta_description,
+              seo_title: updatedDraft.seo_title,
+              meta_description: updatedDraft.meta_description,
             });
 
+            const pubRes = await customClient.publishContent(draftRes.id);
             wpPostResult = {
-              id: post.id,
-              link: post.link,
-              status: post.status,
+              id: draftRes.id,
+              link: pubRes.url || draftRes.url || `${siteDomain}/${updatedDraft.url_slug}`,
+              status: 'published',
             };
-            console.log(`[Content Approval] Direct REST push succeeded for draft ${updatedDraft.id} -> Post ID: ${post.id}`);
+            console.log(`[Content Approval] Custom API post auto-posted live -> ${wpPostResult?.link}`);
           }
+        } catch (customErr: any) {
+          console.error('[Content Approval] Custom API publication failed:', customErr);
         }
-      } catch (directErr: any) {
-        console.warn('[Content Approval] Direct WordPress push error:', directErr.message || directErr);
-        pushError = directErr.message;
+      }
+
+      // ── Execution Mode C: Direct WordPress REST Execution ─────────────
+      if (!wpPostResult) {
+        try {
+          let integrationQuery = supabase
+            .from('integrations')
+            .select('*')
+            .eq('provider', 'wordpress')
+            .eq('status', 'connected');
+
+          if (updatedDraft.website_id) {
+            integrationQuery = integrationQuery.eq('website_id', updatedDraft.website_id);
+          }
+
+          const { data: integration } = await integrationQuery.maybeSingle();
+
+          if (integration) {
+            const { data: creds } = await supabase
+              .from('integration_credentials')
+              .select('encrypted_value, credential_type')
+              .eq('integration_id', integration.id)
+              .in('credential_type', ['agent_connector', 'app_password', 'botcreds'])
+              .maybeSingle();
+
+            if (creds?.encrypted_value) {
+              const applicationPassword = decryptCredential(creds.encrypted_value);
+              const client = new WordPressClient({
+                siteUrl: integration.config?.site_url,
+                username: integration.config?.username,
+                applicationPassword,
+                apiKey: applicationPassword,
+                authMethod: integration.config?.auth_method || creds.credential_type,
+                seoPlugin: integration.config?.seo_plugin || 'none',
+              });
+
+              const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
+
+              const post = await client.createPost({
+                title: updatedDraft.working_title,
+                content: formattedHtmlContent,
+                slug: updatedDraft.url_slug,
+                status: 'publish',
+                seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
+                meta_description: cleanMetaString(updatedDraft.meta_description || ''),
+              });
+
+              wpPostResult = {
+                id: post.id,
+                link: post.link,
+                status: post.status,
+              };
+              console.log(`[Content Approval] Direct REST push succeeded for draft ${updatedDraft.id} -> Post ID: ${post.id}`);
+            }
+          }
+        } catch (directErr: any) {
+          console.warn('[Content Approval] Direct WordPress push error:', directErr.message || directErr);
+          pushError = directErr.message;
+        }
       }
 
       // 2. Queue in Outbound Job Queue for background connector polling

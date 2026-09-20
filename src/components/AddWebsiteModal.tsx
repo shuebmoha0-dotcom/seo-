@@ -10,7 +10,7 @@ export function AddWebsiteModal() {
   const [form, setForm] = useState({
     url: "",
     name: "",
-    connection_type: "wordpress" as "wordpress" | "github" | "custom_api" | "none",
+    connection_type: "platform_blog" as "platform_blog" | "wordpress" | "github" | "custom_api" | "none",
     wp_auth_method: "agent_connector" as "agent_connector" | "application_password" | "botcreds",
     wp_username: "",
     wp_app_password: "",
@@ -158,12 +158,13 @@ export function AddWebsiteModal() {
 
           {/* Connection Type Selection */}
           <div>
-            <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Execution & Publishing Layer</label>
-            <div className="grid grid-cols-3 gap-2">
+            <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Execution &amp; Auto-Posting Layer</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: "wordpress", name: "WordPress", icon: "🟦" },
-                { id: "github", name: "GitHub Code", icon: "🐙" },
-                { id: "custom_api", name: "Custom API", icon: "⚡" },
+                { id: "platform_blog", name: "Platform Blog", icon: "✨", subtitle: "Agent Itself" },
+                { id: "wordpress", name: "WordPress", icon: "🟦", subtitle: "REST / Plugin" },
+                { id: "custom_api", name: "Custom API", icon: "⚡", subtitle: "Webhooks" },
+                { id: "github", name: "GitHub Code", icon: "🐙", subtitle: "Pull Requests" },
               ].map(opt => (
                 <button
                   key={opt.id}
@@ -171,16 +172,30 @@ export function AddWebsiteModal() {
                   onClick={() => setForm(f => ({ ...f, connection_type: opt.id as any }))}
                   className={`p-2.5 rounded-xl border text-left transition-all ${
                     form.connection_type === opt.id
-                      ? "border-indigo-600 bg-indigo-50/50 text-indigo-900 font-semibold"
+                      ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs"
                       : "border-neutral-200 hover:bg-neutral-50 text-neutral-700"
                   }`}
                 >
                   <span className="text-lg block mb-1">{opt.icon}</span>
-                  <span className="text-[11px] block">{opt.name}</span>
+                  <span className="text-[11px] block font-bold">{opt.name}</span>
+                  <span className="text-[9px] text-neutral-400 block">{opt.subtitle}</span>
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Platform Blog Banner */}
+          {form.connection_type === "platform_blog" && (
+            <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span className="text-xs font-bold text-indigo-950">Native Platform Blog (Agent Itself)</span>
+              </div>
+              <p className="text-[11px] text-indigo-800 leading-relaxed">
+                Automatically publishes articles, SEO metadata, and hero visuals directly into your public blog at <span className="font-mono font-bold">/blog</span>. Zero third-party plugins or credentials needed.
+              </p>
+            </div>
+          )}
 
           {/* WordPress Configuration Fields */}
           {form.connection_type === "wordpress" && (
