@@ -22,7 +22,11 @@ export async function GET(request: Request) {
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    const siteUrl = (host && !host.includes('localhost'))
+      ? `${proto}://${host}`
+      : (process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app');
     const redirectUri = `${siteUrl}/api/integrations/ga4/callback`;
 
     let accessToken = 'ga4_access_token_simulated';

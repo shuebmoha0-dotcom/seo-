@@ -4,7 +4,11 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const website_id = searchParams.get('website_id') || 'default';
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host');
+    const proto = request.headers.get('x-forwarded-proto') || 'https';
+    const siteUrl = (host && !host.includes('localhost'))
+      ? `${proto}://${host}`
+      : (process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app');
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
 

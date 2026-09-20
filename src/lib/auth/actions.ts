@@ -4,6 +4,27 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
+import { headers } from 'next/headers';
+
+async function getAppOrigin(): Promise<string> {
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (envUrl && !envUrl.includes('localhost')) {
+    return envUrl.replace(/\/+$/, '');
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  try {
+    const headerList = await headers();
+    const host = headerList.get('x-forwarded-host') || headerList.get('host');
+    const proto = headerList.get('x-forwarded-proto') || 'https';
+    if (host && !host.includes('localhost')) {
+      return `${proto}://${host}`;
+    }
+  } catch {}
+  return 'https://seo-hazel-eight.vercel.app';
+}
+
 // ─────────────────────────────────────────────
 // SIGN UP
 // ─────────────────────────────────────────────
@@ -22,12 +43,14 @@ export async function signUp(formData: FormData) {
     return { error: 'Password must be at least 8 characters.' };
   }
 
+  const origin = await getAppOrigin();
+
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
       data: { name },
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: `${origin}/auth/callback`,
     },
   });
 
@@ -82,8 +105,6 @@ export async function signOut() {
   redirect('/login');
 }
 
-import { headers } from 'next/headers';
-
 // ─────────────────────────────────────────────
 // FORGOT PASSWORD
 // ─────────────────────────────────────────────
@@ -96,16 +117,7 @@ export async function forgotPassword(formData: FormData) {
     return { error: 'Email is required.' };
   }
 
-  let origin = process.env.NEXT_PUBLIC_SITE_URL || '';
-  try {
-    const headerList = await headers();
-    const host = headerList.get('x-forwarded-host') || headerList.get('host');
-    const proto = headerList.get('x-forwarded-proto') || 'https';
-    if (host) {
-      origin = `${proto}://${host}`;
-    }
-  } catch {}
-  if (!origin) origin = 'http://localhost:3000';
+  const origin = await getAppOrigin();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
