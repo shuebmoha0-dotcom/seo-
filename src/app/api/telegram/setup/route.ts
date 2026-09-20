@@ -11,8 +11,17 @@ export async function GET(request: Request) {
     const isConfigured = telegram.configured;
 
     let botInfo = null;
+    let webhookStatus: any = null;
     if (isConfigured) {
       botInfo = await telegram.getMe();
+      // Ensure webhook is properly locked to our production server
+      const whCheck = await telegram.ensureWebhook();
+      const whInfo = await telegram.getWebhookInfo();
+      webhookStatus = {
+        url: whInfo?.url || '',
+        pending_updates: whInfo?.pending_update_count || 0,
+        was_restored: whCheck.restored,
+      };
     }
 
     const botUsername = botInfo?.username || 'MySeoAgentBot';
@@ -30,6 +39,7 @@ export async function GET(request: Request) {
       pairing_url: pairingUrl,
       subscribers_count: subscribers.length,
       subscribers,
+      webhook: webhookStatus,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -59,6 +69,17 @@ export async function POST(request: Request) {
       );
 
       return NextResponse.json({ success: true, count: subscribers.length });
+    }
+
+    if (action === 'repair_webhook') {
+      const check = await telegram.ensureWebhook();
+      const info = await telegram.getWebhookInfo();
+      return NextResponse.json({
+        success: true,
+        restored: check.restored,
+        current_url: info?.url || '',
+        pending_updates: info?.pending_update_count || 0,
+      });
     }
 
     if (action === 'disconnect') {

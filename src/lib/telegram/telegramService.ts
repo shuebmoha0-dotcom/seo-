@@ -51,6 +51,22 @@ export class TelegramService {
   }
 
   /**
+   * Get current Webhook status from Telegram API
+   */
+  async getWebhookInfo(): Promise<{ url: string; pending_update_count: number; last_error_message?: string } | null> {
+    if (!this.isConfigured) return null;
+    try {
+      const res = await fetch(`${this.apiUrl}/getWebhookInfo`);
+      const data = await res.json();
+      if (data.ok) return data.result;
+      return null;
+    } catch (err) {
+      console.error('[TelegramService] getWebhookInfo error:', err);
+      return null;
+    }
+  }
+
+  /**
    * Set the Webhook URL for Telegram updates
    */
   async setWebhook(webhookUrl: string): Promise<boolean> {
@@ -59,7 +75,11 @@ export class TelegramService {
       const res = await fetch(`${this.apiUrl}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'] }),
+        body: JSON.stringify({
+          url: webhookUrl,
+          allowed_updates: ['message', 'edited_message', 'callback_query'],
+          drop_pending_updates: false,
+        }),
       });
       const data = await res.json();
       return !!data.ok;
@@ -67,6 +87,23 @@ export class TelegramService {
       console.error('[TelegramService] setWebhook error:', err);
       return false;
     }
+  }
+
+  /**
+   * Self-healing watchdog: verifies webhook is pointed to our production URL.
+   * If hijacked, cleared, or pointing to a rogue third-party server, instantly restores it.
+   */
+  async ensureWebhook(expectedUrl?: string): Promise<{ restored: boolean; currentUrl: string }> {
+    const targetUrl = expectedUrl || `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app').replace(/\/+$/, '')}/api/telegram/webhook`;
+    const info = await this.getWebhookInfo();
+    const currentUrl = info?.url || '';
+
+    if (currentUrl !== targetUrl) {
+      console.warn(`[TelegramService] Webhook drift/hijack detected (current: "${currentUrl}", expected: "${targetUrl}"). Self-healing immediately...`);
+      const ok = await this.setWebhook(targetUrl);
+      return { restored: ok, currentUrl: ok ? targetUrl : currentUrl };
+    }
+    return { restored: false, currentUrl };
   }
 
   /**

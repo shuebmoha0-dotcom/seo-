@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ScheduleAgent } from '@/lib/agent/scheduleAgent';
+import { TelegramService } from '@/lib/telegram/telegramService';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -20,6 +21,19 @@ async function handleCronExecution(request: Request) {
 
     if (process.env.CRON_SECRET && !isVercelCron && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return new Response('Unauthorized', { status: 401 });
+    }
+
+    // 0. Continuous Self-Healing Watchdog: Guarantee Telegram webhook is locked to our production server
+    try {
+      const telegram = new TelegramService();
+      if (telegram.configured) {
+        const check = await telegram.ensureWebhook();
+        if (check.restored) {
+          console.log(`[Cron Trigger] Webhook watchdog auto-restored rogue/drifted webhook to: ${check.currentUrl}`);
+        }
+      }
+    } catch (whErr) {
+      console.warn('[Cron Trigger] Webhook watchdog check warning:', whErr);
     }
 
     const supabase = createAdminClient();
