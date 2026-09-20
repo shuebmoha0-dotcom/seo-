@@ -64,35 +64,32 @@ export interface AddWebsitePayload {
 
 export class WebsiteService {
   /**
-   * 1. Retrieve all websites for a user with their associated integrations
+   * 1. Retrieve all websites for a user with their associated integrations.
+   * Strictly multi-tenant: NEVER falls back to other users' websites.
    */
   static async getUserWebsites(userId?: string): Promise<WebsiteContext[]> {
-    const supabase = createAdminClient();
-
-    if (userId && userId !== '00000000-0000-0000-0000-000000000000') {
-      const { data: userSites } = await supabase
-        .from('websites')
-        .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
-      if (userSites && userSites.length > 0) {
-        return this.attachIntegrations(supabase, userSites);
-      }
+    if (!userId || userId === '00000000-0000-0000-0000-000000000000') {
+      return [];
     }
 
-    // Fallback: return all registered websites so the dashboard and content planner are always populated
-    const { data: allWebsites, error } = await supabase
+    const supabase = createAdminClient();
+
+    const { data: userSites, error } = await supabase
       .from('websites')
       .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
+      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error || !allWebsites) {
+    if (error) {
       console.error('[WebsiteService] getUserWebsites error:', error);
       return [];
     }
 
-    return this.attachIntegrations(supabase, allWebsites);
+    if (!userSites || userSites.length === 0) {
+      return [];
+    }
+
+    return this.attachIntegrations(supabase, userSites);
   }
 
   private static async attachIntegrations(supabase: any, websites: any[]): Promise<WebsiteContext[]> {
@@ -120,9 +117,14 @@ export class WebsiteService {
   }
 
   /**
-   * 2. Resolve active website context for agent execution
+   * 2. Resolve active website context for agent execution.
+   * Strictly scoped to the authenticated user.
    */
   static async resolveWebsiteContext(userId: string, requestedWebsiteId?: string): Promise<WebsiteContext> {
+    if (!userId || userId === '00000000-0000-0000-0000-000000000000') {
+      throw new Error('Unauthorized: User authentication required to access website context.');
+    }
+
     let supabase: any;
     try {
       supabase = await createClient();
@@ -130,12 +132,13 @@ export class WebsiteService {
       supabase = createAdminClient();
     }
 
-    // 1. If requestedWebsiteId is provided, resolve directly by ID
+    // 1. If requestedWebsiteId is provided, resolve directly by ID and verify ownership
     if (requestedWebsiteId && requestedWebsiteId !== 'default') {
       const { data: directSite } = await supabase
         .from('websites')
         .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
         .eq('id', requestedWebsiteId)
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (directSite) {
@@ -155,20 +158,6 @@ export class WebsiteService {
     const websites = await this.getUserWebsites(userId);
     if (websites.length > 0) {
       return websites[0];
-    }
-
-    // 3. Fallback: Any active website in database
-    const { data: firstAnySite } = await supabase
-      .from('websites')
-      .select('id, user_id, project_id, domain, url, name, platform, status, created_at')
-      .limit(1)
-      .maybeSingle();
-
-    if (firstAnySite) {
-      return {
-        ...firstAnySite,
-        integrations: [],
-      };
     }
 
     throw new Error('No website connected. Please connect a website in the dashboard before executing SEO tasks.');

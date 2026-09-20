@@ -8,9 +8,15 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
-    const websites = await WebsiteService.getUserWebsites(userId);
-    const limitInfo = await checkWebsiteLimit(userId);
+    if (!user) {
+      return NextResponse.json({
+        websites: [],
+        plan_limit: null,
+      });
+    }
+
+    const websites = await WebsiteService.getUserWebsites(user.id);
+    const limitInfo = await checkWebsiteLimit(user.id);
 
     return NextResponse.json({
       websites,
@@ -27,10 +33,12 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
-    const body = await request.json();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required.' }, { status: 401 });
+    }
 
-    const result = await WebsiteService.createWebsiteWithIntegration(userId, body);
+    const body = await request.json();
+    const result = await WebsiteService.createWebsiteWithIntegration(user.id, body);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error || 'Failed to create website.' }, { status: 400 });
@@ -55,8 +63,11 @@ export async function DELETE(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    const userId = user?.id || '00000000-0000-0000-0000-000000000000';
-    const result = await WebsiteService.deleteWebsite(userId, website_id);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required.' }, { status: 401 });
+    }
+
+    const result = await WebsiteService.deleteWebsite(user.id, website_id);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
