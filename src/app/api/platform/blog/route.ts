@@ -1,14 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(req: NextRequest) {
   try {
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+
     const supabase = createAdminClient();
-    const { data: posts, error } = await supabase
+    let query = supabase
       .from("platform_blog_posts")
       .select("*")
       .order("created_at", { ascending: false });
 
+    // Unauthenticated visitors are restricted strictly to published articles
+    if (!user) {
+      query = query.eq("status", "published");
+    }
+
+    const { data: posts, error } = await query;
     if (error) {
       console.error("[PlatformBlog API] Error fetching posts:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -22,6 +34,19 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Strict Authentication Enforcement
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. You must be authenticated to create or edit platform articles." },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const {
       id,
@@ -117,6 +142,19 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    // 1. Strict Authentication Enforcement
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. You must be authenticated to delete platform articles." },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const slug = searchParams.get("slug");

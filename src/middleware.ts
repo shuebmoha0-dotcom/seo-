@@ -13,6 +13,12 @@ const PUBLIC_PREFIXES = [
 ];
 
 function isPublicRoute(pathname: string): boolean {
+  // /blog/admin is strictly protected - requires authenticated login
+  if (pathname.startsWith('/blog/admin')) return false;
+
+  // Public blog pages (/blog and /blog/[slug]) are open for search engines and visitors
+  if (pathname === '/blog' || pathname.startsWith('/blog/')) return true;
+
   if (PUBLIC_ROUTES.includes(pathname)) return true;
   if (PUBLIC_PREFIXES.some(prefix => pathname.startsWith(prefix))) return true;
   return false;

@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LLMProvider } from "@/lib/tools/llm";
+import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Strict Authentication Enforcement
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. You must be authenticated to generate platform articles." },
+        { status: 401 }
+      );
+    }
+
     const { topic, keyword, category = "AI Agents", status = "published" } = await req.json();
 
     if (!topic && !keyword) {
