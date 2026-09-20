@@ -201,7 +201,7 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span>Full Autonomous Content Planner (Claude Sonnet 5)</span>
+                  <span>Full Autonomous Content Planner &amp; Engine</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -309,10 +309,10 @@ export default function PricingPage() {
                   <td className="py-3.5 px-4 text-center text-emerald-600 font-bold">Continuous</td>
                 </tr>
                 <tr>
-                  <td className="py-3.5 px-4 font-medium text-neutral-900">AI Content Writing Model</td>
+                  <td className="py-3.5 px-4 font-medium text-neutral-900">AI Content Writing Engine</td>
                   <td className="py-3.5 px-4 text-center">Standard</td>
-                  <td className="py-3.5 px-4 text-center font-bold text-indigo-700 bg-indigo-50/40">Claude Sonnet 5</td>
-                  <td className="py-3.5 px-4 text-center font-bold">Claude Sonnet 5</td>
+                  <td className="py-3.5 px-4 text-center font-bold text-indigo-700 bg-indigo-50/40">Cornerstone Long-Form</td>
+                  <td className="py-3.5 px-4 text-center font-bold">Cornerstone Long-Form</td>
                 </tr>
                 <tr>
                   <td className="py-3.5 px-4 font-medium text-neutral-900">Execution Approvals</td>

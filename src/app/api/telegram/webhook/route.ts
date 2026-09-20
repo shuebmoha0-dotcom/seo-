@@ -292,7 +292,7 @@ export async function POST(request: Request) {
           await telegram.editMessageText(
             chatId,
             messageId,
-            `🎨 *Recreating Visual Assets...*\n\nGenerating new widescreen 16:9 hero image and workflow diagram for *"${targetDraft?.working_title || 'Article'}"* via OpenAI. Please wait ~10 seconds...`
+            `🎨 *Recreating Visual Assets...*\n\nGenerating new widescreen 16:9 hero image and workflow diagram for *"${targetDraft?.working_title || 'Article'}"*. Please wait ~10 seconds...`
           );
         }
 
