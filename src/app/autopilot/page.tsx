@@ -498,7 +498,7 @@ export default function AutopilotPage() {
                       </span>
                     </div>
                     <p className="text-xs text-neutral-600 leading-relaxed max-w-2xl font-medium">
-                      Continuous, end-to-end autonomous engine: discovers high-ROI keywords, writes 1,200–1,600 word articles via Claude Sonnet 5, generates visual assets via OpenAI, publishes directly to WordPress, and auto-repairs technical SEO issues for months without human bottlenecks.
+                      Continuous, end-to-end autonomous engine: discovers high-ROI keywords, crafts 1,200–1,600 word comprehensive articles, generates custom visual assets, publishes directly to WordPress, and auto-repairs technical SEO issues for months without human bottlenecks.
                     </p>
                   </div>
 

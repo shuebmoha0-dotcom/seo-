@@ -1185,7 +1185,7 @@ export default function ContentPlannerPage() {
                         <div className="space-y-1">
                           <h3 className="text-base font-bold text-neutral-900">Agent is Writing Your Article...</h3>
                           <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
-                            Researching search intent, drafting comprehensive sections with Claude Sonnet 5, and creating editorial illustrations in the background.
+                            Researching search intent, drafting comprehensive sections, and creating editorial illustrations in the background.
                           </p>
                         </div>
 

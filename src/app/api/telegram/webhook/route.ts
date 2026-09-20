@@ -348,7 +348,7 @@ export async function POST(request: Request) {
 
           await telegram.sendMessage(
             chatId,
-            `✏️ *Editing Article: "${targetDraft?.working_title || 'Draft'}"*\n\nPlease reply directly to this message with your edits:\n• e.g. *"Add 3 FAQ questions at the bottom"*\n• e.g. *"Shorten the introduction and make the tone punchy"*\n• e.g. *"Add a section about [concept]"*\n\n_Your edits will be applied surgically via Claude Sonnet 5 without rewriting unchanged sections._`,
+            `✏️ *Editing Article: "${targetDraft?.working_title || 'Draft'}"*\n\nPlease reply directly to this message with your edits:\n• e.g. *"Add 3 FAQ questions at the bottom"*\n• e.g. *"Shorten the introduction and make the tone punchy"*\n• e.g. *"Add a section about [concept]"*\n\n_Your edits will be applied surgically by the editorial engine without rewriting unchanged sections._`,
             { parse_mode: 'Markdown' }
           );
         }
@@ -571,7 +571,7 @@ Your agent will process the request in the background and ping you when finished
       if (subCmd === 'run' || subCmd === 'now' || subCmd === 'cycle') {
         await telegram.sendMessage(
           chatId,
-          `⚡ *Launching On-Demand Autonomous Cycle for \`${currentSite.domain}\`...* ⏳\n\n1️⃣ Profiling authority & topic footprint\n2️⃣ Identifying unwritten high-ROI keyword\n3️⃣ Drafting via Claude Sonnet 5 & generating visuals\n4️⃣ Auto-publishing & auditing technical SEO...`,
+          `⚡ *Launching On-Demand Autonomous Cycle for \`${currentSite.domain}\`...* ⏳\n\n1️⃣ Profiling authority & topic footprint\n2️⃣ Identifying unwritten high-ROI keyword\n3️⃣ Drafting comprehensive content & generating visuals\n4️⃣ Auto-publishing & auditing technical SEO...`,
           { parse_mode: 'Markdown' }
         );
 
@@ -914,7 +914,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
 
         await telegram.sendMessage(
           chatId,
-          `🚀 *Autonomous Content Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Topic / Goal:* ${parsed.topic || parsed.goal}\n\n1️⃣ Researching high-demand, low-KD keywords\n2️⃣ Weaving internal links from live pages\n3️⃣ Generating visual assets\n4️⃣ Drafting 1,200–1,600 words with Claude Sonnet 5\n\n_Agent is writing now..._ ⏳`,
+          `🚀 *Autonomous Content Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Topic / Goal:* ${parsed.topic || parsed.goal}\n\n1️⃣ Researching high-demand, low-KD keywords\n2️⃣ Weaving internal links from live pages\n3️⃣ Generating visual assets\n4️⃣ Drafting 1,200–1,600 words of comprehensive editorial content\n\n_Agent is writing now..._ ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'keyword_research') {
@@ -949,13 +949,13 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       } else if (parsed.action_type === 'generate_images') {
         await telegram.sendMessage(
           chatId,
-          `🎨 *Visual Asset Generation Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Article:* "${parsed.topic || parsed.goal}"\n\n1️⃣ Generating 16:9 widescreen hero visual via OpenAI\n2️⃣ Creating contextual editorial diagram\n3️⃣ Attaching visual assets to your existing article & syncing to WordPress\n\n_Generating visual assets now..._ ⏳`,
+          `🎨 *Visual Asset Generation Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Article:* "${parsed.topic || parsed.goal}"\n\n1️⃣ Generating 16:9 widescreen hero visual\n2️⃣ Creating contextual editorial diagram\n3️⃣ Attaching visual assets to your existing article & syncing to WordPress\n\n_Generating visual assets now..._ ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'edit_article') {
         await telegram.sendMessage(
           chatId,
-          `✏️ *Article Revision Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Instruction:* "${parsed.goal}"\n\n1️⃣ Locating article draft in memory\n2️⃣ Applying surgical updates via Claude Sonnet 5\n3️⃣ Keeping untouched sections and flow intact\n4️⃣ Updating WordPress post and Content Planner\n\n_Editing article now..._ ⏳`,
+          `✏️ *Article Revision Pipeline Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Instruction:* "${parsed.goal}"\n\n1️⃣ Locating article draft in memory\n2️⃣ Applying surgical updates to target sections\n3️⃣ Keeping untouched sections and flow intact\n4️⃣ Updating WordPress post and Content Planner\n\n_Editing article now..._ ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else {
@@ -990,7 +990,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       if ('isTimeout' in execResult) {
         await telegram.sendMessage(
           chatId,
-          `⏳ *Drafting In Progress (Claude Sonnet 5)*\n\nYour article draft ticket has been created in your [Content Planner](/content-planner).\nClaude Sonnet 5 is finishing the prose now and will send your approval card as soon as it is ready!`
+          `⏳ *Drafting In Progress*\n\nYour article draft ticket has been created in your [Content Planner](/content-planner).\nThe editorial engine is finishing the prose now and will send your approval card as soon as it is ready!`
         );
         return NextResponse.json({ ok: true });
       }

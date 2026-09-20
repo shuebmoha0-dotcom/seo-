@@ -445,7 +445,7 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
     } else if (/(thank|thanks|cool|awesome|great|perfect|good job)/i.test(lower)) {
       response_message = `🙌 You're very welcome! I'm constantly monitoring your search positions, click-through rates, and technical signals to help *${domain}* capture Page 1 rankings. Let me know what you'd like to work on next!`;
     } else if (/(who.*(are you|made you)|what can you do)/i.test(lower)) {
-      response_message = `🤖 I am your Autonomous Commercial SEO Agent for *${domain}*. I am built with Claude Sonnet 5, live Google Search Console connectors, and an automated rank recovery engine.\n\nI autonomously:\n1. Write and publish 1,200–1,600 word articles with internal linking and diagrams\n2. Mine striking-distance queries (positions 4–20) for 8x click multipliers\n3. Perform forensic root-cause analysis when rankings drop\n4. Push instant Google Indexing requests.`;
+      response_message = `🤖 I am your Autonomous AI SEO Growth Agent for *${domain}*. Built with live Google Search Console intelligence, an enterprise editorial engine, and an automated rank recovery system.\n\nI autonomously:\n1. Write and publish 1,200–1,600 word articles with internal linking and diagrams\n2. Mine striking-distance queries (positions 4–20) for 8x click multipliers\n3. Perform forensic root-cause analysis when rankings drop\n4. Push instant Google Indexing requests.`;
     }
 
     return {

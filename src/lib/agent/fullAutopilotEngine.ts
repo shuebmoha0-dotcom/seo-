@@ -192,7 +192,7 @@ export class FullAutopilotEngine {
         project_id: website.project_id,
         user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
         name: 'Zero-Touch Full Autopilot',
-        natural_language_instruction: '24/7 continuous autonomous SEO engine: finding unwritten keywords, drafting via Claude Sonnet 5, generating visuals, publishing to WordPress, and fixing technical SEO.',
+        natural_language_instruction: '24/7 continuous autonomous SEO engine: finding unwritten keywords, drafting comprehensive articles, generating visual assets, publishing to WordPress, and fixing technical SEO.',
         status: 'active',
         schedule_type: dbScheduleType,
         schedule_config: updatedConfig,
@@ -220,7 +220,7 @@ export class FullAutopilotEngine {
       const telegram = new TelegramService();
       await telegram.notifyWebsiteSubscribers(
         params.website_id,
-        `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Target:* \`${website.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Needed)\n• *Cadence:* ${cadence.replace('_', ' ').toUpperCase()}\n• *Auto-Publish:* ${updatedConfig.auto_publish ? '✅ Yes (Live WordPress)' : '⏸️ Requires Manual Click'}\n• *Auto-Fix Technical SEO:* ${updatedConfig.auto_fix_technical ? '✅ Yes (Continuous Auto-Repair)' : '❌ Off'}\n\n_The autonomous engine will now discover keywords, write articles via Claude Sonnet 5, and resolve technical issues continuously for months._`
+        `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Target:* \`${website.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Needed)\n• *Cadence:* ${cadence.replace('_', ' ').toUpperCase()}\n• *Auto-Publish:* ${updatedConfig.auto_publish ? '✅ Yes (Live WordPress)' : '⏸️ Requires Manual Click'}\n• *Auto-Fix Technical SEO:* ${updatedConfig.auto_fix_technical ? '✅ Yes (Continuous Auto-Repair)' : '❌ Off'}\n\n_The autonomous engine will now discover keywords, draft comprehensive articles, and resolve technical issues continuously._`
       );
     } catch (_) {}
 

@@ -109,7 +109,7 @@ export async function GET(request: Request) {
           currentStatus = 'needs_revision';
           supabase.from('content_drafts').update({
             status: 'needs_revision',
-            revision_notes: 'Drafting timed out. Click Generate Draft to retry with Claude Sonnet 5.'
+            revision_notes: 'Drafting timed out. Click Generate Draft to retry.'
           }).eq('id', d.id).then(() => {});
         }
       }
