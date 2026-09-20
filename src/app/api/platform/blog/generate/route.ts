@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { LLMProvider } from "@/lib/tools/llm";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isPlatformAdmin } from "@/lib/auth/admin";
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Strict Authentication Enforcement
+    // 1. Strict Authentication & Admin Privilege Enforcement
     const authClient = await createClient();
     const {
       data: { user },
@@ -15,6 +16,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized. You must be authenticated to generate platform articles." },
         { status: 401 }
+      );
+    }
+
+    const userRole = user.user_metadata?.role || (user as any).role;
+    let isAdmin = isPlatformAdmin(user.email, userRole);
+    if (!isAdmin) {
+      const supabaseAdmin = createAdminClient();
+      const { data: dbUser } = await supabaseAdmin
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      isAdmin = isPlatformAdmin(user.email, dbUser?.role || userRole);
+    }
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Platform administrator access required." },
+        { status: 403 }
       );
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isPlatformAdmin } from "@/lib/auth/admin";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,8 +16,27 @@ export async function GET(req: NextRequest) {
       .select("*")
       .order("created_at", { ascending: false });
 
-    // Unauthenticated visitors are restricted strictly to published articles
-    if (!user) {
+    // Determine if requester is a verified platform administrator
+    let isAdmin = false;
+    if (user) {
+      const userRole = user.user_metadata?.role || (user as any).role;
+      if (isPlatformAdmin(user.email, userRole)) {
+        isAdmin = true;
+      } else {
+        const { data: dbUser } = await supabase
+          .from("users")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        if (isPlatformAdmin(user.email, dbUser?.role || userRole)) {
+          isAdmin = true;
+        }
+      }
+    }
+
+    // Only platform administrators can inspect drafts / un-published content.
+    // Regular clients, tenants, and unauthenticated public visitors only see published posts.
+    if (!isAdmin) {
       query = query.eq("status", "published");
     }
 
@@ -34,7 +54,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Strict Authentication Enforcement
+    // 1. Strict Authentication & Admin Privilege Enforcement
     const authClient = await createClient();
     const {
       data: { user },
@@ -44,6 +64,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Unauthorized. You must be authenticated to create or edit platform articles." },
         { status: 401 }
+      );
+    }
+
+    const supabase = createAdminClient();
+    const userRole = user.user_metadata?.role || (user as any).role;
+    let isAdmin = isPlatformAdmin(user.email, userRole);
+    if (!isAdmin) {
+      const { data: dbUser } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      isAdmin = isPlatformAdmin(user.email, dbUser?.role || userRole);
+    }
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Platform administrator access required." },
+        { status: 403 }
       );
     }
 
@@ -84,8 +123,6 @@ export async function POST(req: NextRequest) {
 
     const wordCount = content.trim().split(/\s+/).length;
     const computedReadingTime = reading_time || `${Math.max(1, Math.round(wordCount / 220))} min read`;
-
-    const supabase = createAdminClient();
 
     const postPayload = {
       slug: cleanSlug,
@@ -142,7 +179,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    // 1. Strict Authentication Enforcement
+    // 1. Strict Authentication & Admin Privilege Enforcement
     const authClient = await createClient();
     const {
       data: { user },
@@ -155,6 +192,25 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    const supabase = createAdminClient();
+    const userRole = user.user_metadata?.role || (user as any).role;
+    let isAdmin = isPlatformAdmin(user.email, userRole);
+    if (!isAdmin) {
+      const { data: dbUser } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      isAdmin = isPlatformAdmin(user.email, dbUser?.role || userRole);
+    }
+
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: "Forbidden: Platform administrator access required." },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     const slug = searchParams.get("slug");
@@ -162,8 +218,6 @@ export async function DELETE(req: NextRequest) {
     if (!id && !slug) {
       return NextResponse.json({ error: "Post ID or slug is required" }, { status: 400 });
     }
-
-    const supabase = createAdminClient();
     let query = supabase.from("platform_blog_posts").delete();
 
     if (id) {

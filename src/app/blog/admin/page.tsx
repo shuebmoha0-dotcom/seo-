@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
+import { createClient } from "@/lib/supabase/client";
+import { isPlatformAdmin } from "@/lib/auth/admin";
 import {
   Sparkles,
   Plus,
@@ -46,6 +49,8 @@ interface AdminPost {
 const CATEGORIES = ["AI Agents", "Content Strategy", "Technical SEO", "Growth", "Case Studies"];
 
 export default function PlatformBlogAdminPage() {
+  const router = useRouter();
+  const [isAdminVerified, setIsAdminVerified] = useState(false);
   const [posts, setPosts] = useState<AdminPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -76,7 +81,7 @@ export default function PlatformBlogAdminPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editorTab, setEditorTab] = useState<"write" | "preview">("write");
 
-  // Fetch all platform blog posts
+  // Fetch all platform blog posts (for verified admins)
   const fetchPosts = async () => {
     try {
       setLoading(true);
@@ -92,10 +97,38 @@ export default function PlatformBlogAdminPage() {
     }
   };
 
+  // Verify Admin Authentication Guard
   useEffect(() => {
-    fetchPosts();
-  }, []);
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (!user) {
+          router.replace("/dashboard");
+          return;
+        }
 
+        let admin = isPlatformAdmin(user.email, user.user_metadata?.role || (user as any).role);
+        if (!admin) {
+          const { data: dbUser } = await supabase
+            .from("users")
+            .select("role")
+            .eq("id", user.id)
+            .single();
+          admin = isPlatformAdmin(user.email, dbUser?.role || (user as any).role);
+        }
+
+        if (!admin) {
+          // Regular client or non-admin -> redirect to client dashboard
+          router.replace("/dashboard");
+        } else {
+          setIsAdminVerified(true);
+          fetchPosts();
+        }
+      });
+    } catch {
+      router.replace("/dashboard");
+    }
+  }, [router]);
   // Filter posts
   const filteredPosts = useMemo(() => {
     return posts.filter((p) => {
@@ -259,6 +292,17 @@ export default function PlatformBlogAdminPage() {
       setIsGenerating(false);
     }
   };
+
+  if (!isAdminVerified) {
+    return (
+      <div className="flex h-screen bg-neutral-50 overflow-hidden font-sans">
+        <Sidebar />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-neutral-50 overflow-hidden font-sans">

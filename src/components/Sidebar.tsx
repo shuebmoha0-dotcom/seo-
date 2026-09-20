@@ -1,7 +1,10 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { isPlatformAdmin } from "@/lib/auth/admin";
 import {
   LayoutDashboard,
   Zap,
@@ -30,6 +33,29 @@ import { WebsiteSwitcher } from "@/components/WebsiteSwitcher";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(async ({ data: { user } }) => {
+        if (user) {
+          let admin = isPlatformAdmin(user.email, user.user_metadata?.role || (user as any).role);
+          if (!admin) {
+            const { data: dbUser } = await supabase
+              .from("users")
+              .select("role")
+              .eq("id", user.id)
+              .single();
+            admin = isPlatformAdmin(user.email, dbUser?.role || (user as any).role);
+          }
+          setIsAdmin(admin);
+        }
+      });
+    } catch {
+      // Fallback
+    }
+  }, []);
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -39,7 +65,7 @@ export function Sidebar() {
     { name: "Competitors", href: "/competitors", icon: Users, badge: "AI" },
     { name: "Opportunities", href: "/opportunities", icon: Zap, badge: "8" },
     { name: "Content Planner", href: "/content-planner", icon: FileText },
-    { name: "Platform Blog", href: "/blog/admin", icon: BookOpen, badge: "Blog" },
+    ...(isAdmin ? [{ name: "Platform Blog", href: "/blog/admin", icon: BookOpen, badge: "Admin" }] : []),
     { name: "On-Page SEO", href: "/on-page-seo", icon: Search, badge: "AI" },
     { name: "Internal Links", href: "/internal-linking", icon: LinkIcon, badge: "AI" },
     { name: "Image Agent", href: "/image-agent", icon: ImageIcon, badge: "AI" },
