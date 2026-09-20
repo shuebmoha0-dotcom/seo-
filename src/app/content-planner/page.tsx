@@ -1183,15 +1183,15 @@ export default function ContentPlannerPage() {
                           <PenLine className="w-7 h-7 animate-pulse" />
                         </div>
                         <div className="space-y-1">
-                          <h3 className="text-base font-bold text-neutral-900">Agent is Writing Your Article...</h3>
+                          <h3 className="text-base font-bold text-neutral-900">Drafting Article...</h3>
                           <p className="text-xs text-neutral-600 max-w-md mx-auto leading-relaxed">
-                            Researching search intent, drafting comprehensive sections, and creating editorial illustrations in the background.
+                            Your article is being prepared and will be ready for review shortly.
                           </p>
                         </div>
 
                         <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-700 bg-white/80 border border-blue-200 px-4 py-2 rounded-xl shadow-xs">
                           <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                          <span>Writing in progress • Runs in background (safe to close tab)</span>
+                          <span>Generating draft...</span>
                         </div>
                       </div>
                     ) : previewMode === "formatted" ? (

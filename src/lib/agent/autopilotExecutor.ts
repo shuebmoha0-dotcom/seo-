@@ -367,7 +367,7 @@ export class AutopilotExecutor {
                   search_intent: searchIntent,
                   content_type: 'blog_article',
                   target_audience: websiteAudience,
-                  content_body: `# ${workingTitle}\n\n*Autonomous Content Pipeline Activated: Editorial drafting in progress...*`,
+                  content_body: '',
                   word_count: 0,
                   status: 'writing',
                   current_version: 1,
@@ -1008,7 +1008,7 @@ export class AutopilotExecutor {
           gaps.forEach((g, idx) => {
             ideasSummary += `${idx + 1}️⃣ *"${g.working_title}"*\n`;
             ideasSummary += `   ↳ *Target Keyword:* \`${g.keyword}\` (${g.estimated_volume || '300+'}/mo, KD ${g.estimated_kd || 'Low'})\n`;
-            ideasSummary += `   ↳ *Category:* ${g.target_category} · Zero cannibalization risk\n\n`;
+            ideasSummary += `   ↳ *Category:* ${g.target_category}\n\n`;
           });
           ideasSummary += `_Reply with "Write an article about [Topic]" to start drafting immediately!_`;
         } else {
@@ -1674,7 +1674,6 @@ ${targetDraft.content_body || ''}`
         editSummary += `📝 *New Word Count:* ${wordCount} words\n`;
         editSummary += `🎯 *Edit Applied:* "${editInstructionText.slice(0, 100)}"\n`;
         if (livePostUrl) editSummary += `🔗 *Live URL:* ${livePostUrl}\n`;
-        editSummary += `\n✅ Modifications applied surgically without rewriting unchanged sections.`;
 
         // If in Telegram and draft is still waiting for approval, re-send the approval prompt with updated card
         if (params.chat_id && targetDraft.status !== 'published') {
