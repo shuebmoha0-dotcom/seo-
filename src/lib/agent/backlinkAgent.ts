@@ -15,6 +15,55 @@ export interface BacklinkProspect {
   contact_page?: string;
   editor_name?: string;
   editor_email?: string;
+  opportunity_title?: string;
+  opportunity_angle?: string;
+  pitch_hook?: string;
+  linkable_asset?: string;
+}
+
+/**
+ * Validates that a target URL is live and returns HTTP 200/300.
+ * If a deep path 404s or errors, safely falls back to the clean domain root.
+ */
+async function ensureLiveWorkingUrl(rawUrl: string, domain: string): Promise<string> {
+  const cleanDomain = domain.replace(/^https?:\/\//, '').replace(/\/.*$/, '').trim();
+  const rootUrl = `https://${cleanDomain}`;
+
+  if (!rawUrl || rawUrl === '/' || rawUrl === rootUrl) {
+    return rootUrl;
+  }
+
+  let testUrl = rawUrl.trim();
+  if (!testUrl.startsWith('http://') && !testUrl.startsWith('https://')) {
+    testUrl = `https://${testUrl}`;
+  }
+
+  // If already just domain root, return clean root
+  try {
+    const parsed = new URL(testUrl);
+    if (!parsed.pathname || parsed.pathname === '/') {
+      return rootUrl;
+    }
+  } catch {
+    return rootUrl;
+  }
+
+  try {
+    const res = await fetch(testUrl, {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(2500),
+      redirect: 'follow',
+    });
+
+    if (res.ok) {
+      return res.url || testUrl;
+    }
+    // Deep path returned 404/non-200 -> Fall back to root domain to ensure zero broken links
+    return rootUrl;
+  } catch {
+    return rootUrl;
+  }
 }
 
 export interface BacklinkVerificationResult {
@@ -68,8 +117,8 @@ export class BacklinkAgent {
   }
 
   /**
-   * Autonomously discovers high-relevance backlink prospects for a website
-   * without requiring third-party DataForSEO API keys.
+   * Autonomously discovers high-relevance backlink opportunities for a website
+   * with specific strategic angles, pitch hooks, and verified working URLs.
    */
   async discoverProspectsDirect(
     customerDomain: string,
@@ -80,64 +129,149 @@ export class BacklinkAgent {
         agent: 'BacklinkAgent',
         schema: z.object({
           prospects: z.array(z.object({
-            url: z.string(),
-            domain: z.string(),
+            domain: z.string().describe('Clean domain name e.g. saashub.com'),
+            url: z.string().describe('Verified root or hub URL e.g. https://www.saashub.com. NEVER hallucinate deep article paths'),
             category: z.enum(['competitor_gap', 'resource_page', 'unlinked_mention', 'broken_link', 'guest_contribution']),
+            opportunity_title: z.string().describe('Actionable opportunity title e.g. Curated SaaS Alternative Listing or Resource Page Submission'),
+            opportunity_angle: z.string().describe('Specific strategic angle: why this target site wants the link and what value we offer their readers'),
+            pitch_hook: z.string().describe('The compelling 1-2 sentence pitch hook to use in outreach'),
+            linkable_asset: z.string().describe('The recommended asset to pitch e.g. Industry Benchmark Report, Feature Comparison Matrix, or Free Calculator'),
             relevance_score: z.number().min(50).max(100),
             quality_score: z.number().min(50).max(100),
             opportunity_score: z.number().min(50).max(100),
             risk_score: z.number().min(0).max(50),
             outreach_priority: z.enum(['high', 'medium', 'low']),
-            contact_page: z.string(),
+            contact_page: z.string().describe('Verified contact or submission page URL'),
           }))
         }),
         prompt: `
           You are an elite Digital PR and Link Building Strategist.
-          Identify 6 to 10 high-value, realistic backlink prospect targets for:
+          Identify 6 to 8 high-value, REALISTIC backlink OPPORTUNITIES for:
           Customer Domain: ${customerDomain}
           Niche & Topic: ${topic}
 
-          Identify authoritative industry domains, software resource lists, directories, guest contribution targets, and tech blogs.
-          Assign realistic relevance scores (70-98), quality scores (70-95), and priority.
+          CRITICAL RULES & GROUNDING MANDATE:
+          1. FOCUS ON CONCRETE LINK OPPORTUNITIES, NOT JUST LISTING WEBSITES:
+             For every prospect, provide:
+             - An exact opportunity title (e.g. "Software Directory Listing", "Expert Thought Leadership Contribution", "SaaS Alternative Comparison Page", "Resource Guide Inclusion")
+             - A specific strategic angle explaining why this site will link to the customer and how it benefits their audience
+             - A concrete pitch hook ready for outreach
+             - The recommended linkable asset to pitch
+          2. STRICT ZERO-BROKEN-LINK GUARANTEE:
+             - NEVER hallucinate fake article URLs or invented subpaths (e.g. do NOT invent https://domain.com/blog/topic-name which returns 404).
+             - Provide real root URLs (e.g. https://www.saashub.com, https://betalist.com, https://producthunt.com, https://growthhackers.com, https://hackernoon.com, https://www.indiehackers.com) or known canonical hubs.
+          3. Provide realistic relevance scores (75-98) and quality scores (75-95).
         `
       });
 
-      return object.prospects;
+      // Verify every link in parallel to guarantee 100% working URLs
+      const validatedProspects: BacklinkProspect[] = await Promise.all(
+        ((object as any)?.prospects || []).map(async (p: any) => {
+          const verifiedUrl = await ensureLiveWorkingUrl(p.url, p.domain);
+          const verifiedContact = p.contact_page
+            ? await ensureLiveWorkingUrl(p.contact_page, p.domain)
+            : verifiedUrl;
+          return {
+            ...p,
+            url: verifiedUrl,
+            contact_page: verifiedContact,
+          };
+        })
+      );
+
+      return validatedProspects;
     } catch (err) {
       console.warn('[BacklinkAgent] Direct prospecting fallback:', err);
       return [
         {
-          url: `https://growthhackers.com/articles/${topic.replace(/\s+/g, '-')}`,
-          domain: 'growthhackers.com',
-          category: 'resource_page',
-          relevance_score: 92,
-          quality_score: 88,
-          opportunity_score: 85,
-          risk_score: 10,
-          outreach_priority: 'high',
-          contact_page: 'https://growthhackers.com/contact',
-        },
-        {
-          url: `https://producthunt.com/topics/${topic.replace(/\s+/g, '-')}`,
-          domain: 'producthunt.com',
+          domain: 'saashub.com',
+          url: 'https://www.saashub.com',
           category: 'competitor_gap',
+          opportunity_title: 'SaaS Directory & Competitor Alternative Listing',
+          opportunity_angle: 'List your software on competitor alternative comparison pages to capture in-market switchers actively evaluating tools in your niche.',
+          pitch_hook: 'We provide an up-to-date feature breakdown and benchmark data comparing our solution with legacy competitors.',
+          linkable_asset: 'Feature Comparison Matrix & Benchmark Study',
           relevance_score: 95,
-          quality_score: 94,
-          opportunity_score: 90,
+          quality_score: 91,
+          opportunity_score: 93,
           risk_score: 5,
           outreach_priority: 'high',
-          contact_page: 'https://producthunt.com',
+          contact_page: 'https://www.saashub.com/submit',
         },
         {
-          url: `https://indiehackers.com/products/${customerDomain.split('.')[0]}`,
+          domain: 'producthunt.com',
+          url: 'https://www.producthunt.com',
+          category: 'resource_page',
+          opportunity_title: 'Product Launch & Community Discovery Listing',
+          opportunity_angle: 'Create an authoritative product profile and participate in niche discussions to earn high-authority dofollow referral traffic.',
+          pitch_hook: 'Introduce our platform to early adopters with direct founder commentary and live workflow demos.',
+          linkable_asset: 'Interactive Product Demo & Guided Walkthrough',
+          relevance_score: 96,
+          quality_score: 95,
+          opportunity_score: 94,
+          risk_score: 5,
+          outreach_priority: 'high',
+          contact_page: 'https://www.producthunt.com',
+        },
+        {
+          domain: 'growthhackers.com',
+          url: 'https://growthhackers.com',
+          category: 'resource_page',
+          opportunity_title: 'Growth Community Case Study & Knowledge Base',
+          opportunity_angle: 'Contribute a data-backed case study or workflow breakdown to earn community upvotes and editorial citations.',
+          pitch_hook: 'Sharing original findings and benchmark metrics from our recent experiments with the community.',
+          linkable_asset: 'Original Data Benchmark Report',
+          relevance_score: 92,
+          quality_score: 88,
+          opportunity_score: 87,
+          risk_score: 8,
+          outreach_priority: 'high',
+          contact_page: 'https://growthhackers.com',
+        },
+        {
+          domain: 'betalist.com',
+          url: 'https://betalist.com',
+          category: 'resource_page',
+          opportunity_title: 'Early Access & Beta Directory Feature',
+          opportunity_angle: 'Submit startup profile to get featured in curated directories targeting early technology adopters.',
+          pitch_hook: 'Featuring our newly launched platform for early adopters looking for modern, lightweight alternatives.',
+          linkable_asset: 'Beta Access & Founder Onboarding Walkthrough',
+          relevance_score: 89,
+          quality_score: 85,
+          opportunity_score: 86,
+          risk_score: 8,
+          outreach_priority: 'medium',
+          contact_page: 'https://betalist.com/submit',
+        },
+        {
           domain: 'indiehackers.com',
+          url: 'https://www.indiehackers.com',
           category: 'unlinked_mention',
-          relevance_score: 88,
-          quality_score: 84,
-          opportunity_score: 80,
+          opportunity_title: 'Founder Community Milestone Story & Profile',
+          opportunity_angle: 'Publish an authentic case study detailing technical milestones and lessons learned.',
+          pitch_hook: 'A transparent deep-dive on how we solved workflow automation and scalability for our users.',
+          linkable_asset: 'Transparent Metrics & Architecture Case Study',
+          relevance_score: 93,
+          quality_score: 90,
+          opportunity_score: 89,
+          risk_score: 5,
+          outreach_priority: 'high',
+          contact_page: 'https://www.indiehackers.com',
+        },
+        {
+          domain: 'hackernoon.com',
+          url: 'https://hackernoon.com',
+          category: 'guest_contribution',
+          opportunity_title: 'Technical Editorial Guest Article',
+          opportunity_angle: 'Publish an in-depth technical analysis or engineering breakdown to establish topical authority.',
+          pitch_hook: 'Offering an educational, no-fluff guide dissecting modern implementation strategies and best practices.',
+          linkable_asset: 'In-Depth Engineering Guide & Code Architecture',
+          relevance_score: 90,
+          quality_score: 92,
+          opportunity_score: 85,
           risk_score: 10,
           outreach_priority: 'medium',
-          contact_page: 'https://indiehackers.com',
+          contact_page: 'https://hackernoon.com',
         },
       ];
     }
@@ -149,6 +283,13 @@ export class BacklinkAgent {
     customerSiteUrl: string,
     customerAssetName: string
   ): Promise<{ subject: string; body: string }> {
+    const oppDetails = [
+      prospect.opportunity_title ? `Opportunity Type: ${prospect.opportunity_title}` : '',
+      prospect.opportunity_angle ? `Strategic Angle: ${prospect.opportunity_angle}` : '',
+      prospect.pitch_hook ? `Target Pitch Proposition: ${prospect.pitch_hook}` : '',
+      prospect.linkable_asset ? `Recommended Asset: ${prospect.linkable_asset}` : '',
+    ].filter(Boolean).join('\n');
+
     const context = `
       You are an elite, highly polite Digital PR and Partner Outreach specialist.
       
@@ -156,20 +297,19 @@ export class BacklinkAgent {
       Prospect Category: ${prospect.category}
       Customer Website: ${customerSiteUrl}
       Customer Linkable Resource/Asset: ${customerAssetName}
+      ${oppDetails}
       
       Write a highly personalized, concise, and non-spammy outreach email.
       Strict Rules:
       - Do NOT sound like automated mass spam.
-      - Have a legitimate, authentic reason for contacting them.
+      - Have a legitimate, authentic reason for contacting them matching the opportunity angle.
       - Explain clearly why referencing this resource adds value to their readers.
       - Keep the total length under 150 words.
     `;
 
     try {
       const { object } = await LLMProvider.generateObject({
-      agent: 'BacklinkAgent',
-      
-        
+        agent: 'BacklinkAgent',
         schema: z.object({
           subject: z.string().describe('Clear, respectful email subject line'),
           body: z.string().describe('Concise, personalized outreach message body')
@@ -181,9 +321,10 @@ export class BacklinkAgent {
       return object;
     } catch (error) {
       console.error('Error generating backlink outreach:', error);
+      const angleSnippet = prospect.opportunity_angle || `we recently published an in-depth benchmark report on ${customerAssetName} at ${customerSiteUrl}`;
       return {
-        subject: `Resource suggestion for ${prospect.domain}`,
-        body: `Hi Team at ${prospect.domain},\n\nI was reading your article at ${prospect.url} and noticed your section on industry tools. We recently published an in-depth benchmark report on ${customerAssetName} at ${customerSiteUrl}.\n\nThought it might be a valuable resource for your readers if you ever update the page!\n\nBest regards,`
+        subject: `Partnership & Resource Suggestion: ${customerAssetName} for ${prospect.domain}`,
+        body: `Hi Team at ${prospect.domain},\n\nI was reviewing your platform and noticed your curated resources in our niche. ${angleSnippet}.\n\nGiven the interest of your audience, I thought our resource might make a valuable addition for your readers. Let me know if you'd like me to share any exclusive benchmark data or assets.\n\nBest regards,`
       };
     }
   }

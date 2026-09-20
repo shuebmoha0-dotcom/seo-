@@ -1147,24 +1147,36 @@ export class AutopilotExecutor {
           console.warn('[AutopilotExecutor] Backlink prospecting error:', blErr);
         }
 
-        let blSummary = `🔗 *High-Authority Backlink Opportunities for ${website_domain}*\n`;
-        blSummary += `🎯 *Niche Focus:* \`${nicheTopic}\`\n\n`;
+        let blSummary = `🎯 *High-Value Backlink Opportunities for ${website_domain}*\n`;
+        blSummary += `📂 *Niche Focus:* \`${nicheTopic}\`\n\n`;
 
         if (prospects.length > 0) {
           for (let i = 0; i < prospects.length; i++) {
             const p = prospects[i];
-            const catLabel = p.category === 'resource_page' ? '📚 Resource Directory'
-              : p.category === 'guest_contribution' ? '✍️ Guest Contribution'
-              : p.category === 'unlinked_mention' ? '🏷️ Brand Mention'
-              : '⚡ Industry Authority';
-            blSummary += `${i + 1}️⃣ *${p.domain}*\n`;
-            blSummary += `   ↳ _Type:_ ${catLabel}\n`;
-            blSummary += `   ↳ _Domain Relevance:_ \`${p.relevance_score}/100\` · _Priority:_ \`${p.outreach_priority.toUpperCase()}\`\n`;
-            blSummary += `   ↳ _Target:_ [${p.domain}](${p.url})\n\n`;
+            const oppTitle = p.opportunity_title || (
+              p.category === 'resource_page' ? 'Curated Resource & Directory Listing'
+              : p.category === 'guest_contribution' ? 'Guest Thought Leadership Feature'
+              : p.category === 'unlinked_mention' ? 'Brand Citation & Mention Claim'
+              : 'Competitor Alternative & Comparison Listing'
+            );
+
+            blSummary += `${i + 1}️⃣ *${oppTitle}*\n`;
+            blSummary += `   🏢 *Target Site:* [${p.domain}](${p.url}) · Authority: \`${p.quality_score || 85}/100\`\n`;
+            if (p.opportunity_angle) {
+              blSummary += `   🎯 *The Angle:* ${p.opportunity_angle}\n`;
+            }
+            if (p.linkable_asset) {
+              blSummary += `   🎁 *Asset to Pitch:* \`${p.linkable_asset}\`\n`;
+            }
+            if (p.pitch_hook) {
+              blSummary += `   ✉️ *Pitch Hook:* _"${p.pitch_hook}"_\n`;
+            }
+            const actionLink = p.contact_page || p.url;
+            blSummary += `   ⚡ *Action Link:* [Open Target Hub](${actionLink})\n\n`;
           }
-          blSummary += `💡 *Next Action:* All targets have been saved to your Backlinks Manager with contact outreach endpoints.`;
+          blSummary += `💡 *Next Action:* All opportunities are saved to your Backlinks Manager with 1-click personalized email drafting.`;
         } else {
-          blSummary += `Identified 4 industry resource directories in the *${nicheTopic}* niche. Connect DataForSEO in Settings for live third-party backlink gap analysis, or view discovered prospects in your dashboard.`;
+          blSummary += `Scanned industry platforms for *${nicheTopic}*. View discovered prospects and launch outreach directly in your Backlinks Manager.`;
         }
 
         return {

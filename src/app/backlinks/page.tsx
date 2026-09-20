@@ -257,29 +257,68 @@ export default function BacklinksPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {prospects.map((p) => (
-                      <div key={p.id} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
-                            {p.category}
-                          </span>
-                          <span className="text-xs font-mono font-semibold text-neutral-700">
-                            Score: {p.opportunity_score || 80}/100
-                          </span>
+                    {prospects.map((p) => {
+                      const targetLink = p.url || p.prospect_url || `https://${p.domain}`;
+                      const oppTitle = p.opportunity_title || (
+                        p.category === 'resource_page' ? 'Curated Resource & Directory Listing'
+                        : p.category === 'guest_contribution' ? 'Guest Thought Leadership Feature'
+                        : p.category === 'unlinked_mention' ? 'Brand Citation & Mention Claim'
+                        : p.category === 'broken_link' ? 'Broken Link Replacement Opportunity'
+                        : 'Competitor Alternative & Directory Listing'
+                      );
+                      const catLabel = p.category ? String(p.category).replace(/_/g, ' ') : 'Directory';
+
+                      return (
+                        <div key={p.id} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-3.5 hover:border-indigo-200 hover:shadow-md transition-all">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-full">
+                              {catLabel}
+                            </span>
+                            <span className="text-xs font-mono font-semibold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-lg">
+                              Score: {p.opportunity_score || p.relevance_score || 85}/100
+                            </span>
+                          </div>
+
+                          <div>
+                            <h4 className="font-bold text-sm text-neutral-900 leading-snug">{oppTitle}</h4>
+                            <a
+                              href={targetLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1 font-medium group"
+                            >
+                              <span className="truncate">{p.domain}</span>
+                              <ArrowUpRight className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                            </a>
+                          </div>
+
+                          {p.opportunity_angle && (
+                            <p className="text-xs text-neutral-600 leading-relaxed line-clamp-2 bg-neutral-50 p-2.5 rounded-xl border border-neutral-100">
+                              {p.opportunity_angle}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between pt-2 border-t border-neutral-100 text-xs">
+                            <a
+                              href={p.contact_page || targetLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-neutral-500 hover:text-neutral-800 text-[11px] font-medium flex items-center gap-1"
+                            >
+                              <span>Visit Hub</span>
+                              <ArrowUpRight className="w-3 h-3" />
+                            </a>
+                            <button
+                              onClick={() => handleDraftOutreach(p)}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-sm"
+                            >
+                              <Mail className="w-3 h-3" />
+                              <span>Draft Outreach</span>
+                            </button>
+                          </div>
                         </div>
-                        <h4 className="font-bold text-sm text-neutral-900 truncate">{p.domain}</h4>
-                        <p className="text-xs text-neutral-500 truncate">{p.url || p.prospect_url}</p>
-                        <div className="flex items-center justify-between pt-2 border-t border-neutral-100 text-xs">
-                          <button
-                            onClick={() => handleDraftOutreach(p)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors"
-                          >
-                            <Mail className="w-3 h-3" />
-                            Draft Outreach
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -3,13 +3,17 @@ import { BacklinkAgent } from '@/lib/agent/backlinkAgent';
 
 export async function POST(request: Request) {
   try {
-    const { prospect, customer_url, asset_name } = await request.json();
+    const body = await request.json();
+    const prospect = body.prospect;
+    const targetUrl = body.customer_url || body.linkTargetUrl || 'https://example.com';
+    const assetName = body.asset_name || prospect?.linkable_asset || body.siteName || 'Industry Benchmark Report';
+
     const agent = new BacklinkAgent();
 
     const draft = await agent.draftOutreach(
       prospect,
-      customer_url || 'https://my-saas-company.com',
-      asset_name || '2026 SaaS Productivity Benchmark Report'
+      targetUrl,
+      assetName
     );
 
     return NextResponse.json({ success: true, draft });
