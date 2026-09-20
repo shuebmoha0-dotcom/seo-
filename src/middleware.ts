@@ -1,5 +1,50 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isPlatformAdmin } from '@/lib/auth/admin';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PERMANENT ROUTE PROTECTION CONTRACT
+// Public routes that unauthenticated prospective clients & search engines can see.
+// Internal dashboard routes and data APIs are strictly isolated & blocked.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PUBLIC_EXACT_PAGES = new Set([
+  '/',
+  '/landing',
+  '/pricing',
+  '/blog',
+  '/login',
+  '/forgot-password',
+  '/reset-password',
+]);
+
+const PUBLIC_PAGE_PREFIXES = [
+  '/blog/', // Public articles (e.g. /blog/how-ai-agents-fix-technical-seo)
+];
+
+const PUBLIC_API_PREFIXES = [
+  '/api/auth/',
+  '/api/telegram/',
+  '/api/cron/',
+  '/api/webhooks/',
+  '/api/integrations/wordpress/plugin',
+  '/api/integrations/wordpress/outbound/',
+];
+
+function isPublicPage(pathname: string): boolean {
+  // /blog/admin is strictly an internal platform admin route
+  if (pathname.startsWith('/blog/admin')) return false;
+
+  if (PUBLIC_EXACT_PAGES.has(pathname)) return true;
+  return PUBLIC_PAGE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
+function isPublicApi(pathname: string, method: string): boolean {
+  // Public blog articles can be read by public visitors & Googlebot via GET
+  if (pathname === '/api/platform/blog' && method === 'GET') return true;
+
+  return PUBLIC_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -39,46 +84,44 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  const method = request.method;
 
-  // List of protected routes that strictly require an authenticated user
-  const protectedRoutes = [
-    '/dashboard',
-    '/autopilot',
-    '/strategy',
-    '/competitors',
-    '/opportunities',
-    '/content-planner',
-    '/on-page-seo',
-    '/internal-linking',
-    '/image-agent',
-    '/backlinks',
-    '/technical-seo',
-    '/rank-tracking',
-    '/site-explorer',
-    '/memory',
-    '/schedule',
-    '/workflows',
-    '/usage',
-    '/settings',
-    '/integrations',
-    '/onboarding',
-    '/blog/admin',
-  ];
+  // 1. API Route Protection Gate
+  if (pathname.startsWith('/api/')) {
+    if (!isPublicApi(pathname, method) && !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized: You must be authenticated to access this resource.' },
+        { status: 401 }
+      );
+    }
+    return response;
+  }
 
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    pathname === route || pathname.startsWith(`${route}/`)
-  );
+  // 2. Admin Portal Protection (/blog/admin)
+  if (pathname.startsWith('/blog/admin')) {
+    if (!user) {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirectTo', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
 
-  // If visiting an authenticated tool without logging in, redirect to login
-  if (isProtectedRoute && !user) {
+    const role = user.user_metadata?.role || (user as any).role;
+    if (!isPlatformAdmin(user.email, role)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return response;
+  }
+
+  // 3. Logged-in user visiting /login -> redirect directly to dashboard
+  if (user && pathname === '/login') {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+
+  // 4. Page Protection Gate: If route is not public and user is not logged in -> redirect to /login
+  if (!isPublicPage(pathname) && !user) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  // If user is already logged in and visits /login, redirect to /dashboard
-  if (user && pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
   return response;
@@ -87,12 +130,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public files with image extensions
+     * Match all paths except static files, images, icons, and fonts
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf)$).*)',
   ],
 };

@@ -81,6 +81,9 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           setCurrentWebsiteState(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("seo_active_website_id");
+          }
         }
       }
     } catch (err) {
@@ -92,6 +95,30 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshWebsites();
+
+    // Listen to Supabase auth state changes to isolate user sessions
+    try {
+      const { createClient } = require("@/lib/supabase/client");
+      const supabase = createClient();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+        if (event === "SIGNED_OUT") {
+          setWebsites([]);
+          setCurrentWebsiteState(null);
+          setPlanLimit(null);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("seo_active_website_id");
+          }
+        } else if (event === "SIGNED_IN" || event === "USER_UPDATED") {
+          refreshWebsites();
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    } catch {
+      // Fallback
+    }
   }, []);
 
   const setCurrentWebsite = (site: WebsiteData) => {

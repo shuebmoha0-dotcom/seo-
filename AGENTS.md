@@ -67,6 +67,20 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Empirical Scoring & Word Counts**:
   - Word counts, reading times, and SEO scores must be measured directly from the actual generated article body. Never hardcode fake scores (e.g. 95/78) or guess word counts.
 
+## 10. STRICT MULTI-TENANT PRIVACY & ZERO CROSS-ACCOUNT LEAKAGE (AIRTIGHT BOUNDARY CONTRACT)
+- **MANDATE**: Cross-tenant data leakage is a critical, zero-tolerance security violation. Every user's websites, drafts, keywords, credentials, and performance metrics are strictly isolated to their authenticated `user_id`.
+- **PROHIBITIONS**:
+  - NEVER implement fallbacks that query or return "all registered websites" or "any active website in the database" when a user is unauthenticated or has 0 websites connected. If `user_id` is missing or has no websites, return an empty array `[]`. Never hand another user's website to any visitor.
+  - NEVER import or render authenticated application components (`<Sidebar />`, `<WebsiteSwitcher />`, `<DashboardHeader />`, internal tools) on public marketing pages (`/`, `/pricing`, `/blog`, `/login`, etc.). Public pages must remain 100% static/public marketing pages with public navigation only.
+  - NEVER hardcode user names, sample accounts ("Alex", "Alex Johnson"), or placeholder credentials in components. User identities must always resolve dynamically from the active Supabase session.
+- **Edge Middleware Enforcement**:
+  - All protected dashboard pages and internal API endpoints MUST be enforced at the Edge in `src/middleware.ts`.
+  - Unauthenticated requests to internal pages must immediately redirect to `/login`.
+  - Unauthenticated requests to internal data APIs must immediately return `401 Unauthorized`.
+- **Database RLS Guarantee**:
+  - Every table must enforce Postgres Row Level Security (RLS) scoped to `user_id = auth.uid()` (directly or via `website_id IN (SELECT id FROM public.websites WHERE user_id = auth.uid())`).
+
+
 
 
 
