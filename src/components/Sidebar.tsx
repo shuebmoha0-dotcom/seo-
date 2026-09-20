@@ -23,6 +23,7 @@ import {
   Clock,
   Users,
   Network,
+  BookOpen,
 } from "lucide-react";
 
 import { WebsiteSwitcher } from "@/components/WebsiteSwitcher";
@@ -38,6 +39,7 @@ export function Sidebar() {
     { name: "Competitors", href: "/competitors", icon: Users, badge: "AI" },
     { name: "Opportunities", href: "/opportunities", icon: Zap, badge: "8" },
     { name: "Content Planner", href: "/content-planner", icon: FileText },
+    { name: "Platform Blog", href: "/blog/admin", icon: BookOpen, badge: "Blog" },
     { name: "On-Page SEO", href: "/on-page-seo", icon: Search, badge: "AI" },
     { name: "Internal Links", href: "/internal-linking", icon: LinkIcon, badge: "AI" },
     { name: "Image Agent", href: "/image-agent", icon: ImageIcon, badge: "AI" },

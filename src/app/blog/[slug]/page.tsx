@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { BlogNavbar } from "@/components/blog/BlogNavbar";
 import { BlogFooter } from "@/components/blog/BlogFooter";
-import { getBlogPostBySlug, getAllBlogPosts, getRelatedPosts } from "@/lib/blog/posts";
+import { getBlogPostBySlug, getAllBlogPosts, getRelatedPosts, getLiveBlogPostBySlug } from "@/lib/blog/posts";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -26,7 +26,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
-  const post = getBlogPostBySlug(slug);
+  const post = await getLiveBlogPostBySlug(slug);
 
   if (!post) {
     return {
@@ -74,7 +74,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function BlogPostDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const post = getBlogPostBySlug(slug);
+  const post = await getLiveBlogPostBySlug(slug);
 
   if (!post) {
     notFound();

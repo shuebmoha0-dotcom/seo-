@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Search, Sparkles, Clock, Calendar, ArrowRight, BookOpen, Layers } from "lucide-react";
@@ -14,13 +14,51 @@ const CATEGORIES = ["All", "AI Agents", "Content Strategy", "Technical SEO", "Gr
 export default function BlogIndexPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [posts, setPosts] = useState<BlogPost[]>(() => getAllBlogPosts());
 
-  const allPosts = useMemo(() => getAllBlogPosts(), []);
-  const featuredPost = useMemo(() => getFeaturedBlogPost(), []);
+  useEffect(() => {
+    fetch("/api/platform/blog")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.posts && Array.isArray(data.posts) && data.posts.length > 0) {
+          const published = data.posts
+            .filter((p: any) => p.status === "published")
+            .map((d: any) => ({
+              slug: d.slug,
+              title: d.title,
+              excerpt: d.excerpt,
+              content: d.content,
+              category: d.category,
+              author: {
+                name: d.author_name || "Editorial Team",
+                role: d.author_role || "SEO Intelligence & Engineering",
+                avatarUrl: d.author_avatar,
+              },
+              publishedAt: d.published_at ? d.published_at.slice(0, 10) : "2026-03-01",
+              updatedAt: d.updated_at,
+              readingTime: d.reading_time || "5 min read",
+              coverImage: d.cover_image,
+              coverImageAlt: d.cover_image_alt || d.title,
+              metaTitle: d.meta_title || d.title,
+              metaDescription: d.meta_description || d.excerpt,
+              keywords: d.keywords || [],
+              featured: Boolean(d.featured),
+            }));
+          if (published.length > 0) {
+            setPosts(published);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const featuredPost = useMemo(() => {
+    return posts.find((p) => p.featured) || posts[0];
+  }, [posts]);
 
   // Filter posts based on category and search query
   const filteredPosts = useMemo(() => {
-    return allPosts.filter((post) => {
+    return posts.filter((post) => {
       const matchesCategory =
         selectedCategory === "All" || post.category === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
@@ -31,7 +69,7 @@ export default function BlogIndexPage() {
         post.keywords.some((k) => k.toLowerCase().includes(q));
       return matchesCategory && matchesSearch;
     });
-  }, [allPosts, selectedCategory, searchQuery]);
+  }, [posts, selectedCategory, searchQuery]);
 
   return (
     <div className="min-h-screen bg-white text-neutral-900 selection:bg-indigo-500/20">

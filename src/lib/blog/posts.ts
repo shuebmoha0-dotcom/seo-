@@ -441,3 +441,93 @@ export function getRelatedPosts(currentSlug: string, category: string, limit = 3
     })
     .slice(0, limit);
 }
+
+/**
+ * Fetch all published blog posts dynamically from Supabase platform_blog_posts table,
+ * falling back seamlessly to built-in cornerstone articles if database is unavailable.
+ */
+export async function getLiveBlogPosts(): Promise<BlogPost[]> {
+  try {
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+    const { data: dbPosts, error } = await supabase
+      .from('platform_blog_posts')
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false });
+
+    if (error || !dbPosts || dbPosts.length === 0) {
+      return getAllBlogPosts();
+    }
+
+    return dbPosts.map((d: any) => ({
+      slug: d.slug,
+      title: d.title,
+      excerpt: d.excerpt,
+      content: d.content,
+      category: d.category as any,
+      author: {
+        name: d.author_name || 'Editorial Team',
+        role: d.author_role || 'SEO Intelligence & Engineering',
+        avatarUrl: d.author_avatar,
+      },
+      publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
+      updatedAt: d.updated_at,
+      readingTime: d.reading_time || '5 min read',
+      coverImage: d.cover_image,
+      coverImageAlt: d.cover_image_alt || d.title,
+      metaTitle: d.meta_title || d.title,
+      metaDescription: d.meta_description || d.excerpt,
+      keywords: d.keywords || [],
+      featured: Boolean(d.featured),
+    }));
+  } catch (err) {
+    console.error('[BlogPosts] Error loading from db, using fallback:', err);
+    return getAllBlogPosts();
+  }
+}
+
+/**
+ * Fetch a single blog post by slug dynamically from Supabase
+ */
+export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | undefined> {
+  try {
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
+    const { data: d, error } = await supabase
+      .from('platform_blog_posts')
+      .select('*')
+      .eq('slug', slug)
+      .eq('status', 'published')
+      .single();
+
+    if (error || !d) {
+      return getBlogPostBySlug(slug);
+    }
+
+    return {
+      slug: d.slug,
+      title: d.title,
+      excerpt: d.excerpt,
+      content: d.content,
+      category: d.category as any,
+      author: {
+        name: d.author_name || 'Editorial Team',
+        role: d.author_role || 'SEO Intelligence & Engineering',
+        avatarUrl: d.author_avatar,
+      },
+      publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
+      updatedAt: d.updated_at,
+      readingTime: d.reading_time || '5 min read',
+      coverImage: d.cover_image,
+      coverImageAlt: d.cover_image_alt || d.title,
+      metaTitle: d.meta_title || d.title,
+      metaDescription: d.meta_description || d.excerpt,
+      keywords: d.keywords || [],
+      featured: Boolean(d.featured),
+    };
+  } catch (err) {
+    return getBlogPostBySlug(slug);
+  }
+}
+
