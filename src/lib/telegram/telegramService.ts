@@ -22,7 +22,7 @@ export class TelegramService {
   private isConfigured: boolean;
 
   constructor(token?: string) {
-    this.token = token || process.env.TELEGRAM_BOT_TOKEN || '8681521493:AAGWZwCNpz2_gTYnMBFm613psNL3dbijm0w';
+    this.token = token || process.env.TELEGRAM_BOT_TOKEN || '8681521493:AAF-fgnzqJmYpjfPn7Tghb0ywbtw3pnc2FU';
     this.isConfigured = !!(this.token && !this.token.includes('your-') && this.token.trim().length > 15);
   }
 
