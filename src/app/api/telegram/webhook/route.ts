@@ -1,7 +1,7 @@
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
@@ -29,7 +29,7 @@ function isDuplicateUpdate(updateId?: number): boolean {
 }
 
 function safeBackground(fn: () => Promise<void>) {
-  setImmediate(async () => {
+  after(async () => {
     try {
       await fn();
     } catch (err: any) {
@@ -305,36 +305,45 @@ export async function POST(request: Request) {
             .maybeSingle();
           domain = ws?.domain || '';
 
-          const executor = new AutopilotExecutor();
-          await executor.executeImmediateAction({
-            instruction: {
-              intent_type: 'immediate_action',
-              action_type: 'generate_images',
-              goal: `Recreate images for ${targetDraft.working_title}`,
-              topic: targetDraft.working_title,
-              summary: `Recreate images for ${targetDraft.working_title}`,
-            },
-            website_id: targetDraft.website_id,
-            website_domain: domain,
-            chat_id: chatId,
-            draft_id: executionId,
+          after(async () => {
+            try {
+              const executor = new AutopilotExecutor();
+              await executor.executeImmediateAction({
+                instruction: {
+                  intent_type: 'immediate_action',
+                  action_type: 'generate_images',
+                  goal: `Recreate images for ${targetDraft.working_title}`,
+                  topic: targetDraft.working_title,
+                  summary: `Recreate images for ${targetDraft.working_title}`,
+                },
+                website_id: targetDraft.website_id,
+                website_domain: domain,
+                chat_id: chatId,
+                draft_id: executionId,
+              });
+
+              const { data: refreshedDraft } = await supabase
+                .from('content_drafts')
+                .select('id, working_title, word_count, rankmath_score')
+                .eq('id', executionId)
+                .maybeSingle();
+
+              if (chatId) {
+                await telegram.sendApprovalPrompt(chatId, {
+                  executionId: refreshedDraft?.id || executionId,
+                  taskTitle: refreshedDraft?.working_title || targetDraft.working_title,
+                  websiteDomain: domain,
+                  score: refreshedDraft?.rankmath_score || 85,
+                  wordCount: refreshedDraft?.word_count || 1400,
+                });
+              }
+            } catch (err: any) {
+              console.error('[recreate_images after error]:', err);
+              if (chatId) {
+                await telegram.sendMessage(chatId, `❌ *Failed to recreate images:*\n${err?.message || 'Unexpected error'}`);
+              }
+            }
           });
-
-          const { data: refreshedDraft } = await supabase
-            .from('content_drafts')
-            .select('id, working_title, word_count, rankmath_score')
-            .eq('id', executionId)
-            .maybeSingle();
-
-          if (chatId) {
-            await telegram.sendApprovalPrompt(chatId, {
-              executionId: refreshedDraft?.id || executionId,
-              taskTitle: refreshedDraft?.working_title || targetDraft.working_title,
-              websiteDomain: domain,
-              score: refreshedDraft?.rankmath_score || 85,
-              wordCount: refreshedDraft?.word_count || 1400,
-            });
-          }
         }
       } else if (action === 'edit_article' && executionId) {
         const { data: targetDraft } = await supabase
@@ -621,108 +630,116 @@ Your agent will process the request in the background and ping you when finished
           { parse_mode: 'Markdown' }
         );
 
-        // A. If recurring schedule requested, activate in database
-        if (isDailySchedule) {
+        after(async () => {
           try {
-            await supabase.from('tasks').upsert({
-              project_id: currentSite.project_id,
-              user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-              name: `Daily SEO Scan & Audit for ${currentSite.domain}`,
-              natural_language_instruction: taskPrompt,
-              status: 'active',
-              schedule_type: 'daily',
-              schedule_config: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
-              timezone: 'UTC',
-              next_run_at: new Date(Date.now() + 86400000).toISOString(),
-            });
+            // A. If recurring schedule requested, activate in database
+            if (isDailySchedule) {
+              try {
+                await supabase.from('tasks').upsert({
+                  project_id: currentSite.project_id,
+                  user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+                  name: `Daily SEO Scan & Audit for ${currentSite.domain}`,
+                  natural_language_instruction: taskPrompt,
+                  status: 'active',
+                  schedule_type: 'daily',
+                  schedule_config: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+                  timezone: 'UTC',
+                  next_run_at: new Date(Date.now() + 86400000).toISOString(),
+                });
 
-            await supabase.from('scheduled_agent_configs').upsert({
-              website_id: currentSite.id,
-              frequency: 'daily',
-              schedule_time: '09:00',
-              status: 'active',
-              next_run_at: new Date(Date.now() + 86400000).toISOString(),
-              notify_on_run_complete: true,
-              notify_on_opportunity: true
-            });
-          } catch (e) { }
-        }
+                await supabase.from('scheduled_agent_configs').upsert({
+                  website_id: currentSite.id,
+                  frequency: 'daily',
+                  schedule_time: '09:00',
+                  status: 'active',
+                  next_run_at: new Date(Date.now() + 86400000).toISOString(),
+                  notify_on_run_complete: true,
+                  notify_on_opportunity: true
+                });
+              } catch (e) { }
+            }
 
-        // B. Run live website crawl immediately using WebsiteCrawler
-        const crawler = new WebsiteCrawler();
-        const targetUrl = currentSite.url || `https://${currentSite.domain}`;
-        const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
+            // B. Run live website crawl immediately using WebsiteCrawler
+            const crawler = new WebsiteCrawler();
+            const targetUrl = currentSite.url || `https://${currentSite.domain}`;
+            const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
 
-        // Analyze key signals
-        const titleLength = crawlData.title?.length || 0;
-        const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
-        const h1Count = crawlData.h1.length;
-        const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
-        const metaLength = crawlData.meta_description?.length || 0;
+            // Analyze key signals
+            const titleLength = crawlData.title?.length || 0;
+            const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
+            const h1Count = crawlData.h1.length;
+            const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
+            const metaLength = crawlData.meta_description?.length || 0;
 
-        let reportLines = [
-          `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
-          '━━━━━━━━━━━━━━━━━━━━━',
-        ];
+            let reportLines = [
+              `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
+              '━━━━━━━━━━━━━━━━━━━━━',
+            ];
 
-        if (isDailySchedule) {
-          reportLines.push(
-            '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
-            'Your site will now be scanned and reported every morning automatically!\n'
-          );
-        }
+            if (isDailySchedule) {
+              reportLines.push(
+                '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
+                'Your site will now be scanned and reported every morning automatically!\n'
+              );
+            }
 
-        reportLines.push(
-          '🔍 *Live Site Scan Results:*',
-          `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
-          `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
-          `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
-          `• *Images:* ${crawlData.images.length} analyzed`
-        );
+            reportLines.push(
+              '🔍 *Live Site Scan Results:*',
+              `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
+              `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
+              `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
+              `• *Images:* ${crawlData.images.length} analyzed`
+            );
 
-        reportLines.push('\n⚠️ *On-Page Audit Findings:*');
+            reportLines.push('\n⚠️ *On-Page Audit Findings:*');
 
-        if (isWastedH1) {
-          reportLines.push(
-            `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
-            `   • Current H1: \`"${crawlData.h1[0]}"\``,
-            `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
-            `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
-          );
-        } else if (h1Count === 0) {
-          reportLines.push(
-            `\n1️⃣ *Missing H1 Tag:*`,
-            `   • *Impact:* No primary H1 tag detected on the page.`,
-            `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
-          );
-        } else {
-          reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
-        }
+            if (isWastedH1) {
+              reportLines.push(
+                `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
+                `   • Current H1: \`"${crawlData.h1[0]}"\``,
+                `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
+                `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
+              );
+            } else if (h1Count === 0) {
+              reportLines.push(
+                `\n1️⃣ *Missing H1 Tag:*`,
+                `   • *Impact:* No primary H1 tag detected on the page.`,
+                `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
+              );
+            } else {
+              reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
+            }
 
-        if (isGenericTitle) {
-          reportLines.push(
-            `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
-            `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
-            `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
-          );
-        } else {
-          reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
-        }
+            if (isGenericTitle) {
+              reportLines.push(
+                `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
+                `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
+                `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
+              );
+            } else {
+              reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
+            }
 
-        if (metaLength < 70) {
-          reportLines.push(
-            `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
-          );
-        } else {
-          reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
-        }
+            if (metaLength < 70) {
+              reportLines.push(
+                `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
+              );
+            } else {
+              reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
+            }
 
-        reportLines.push(
-          '\n━━━━━━━━━━━━━━━━━━━━━',
-          '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
-        );
+            reportLines.push(
+              '\n━━━━━━━━━━━━━━━━━━━━━',
+              '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
+            );
 
-        await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
+            await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
+          } catch (crawlErr: any) {
+            console.error('[Crawl error in after()]:', crawlErr);
+            await telegram.sendMessage(chatId, `⚠️ *Crawl Notice:* Could not complete live crawl: ${crawlErr?.message || 'Error occurred'}`);
+          }
+        });
+
         return NextResponse.json({ ok: true });
       }
 
@@ -966,91 +983,90 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         );
       }
 
-      const executor = new AutopilotExecutor();
-      const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
-        setTimeout(() => resolve({ isTimeout: true }), 54000)
-      );
+      after(async () => {
+        try {
+          const executor = new AutopilotExecutor();
+          const execResult = await executor.executeImmediateAction({
+            instruction: parsed,
+            website_id: currentSite.id,
+            website_domain: currentSite.domain,
+            website_url: currentSite.url || `https://${currentSite.domain}`,
+            project_id: currentSite.project_id,
+            user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+            sync: true,
+            chat_id: chatId,
+            draft_id: activeEditingDraftId,
+            siteInventory: sharedInventory || undefined,
+          });
 
-      const execResult = await Promise.race([
-        executor.executeImmediateAction({
-          instruction: parsed,
-          website_id: currentSite.id,
-          website_domain: currentSite.domain,
-          website_url: currentSite.url || `https://${currentSite.domain}`,
-          project_id: currentSite.project_id,
-          user_id: currentSite.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
-          sync: true,
-          chat_id: chatId,
-          draft_id: activeEditingDraftId,
-          siteInventory: sharedInventory || undefined,
-        }),
-        timeoutPromise
-      ]);
+          if (execResult.success) {
+            if (parsed.action_type === 'seo_diagnostic') {
+              await telegram.sendMessage(
+                chatId,
+                execResult.summary,
+                { parse_mode: 'Markdown' }
+              );
+            } else if (parsed.action_type === 'generate_images') {
+              await telegram.sendMessage(
+                chatId,
+                `${execResult.summary}${execResult.link_url ? `\n\n[Open Article](${execResult.link_url})` : ''}`,
+                { parse_mode: 'Markdown' }
+              );
+            } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
+              const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
+                `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
+              ).join('\n\n');
 
-      if ('isTimeout' in execResult) {
-        await telegram.sendMessage(
-          chatId,
-          `⏳ *Drafting in progress...*\n\nYour article is being created in your [Content Planner](/content-planner). You will receive an approval card as soon as it is ready.`
-        );
-        return NextResponse.json({ ok: true });
-      }
+              await telegram.sendMessage(
+                chatId,
+                `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
+                { parse_mode: 'Markdown' }
+              );
+            } else if (parsed.action_type === 'write_article') {
+              // write_article automatically dispatches the interactive [Approve & Publish] card via sendApprovalPrompt!
+            } else {
+              const isProcessing = execResult.summary.includes('background') || execResult.summary.includes('started') || execResult.summary.includes('running');
+              await telegram.sendMessage(
+                chatId,
+                `${isProcessing ? '⚙️ *Task Processing...*' : '✅ *Task Completed!*'}\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
+                { parse_mode: 'Markdown' }
+              );
+            }
+          } else {
+            await telegram.sendMessage(
+              chatId,
+              `⚠️ *Task Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
+              { parse_mode: 'Markdown' }
+            );
+          }
 
-      if (execResult.success) {
-        if (parsed.action_type === 'seo_diagnostic') {
+          // Save agent response to memory
+          try {
+            await supabase.from('project_memory').insert({
+              website_id: currentSite.id,
+              category: 'workflow',
+              content: execResult.summary,
+              source: 'agent_response',
+              source_detail: chatId,
+              confidence: 'high'
+            });
+          } catch(e) {}
+
+        } catch (taskErr: any) {
+          console.error('[Telegram Task Exec Error in after()]:', taskErr);
           await telegram.sendMessage(
             chatId,
-            execResult.summary,
-            { parse_mode: 'Markdown' }
-          );
-        } else if (parsed.action_type === 'generate_images') {
-          await telegram.sendMessage(
-            chatId,
-            `${execResult.summary}${execResult.link_url ? `\n\n[Open Article](${execResult.link_url})` : ''}`,
-            { parse_mode: 'Markdown' }
-          );
-        } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
-          const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
-            `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
-          ).join('\n\n');
-
-          await telegram.sendMessage(
-            chatId,
-            `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
-            { parse_mode: 'Markdown' }
-          );
-        } else {
-          const isProcessing = execResult.summary.includes('background') || execResult.summary.includes('started') || execResult.summary.includes('running');
-          await telegram.sendMessage(
-            chatId,
-            `${isProcessing ? '⚙️ *Task Processing...*' : '✅ *Task Completed!*'}\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
+            `❌ *Task Execution Notice:*\n${taskErr?.message || 'An unexpected error occurred during execution.'}`,
             { parse_mode: 'Markdown' }
           );
         }
-      } else {
-        await telegram.sendMessage(
-          chatId,
-          `⚠️ *Task Notice:*\n${execResult.summary || 'Could not complete task fully.'}`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-
-      // Save agent response to memory
-      try {
-        await supabase.from('project_memory').insert({
-          website_id: currentSite.id,
-          category: 'workflow',
-          content: execResult.summary,
-          source: 'agent_response',
-          source_detail: chatId,
-          confidence: 'high'
-        });
-      } catch(e) {}
+      });
 
     } catch (taskErr: any) {
-      console.error('[Telegram Task Exec Error]:', taskErr);
+      console.error('[Telegram Task Dispatch Error]:', taskErr);
       await telegram.sendMessage(
         chatId,
-        `❌ *Task Execution Notice:*\n${taskErr.message || 'An unexpected error occurred during execution.'}`,
+        `❌ *Task Execution Notice:*\n${taskErr?.message || 'An unexpected error occurred during dispatch.'}`,
         { parse_mode: 'Markdown' }
       );
     }

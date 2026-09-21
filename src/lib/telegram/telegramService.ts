@@ -53,7 +53,7 @@ export class TelegramService {
   /**
    * Get current Webhook status from Telegram API
    */
-  async getWebhookInfo(): Promise<{ url: string; pending_update_count: number; last_error_message?: string } | null> {
+  async getWebhookInfo(): Promise<{ url: string; pending_update_count: number; last_error_message?: string; last_error_date?: number } | null> {
     if (!this.isConfigured) return null;
     try {
       const res = await fetch(`${this.apiUrl}/getWebhookInfo`);
@@ -93,15 +93,16 @@ export class TelegramService {
    * Self-healing watchdog: verifies webhook is pointed to our production URL.
    * If hijacked, cleared, or pointing to a rogue third-party server, instantly restores it.
    */
-  async ensureWebhook(expectedUrl?: string): Promise<{ restored: boolean; currentUrl: string }> {
+  async ensureWebhook(expectedUrl?: string): Promise<{ restored: boolean; currentUrl: string; lastError?: string }> {
     const targetUrl = expectedUrl || `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app').replace(/\/+$/, '')}/api/telegram/webhook`;
     const info = await this.getWebhookInfo();
     const currentUrl = info?.url || '';
+    const hasError = !!info?.last_error_message;
 
-    if (currentUrl !== targetUrl) {
-      console.warn(`[TelegramService] Webhook drift/hijack detected (current: "${currentUrl}", expected: "${targetUrl}"). Self-healing immediately...`);
+    if (currentUrl !== targetUrl || hasError) {
+      console.warn(`[TelegramService] Webhook maintenance required (current: "${currentUrl}", target: "${targetUrl}", lastError: "${info?.last_error_message || 'none'}"). Self-healing immediately...`);
       const ok = await this.setWebhook(targetUrl);
-      return { restored: ok, currentUrl: ok ? targetUrl : currentUrl };
+      return { restored: ok, currentUrl: ok ? targetUrl : currentUrl, lastError: info?.last_error_message };
     }
     return { restored: false, currentUrl };
   }

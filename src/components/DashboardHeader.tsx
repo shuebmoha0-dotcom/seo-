@@ -51,6 +51,18 @@ export function DashboardHeader() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Telegram Bot Self-Healing Watchdog Heartbeat
+  useEffect(() => {
+    const pingWatchdog = () => {
+      fetch('/api/telegram/health').catch(() => {});
+    };
+    // Ping on load
+    pingWatchdog();
+    // Ping every 3 minutes while dashboard is open
+    const interval = setInterval(pingWatchdog, 3 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Format date range (last 30 days up to today)
   const now = new Date();
   const thirtyDaysAgo = new Date();
