@@ -99,7 +99,7 @@ export function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="space-y-0.5">
+        <nav className="space-y-1 max-h-[calc(100vh-270px)] overflow-y-auto pr-1">
           {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href === "/dashboard" && pathname === "/");
             const Icon = item.icon;
@@ -107,21 +107,21 @@ export function Sidebar() {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-[0_2px_8px_rgba(79,70,229,0.25)]"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+                    ? "bg-indigo-50/90 text-indigo-700 font-semibold border-l-2 border-indigo-600 pl-2.5 shadow-xs"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 font-medium"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-neutral-400"}`} />
+                <div className="flex items-center gap-2.5">
+                  <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-neutral-400"}`} />
                   <span>{item.name}</span>
                 </div>
                 {item.badge && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                  <span className={`text-[10px] px-2 py-0.2 rounded-full font-semibold border ${
                     isActive
-                      ? "bg-white/20 text-white border-white/30"
-                      : "bg-indigo-50 text-indigo-600 border-indigo-200"
+                      ? "bg-indigo-100/70 text-indigo-700 border-indigo-200"
+                      : "bg-neutral-100 text-neutral-600 border-neutral-200/80"
                   }`}>
                     {item.badge}
                   </span>
