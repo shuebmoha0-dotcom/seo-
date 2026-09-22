@@ -75,9 +75,10 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
         if (matched) {
           setCurrentWebsiteState(matched);
         } else if (siteList.length > 0) {
-          setCurrentWebsiteState(siteList[0]);
+          const preferredSite = siteList.find(s => s.integrations && s.integrations.some(i => i.status === 'connected')) || siteList[0];
+          setCurrentWebsiteState(preferredSite);
           if (typeof window !== "undefined") {
-            localStorage.setItem("seo_active_website_id", siteList[0].id);
+            localStorage.setItem("seo_active_website_id", preferredSite.id);
           }
         } else {
           setCurrentWebsiteState(null);

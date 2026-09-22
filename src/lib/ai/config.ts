@@ -30,9 +30,10 @@ export const AI_CONFIG = {
   SONNET_MODEL: 'claude-sonnet-5' as const,
 
   // ── Image Models ────────────────────────────────────────────────────────────
-  // OpenAI Image Generation (Primary Image Provider - Balanced Medium Quality)
-  OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini',
-  OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'medium') as 'low' | 'medium' | 'high' | 'auto',
+  // OpenAI Flagship Image Generation (High-Fidelity Photorealism & Editorial Design)
+  OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
+  OPENAI_IMAGE_FALLBACK_MODEL: 'gpt-image-2',
+  OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'high') as 'low' | 'medium' | 'high' | 'auto',
 
   // Gemini Image Generation via Google AI Studio (Fallback)
   GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
@@ -60,7 +61,9 @@ export const PRICING_RATES: Record<string, ModelPricing> = {
 };
 
 export const IMAGE_PRICING_ESTIMATES: Record<string, number> = {
-  [AI_CONFIG.OPENAI_IMAGE_MODEL]: 0.008, // ~$0.008 per image (cheap & fast)
+  [AI_CONFIG.OPENAI_IMAGE_MODEL]: 0.04, // High-quality flagship image (~$0.04 per image)
+  'gpt-image-2.5-flare': 0.04,
+  'gpt-image-2': 0.04,
   'gpt-image-1-mini': 0.008,
   'gpt-image-1': 0.03,
   [AI_CONFIG.GEMINI_IMAGE_MODEL]: 0.03, // ~$0.030 per image

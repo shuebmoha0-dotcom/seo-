@@ -34,27 +34,11 @@ export async function GET(request: Request) {
       }
     }
 
-    let query = supabase
-      .from('content_drafts')
-      .select(`
-        *,
-        content_versions (*),
-        content_qa_results (*),
-        content_images (*)
-      `)
-      .order('created_at', { ascending: false });
+    let drafts: any[] | null = null;
+    let fallbackUsed = false;
 
-    if (websiteId) {
-      query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
-    }
-
-    let { data: drafts, error } = await query;
-
-    if (error) throw error;
-
-    // Fallback: if website filter returned 0 drafts, return all available drafts so the user never sees an empty screen
-    if (!drafts || drafts.length === 0) {
-      const { data: allDrafts } = await supabase
+    try {
+      let query = supabase
         .from('content_drafts')
         .select(`
           *,
@@ -64,8 +48,46 @@ export async function GET(request: Request) {
         `)
         .order('created_at', { ascending: false });
 
-      if (allDrafts && allDrafts.length > 0) {
-        drafts = allDrafts;
+      if (websiteId) {
+        query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        drafts = data;
+      }
+    } catch (queryErr: any) {
+      console.warn('[Content Draft GET] Primary query warning:', queryErr?.message);
+    }
+
+    // Fallback: if website filter returned 0 drafts or query had issue, return all available drafts so the user never loses previous posts
+    if (!drafts || drafts.length === 0) {
+      fallbackUsed = true;
+      try {
+        const { data: allDrafts, error: allErr } = await supabase
+          .from('content_drafts')
+          .select(`
+            *,
+            content_versions (*),
+            content_qa_results (*),
+            content_images (*)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (!allErr && allDrafts && allDrafts.length > 0) {
+          drafts = allDrafts;
+        } else {
+          // Ultimate direct fallback without joins
+          const { data: rawDrafts } = await supabase
+            .from('content_drafts')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (rawDrafts && rawDrafts.length > 0) {
+            drafts = rawDrafts;
+          }
+        }
+      } catch (fallbackErr: any) {
+        console.error('[Content Draft GET] Fallback query error:', fallbackErr?.message);
       }
     }
 

@@ -1318,20 +1318,20 @@ export class AutopilotExecutor {
           topic: articleTitle,
           target_keyword: primaryKw,
           purpose: `Featured hero visual for ${articleTitle}`,
-          style: 'Modern 3D isometric conceptual tech artwork with matte geometric surfaces, floating UI elements, and modern studio lighting',
+          style: 'Premium editorial hero visual with cinematic lighting, rich textures, and sophisticated modern aesthetic',
           dimensions: '1792x1008',
           image_placement: 'hero',
-          desired_visual_style: 'Modern 3D isometric conceptual tech artwork with rich studio lighting, web banner quality, no text overlay',
+          desired_visual_style: 'Premium editorial hero visual with cinematic lighting, rich textures, 16:9 widescreen framing, no text overlay',
         });
 
         const bodyDiagramPromise = ImageRouter.generate({
           topic: articleTitle,
           target_keyword: primaryKw,
           purpose: `Step-by-step framework diagram for ${articleTitle}`,
-          style: 'Clean isometric workflow diagram, modern tech infographic style with connected geometric modules and elegant lighting',
+          style: 'Minimalist modern architectural workflow visualization, elegant geometric data flow, subtle studio backlighting',
           dimensions: '1792x1008',
           image_placement: 'body',
-          desired_visual_style: 'Clean isometric workflow diagram, modern tech infographic style, 16:9 widescreen, no text overlay',
+          desired_visual_style: 'Minimalist modern architectural workflow visualization, elegant geometric data flow, 16:9 widescreen, no text overlay',
         });
 
         const [heroResult, bodyResult] = await Promise.all([heroImagePromise, bodyDiagramPromise]);

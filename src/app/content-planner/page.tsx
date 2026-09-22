@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
   PenLine, Cpu, Globe, Zap, Brain, ExternalLink, ArrowLeft, Copy, CheckCheck,
-  BarChart2, ShieldCheck, Activity, Award, ArrowUpRight
+  BarChart2, ShieldCheck, Activity, Award, ArrowUpRight, Search
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -120,7 +120,7 @@ const QA_LABELS: Record<string, string> = {
 export default function ContentPlannerPage() {
   const { currentWebsite, openAddModal } = useWebsite();
 
-  const [activeTab, setActiveTab] = useState<"queue" | "rules">("queue");
+  const [activeTab, setActiveTab] = useState<"queue" | "studio" | "rules">("queue");
   const [selectedDraft, setSelectedDraft] = useState<ContentDraft | null>(null);
   const [generating, setGenerating] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
@@ -132,6 +132,8 @@ export default function ContentPlannerPage() {
   const [rulesSaved, setRulesSaved] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDraftDropdownOpen, setIsDraftDropdownOpen] = useState(false);
 
   // Quick 1-click generator keyword input
   const [quickKeyword, setQuickKeyword] = useState("");
@@ -326,9 +328,7 @@ export default function ContentPlannerPage() {
         const loadedDrafts = data.drafts || [];
         setDrafts(loadedDrafts);
 
-        if (!selectedDraft || !loadedDrafts.some((d: any) => d.id === selectedDraft?.id)) {
-          if (loadedDrafts.length > 0) setSelectedDraft(loadedDrafts[0]);
-        } else {
+        if (selectedDraft) {
           const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
           if (updatedSelected) {
             if (
@@ -418,6 +418,7 @@ export default function ContentPlannerPage() {
       if (data.draft) {
         setDrafts(prev => [data.draft, ...prev.filter(d => d.id !== data.draft.id)]);
         setSelectedDraft(data.draft);
+        setActiveTab("studio");
         setQuickKeyword("");
       }
     } catch (e: any) {
@@ -547,10 +548,16 @@ export default function ContentPlannerPage() {
 
   // Filtered drafts
   const filteredDrafts = drafts.filter(d => {
-    if (filterStatus === "all") return true;
-    if (filterStatus === "published") return d.status === "published";
-    if (filterStatus === "draft") return d.status !== "published";
-    if (filterStatus === "needs_revision") return d.status === "needs_revision";
+    if (filterStatus === "published" && d.status !== "published") return false;
+    if (filterStatus === "draft" && d.status === "published") return false;
+    if (filterStatus === "needs_revision" && d.status !== "needs_revision") return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = (d.working_title || '').toLowerCase().includes(q);
+      const matchKw = (d.primary_keyword || '').toLowerCase().includes(q);
+      const matchSlug = (d.url_slug || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchKw && !matchSlug) return false;
+    }
     return true;
   });
 
@@ -579,16 +586,48 @@ export default function ContentPlannerPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => setActiveTab(activeTab === "rules" ? "queue" : "rules")}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all ${
-                  activeTab === "rules"
-                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                onClick={() => setActiveTab("queue")}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                  activeTab === "queue"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
                     : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs"
                 }`}
               >
-                <Settings className="w-3.5 h-3.5 text-neutral-500" />
+                <Layers className="w-3.5 h-3.5" />
+                <span>All Articles ({drafts.length})</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!selectedDraft && drafts.length > 0) {
+                    setSelectedDraft(drafts[0]);
+                  }
+                  setActiveTab("studio");
+                }}
+                disabled={drafts.length === 0}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                  activeTab === "studio"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs disabled:opacity-40"
+                }`}
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                <span>
+                  {selectedDraft ? `Studio (${selectedDraft.working_title.slice(0, 18)}...)` : "Article Studio"}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("rules")}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                  activeTab === "rules"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs"
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
                 <span>Publishing Rules</span>
               </button>
             </div>
@@ -726,14 +765,64 @@ export default function ContentPlannerPage() {
             </div>
           )}
 
-          {/* ── MAIN STUDIO WORKSPACE (STITCH TWO-COLUMN LAYOUT) ── */}
-          {selectedDraft ? (
+          {/* ── MAIN STUDIO WORKSPACE (WHEN STUDIO TAB ACTIVE & DRAFT SELECTED) ── */}
+          {activeTab === "studio" && selectedDraft ? (
             <div className="space-y-4">
               
               {/* Top Studio Control Bar */}
               <div className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
+                    {/* Back to All Articles button */}
+                    <button
+                      onClick={() => setActiveTab("queue")}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
+                      title="Back to All Articles"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>All Articles ({drafts.length})</span>
+                    </button>
+
+                    {/* Switch Article Dropdown */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsDraftDropdownOpen(!isDraftDropdownOpen)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium transition-colors shadow-2xs"
+                      >
+                        <History className="w-3.5 h-3.5 text-neutral-500" />
+                        <span>Switch Article ▾</span>
+                      </button>
+
+                      {isDraftDropdownOpen && (
+                        <div className="absolute top-full left-0 mt-1.5 w-80 max-h-72 overflow-y-auto bg-white border border-neutral-200 rounded-xl shadow-xl z-50 p-1.5 space-y-1">
+                          <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 flex items-center justify-between">
+                            <span>Previous Articles ({drafts.length})</span>
+                            <span className="text-[9px] text-indigo-600 font-semibold">Click to Open</span>
+                          </div>
+                          {drafts.map((d) => (
+                            <button
+                              key={d.id}
+                              onClick={() => {
+                                setSelectedDraft(d);
+                                setIsDraftDropdownOpen(false);
+                              }}
+                              className={`w-full text-left p-2 rounded-lg text-xs transition-colors flex items-start justify-between gap-2 ${
+                                selectedDraft.id === d.id ? "bg-indigo-50 text-indigo-900 font-semibold" : "hover:bg-neutral-50 text-neutral-700"
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate font-medium">{d.working_title}</p>
+                                <p className="text-[10px] text-neutral-400 font-mono mt-0.5">{d.word_count || 0}w · {d.primary_keyword}</p>
+                              </div>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0 ${STATUS_CONFIG[d.status]?.color || "bg-neutral-100"}`}>
+                                {STATUS_CONFIG[d.status]?.label || d.status}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${STATUS_CONFIG[selectedDraft.status]?.color || "bg-neutral-100"}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedDraft.status]?.dot || "bg-neutral-400"}`} />
                       <span>{STATUS_CONFIG[selectedDraft.status]?.label || selectedDraft.status}</span>
@@ -1054,47 +1143,73 @@ export default function ContentPlannerPage() {
 
             </div>
           ) : (
-            /* ── DRAFT QUEUE TABLE (WHEN NO DRAFT SELECTED) ── */
+            /* ── DRAFT QUEUE TABLE (ALL ARTICLES INVENTORY VIEW) ── */
             <div className="bg-white border border-neutral-200/80 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-              <div className="p-5 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-neutral-900 tracking-tight">Article Inventory</h3>
-                  <span className="text-xs text-neutral-400 font-mono">({drafts.length} Total)</span>
+              <div className="p-5 border-b border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-neutral-900 tracking-tight">Article Inventory</h3>
+                    <span className="text-xs font-mono font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                      {drafts.length} Total
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-500">
+                    Click any previous post to open the studio editor, review QA diagnostics, or publish live.
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
-                  <button
-                    onClick={() => setFilterStatus("all")}
-                    className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                      filterStatus === "all" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500"
-                    }`}
-                  >
-                    All ({drafts.length})
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("draft")}
-                    className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                      filterStatus === "draft" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500"
-                    }`}
-                  >
-                    Drafts ({drafts.filter(d => d.status !== "published").length})
-                  </button>
-                  <button
-                    onClick={() => setFilterStatus("published")}
-                    className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                      filterStatus === "published" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500"
-                    }`}
-                  >
-                    Published ({drafts.filter(d => d.status === "published").length})
-                  </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Search Input */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      placeholder="Search articles by title or keyword..."
+                      className="pl-8 pr-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-56"
+                    />
+                  </div>
+
+                  {/* Filter Pills */}
+                  <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
+                    <button
+                      onClick={() => setFilterStatus("all")}
+                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        filterStatus === "all" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
+                      }`}
+                    >
+                      All ({drafts.length})
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("draft")}
+                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        filterStatus === "draft" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
+                      }`}
+                    >
+                      Drafts ({drafts.filter(d => d.status !== "published").length})
+                    </button>
+                    <button
+                      onClick={() => setFilterStatus("published")}
+                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        filterStatus === "published" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
+                      }`}
+                    >
+                      Published ({drafts.filter(d => d.status === "published").length})
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {filteredDrafts.length === 0 ? (
                 <div className="p-12 text-center space-y-3">
                   <FileText className="w-8 h-8 text-neutral-300 mx-auto" />
-                  <p className="text-xs font-semibold text-neutral-800">No articles match the filter</p>
-                  <p className="text-[11px] text-neutral-400">Enter a keyword above to generate a new piece.</p>
+                  <p className="text-xs font-semibold text-neutral-800">
+                    {searchQuery ? `No articles matched "${searchQuery}"` : "No articles match the selected filter"}
+                  </p>
+                  <p className="text-[11px] text-neutral-400">
+                    {searchQuery ? "Clear your search query to see all articles." : "Enter a keyword above to generate a new piece."}
+                  </p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -1113,12 +1228,22 @@ export default function ContentPlannerPage() {
                       {filteredDrafts.map((d) => (
                         <tr 
                           key={d.id} 
-                          onClick={() => setSelectedDraft(d)}
-                          className="hover:bg-neutral-50/80 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setSelectedDraft(d);
+                            setActiveTab("studio");
+                          }}
+                          className="hover:bg-neutral-50/80 transition-colors cursor-pointer group"
                         >
                           <td className="py-3.5 px-5">
-                            <div className="font-semibold text-neutral-900 max-w-md truncate">{d.working_title}</div>
-                            <div className="text-[11px] text-neutral-400 font-mono mt-0.5">/{d.url_slug || "article"}/</div>
+                            <div className="font-semibold text-neutral-900 group-hover:text-indigo-600 transition-colors max-w-md truncate">
+                              {d.working_title}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-neutral-400 font-mono">
+                              <span>/{d.url_slug || "article"}/</span>
+                              {d.published_at && (
+                                <span className="text-emerald-600">· {formatPublishDate(d.published_at)}</span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 font-mono text-[11px] text-neutral-600">
                             {d.primary_keyword}
@@ -1138,16 +1263,31 @@ export default function ContentPlannerPage() {
                             </span>
                           </td>
                           <td className="py-3.5 px-5 text-right">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedDraft(d);
-                              }}
-                              className="px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors inline-flex items-center gap-1"
-                            >
-                              <span>Open Studio</span>
-                              <ArrowRight className="w-3 h-3" />
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              {d.wordpress_post_url && (
+                                <a
+                                  href={d.wordpress_post_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="p-1.5 text-neutral-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                  title="View Live Post on WordPress"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedDraft(d);
+                                  setActiveTab("studio");
+                                }}
+                                className="px-3 py-1.5 text-xs font-semibold text-indigo-600 hover:text-white hover:bg-indigo-600 bg-indigo-50 rounded-lg transition-all inline-flex items-center gap-1 shadow-2xs"
+                              >
+                                <span>Open Studio</span>
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

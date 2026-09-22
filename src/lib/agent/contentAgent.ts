@@ -579,13 +579,13 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
         const imagePromises = brief.image_requirements.slice(0, 2).map(async (req, i) => {
           try {
             // Dynamic diverse visual style selection based on image requirement type and context
-            let visualStyle = 'Modern editorial SaaS illustration with sophisticated color palette and clean conceptual metaphors';
+            let visualStyle = 'High-end editorial visual with sophisticated modern aesthetic and clean conceptual depth';
             if (req.image_type === 'diagram' || req.purpose.toLowerCase().includes('workflow') || req.purpose.toLowerCase().includes('process')) {
-              visualStyle = 'Clean isometric workflow diagram, modern tech infographic style with connected geometric modules and elegant lighting';
+              visualStyle = 'Minimalist modern architectural workflow visualization, elegant geometric data flow, subtle studio backlighting';
             } else if (i === 0) {
-              visualStyle = 'Premium 3D isometric conceptual tech artwork with matte geometric surfaces, floating UI elements, and modern studio lighting';
+              visualStyle = 'Premium editorial hero visual with cinematic lighting, rich textures, and sophisticated modern aesthetic';
             } else {
-              visualStyle = 'Modern editorial vector illustration with clean conceptual iconography, subtle textures, and rich color accents';
+              visualStyle = 'Refined conceptual visual with subtle depth of field, balanced lighting, and modern editorial styling';
             }
 
             // Enforce a bounded 22-second race so image generation cannot stall the article pipeline

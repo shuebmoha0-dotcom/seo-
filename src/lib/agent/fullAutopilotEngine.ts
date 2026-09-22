@@ -274,7 +274,7 @@ export class FullAutopilotEngine {
    * 1. Profiles site niche & authority tier
    * 2. Finds top unwritten keyword gap with zero cannibalization
    * 3. Drafts comprehensive 1,200-1,600 word article via Claude Sonnet 5
-   * 4. Generates visuals via OpenAI gpt-image-1-mini
+   * 4. Generates visuals via OpenAI gpt-image-2.5-flare / gpt-image-2
    * 5. Automatically publishes live to WordPress (if auto_publish=true)
    * 6. Crawls and auto-fixes technical SEO issues
    * 7. Reschedules next run for perpetual operation

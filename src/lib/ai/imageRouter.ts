@@ -36,7 +36,7 @@ export interface ImageGenerationResult {
 
 export interface ImageProvider {
   name: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
-  generateImage(prompt: string, dimensions?: string): Promise<{ url: string; base64?: string }>;
+  generateImage(prompt: string, dimensions?: string): Promise<{ url: string; base64?: string; modelUsed?: string }>;
 }
 
 /**
@@ -44,9 +44,9 @@ export interface ImageProvider {
  */
 export function buildInstantImagePrompt(request: ImageGenerationRequest): string {
   const topic = request.topic || request.target_keyword || 'Tech strategy';
-  const style = request.desired_visual_style || request.style || 'Modern editorial SaaS illustration';
+  const style = request.desired_visual_style || request.style || 'High-end editorial digital visual';
   const purpose = request.purpose || 'Editorial article visual';
-  return `${style} visually representing ${topic}, ${purpose}. Professional 3D isometric conceptual render with floating UI elements, rich indigo and amber studio lighting, balanced composition, 16:9 widescreen landscape format, no text overlay, web banner quality.`;
+  return `${style} visually representing "${topic}" for ${purpose}. Cinematic studio lighting, sophisticated composition, ultra-high resolution, photorealistic depth and rich textures, 16:9 widescreen landscape framing, no text overlay, no logos.`;
 }
 
 export async function generateImagePrompt(request: ImageGenerationRequest, _context?: UsageContext): Promise<string> {
@@ -54,18 +54,19 @@ export async function generateImagePrompt(request: ImageGenerationRequest, _cont
 }
 
 /**
- * 1.5. OpenAI Image Provider (Primary Image Provider - Fast, Cheap & High Quality)
+ * 1.5. OpenAI Image Provider (Primary Image Provider - High Fidelity Editorial Visuals)
  */
 export const OpenAIImageProvider: ImageProvider = {
   name: 'openai',
-  async generateImage(prompt: string, dimensions = '1536x1024'): Promise<{ url: string; base64?: string }> {
+  async generateImage(prompt: string, dimensions = '1536x1024'): Promise<{ url: string; base64?: string; modelUsed?: string }> {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY is not configured.');
     }
 
-    const model = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-1-mini';
-    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'medium';
+    const primaryModel = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare';
+    const fallbackModel = AI_CONFIG.OPENAI_IMAGE_FALLBACK_MODEL || 'gpt-image-2';
+    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'high';
 
     // Map requested dimensions to supported OpenAI sizes: 1024x1024, 1536x1024, 1024x1536, or auto
     let size: '1024x1024' | '1536x1024' | '1024x1536' = '1536x1024';
@@ -77,68 +78,85 @@ export const OpenAIImageProvider: ImageProvider = {
       size = '1536x1024'; // Default to 3:2 landscape
     }
 
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        prompt: `${prompt}. Clean editorial SaaS tech illustration, modern aesthetic, isometric perspective, elegant composition, high resolution, no text overlay, web quality.`,
-        n: 1,
-        size,
-        quality,
-      }),
-      signal: AbortSignal.timeout(25000),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`OpenAI Image API returned HTTP ${response.status}: ${errText}`);
+    const modelsToTry = [primaryModel];
+    if (fallbackModel && fallbackModel !== primaryModel) {
+      modelsToTry.push(fallbackModel);
     }
 
-    const data = await response.json();
-    const item = data.data?.[0];
-    if (!item?.b64_json && !item?.url) {
-      throw new Error('OpenAI image generation returned empty data.');
-    }
-
-    let publicUrl = item.url || '';
-    const base64Data = item.b64_json;
-
-    // Upload base64 to Supabase storage to get permanent public CDN URL
-    if (base64Data) {
+    let lastError: Error | null = null;
+    for (const model of modelsToTry) {
       try {
-        const { createAdminClient } = await import('@/lib/supabase/admin');
-        const supabase = createAdminClient();
-        const buffer = Buffer.from(base64Data, 'base64');
-        const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
-
-        const { error } = await supabase.storage.from('content-images').upload(filename, buffer, {
-          contentType: 'image/png',
-          upsert: true,
+        console.log(`[OpenAIImageProvider] Generating image using ${model} (quality: ${quality}, size: ${size})...`);
+        const response = await fetch('https://api.openai.com/v1/images/generations', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            prompt: `${prompt}. High-end editorial visual design, cinematic studio lighting, elegant composition, photorealistic textures, 16:9 widescreen landscape framing, zero text, zero typography, zero watermarks.`,
+            n: 1,
+            size,
+            quality,
+          }),
+          signal: AbortSignal.timeout(30000),
         });
 
-        if (!error) {
-          const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
-          if (urlData?.publicUrl) {
-            publicUrl = urlData.publicUrl;
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`OpenAI Image API (${model}) returned HTTP ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json();
+        const item = data.data?.[0];
+        if (!item?.b64_json && !item?.url) {
+          throw new Error(`OpenAI image generation (${model}) returned empty data.`);
+        }
+
+        let publicUrl = item.url || '';
+        const base64Data = item.b64_json;
+
+        // Upload base64 to Supabase storage to get permanent public CDN URL
+        if (base64Data) {
+          try {
+            const { createAdminClient } = await import('@/lib/supabase/admin');
+            const supabase = createAdminClient();
+            const buffer = Buffer.from(base64Data, 'base64');
+            const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+
+            const { error } = await supabase.storage.from('content-images').upload(filename, buffer, {
+              contentType: 'image/png',
+              upsert: true,
+            });
+
+            if (!error) {
+              const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
+              if (urlData?.publicUrl) {
+                publicUrl = urlData.publicUrl;
+              }
+            }
+          } catch (uploadErr) {
+            console.warn('[ImageRouter] Upload to Supabase storage failed, using data URI fallback:', uploadErr);
+          }
+
+          if (!publicUrl) {
+            publicUrl = `data:image/png;base64,${base64Data}`;
           }
         }
-      } catch (uploadErr) {
-        console.warn('[ImageRouter] Upload to Supabase storage failed, using data URI fallback:', uploadErr);
-      }
 
-      if (!publicUrl) {
-        publicUrl = `data:image/png;base64,${base64Data}`;
+        return {
+          url: publicUrl,
+          base64: base64Data,
+          modelUsed: model,
+        };
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[OpenAIImageProvider] Attempt with ${model} failed:`, err?.message);
       }
     }
 
-    return {
-      url: publicUrl,
-      base64: base64Data,
-    };
+    throw lastError || new Error('All OpenAI image models failed.');
   },
 };
 
@@ -174,7 +192,7 @@ export const GeminiImageProvider: ImageProvider = {
             },
           },
         }),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(20000),
       });
 
       if (!response.ok) {
@@ -236,7 +254,7 @@ export const GeminiImageProvider: ImageProvider = {
           outputMimeType: 'image/jpeg',
         },
       }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(20000),
     });
 
     if (!response.ok) {
@@ -390,17 +408,18 @@ export const ImageRouter = {
     // Enforce 16:9 dimensions
     const dimensions = request.dimensions || '1200x675';
 
-    // 2. Primary: OpenAI Image Provider (gpt-image-1-mini - Fast, Cheap, & Crisp Quality)
+    // 2. Primary: OpenAI Image Provider (gpt-image-2.5-flare / gpt-image-2 - High Fidelity & Photorealism)
     if (process.env.OPENAI_API_KEY && PROVIDER_HEALTH.openai_image.status !== 'degraded') {
       try {
         const openAiStart = Date.now();
-        console.log(`[Image Router] Generating editorial image via OpenAI (${AI_CONFIG.OPENAI_IMAGE_MODEL}) for "${request.topic}"...`);
+        console.log(`[Image Router] Generating high-fidelity visual via OpenAI (${AI_CONFIG.OPENAI_IMAGE_MODEL}) for "${request.topic}"...`);
         const result = await OpenAIImageProvider.generateImage(prompt, dimensions);
         recordProviderSuccess('openai_image');
+        const modelUsed = result.modelUsed || AI_CONFIG.OPENAI_IMAGE_MODEL;
 
         await recordImageUsage({
           provider: 'openai',
-          model: AI_CONFIG.OPENAI_IMAGE_MODEL,
+          model: modelUsed,
           status: 'success',
           fallbackUsed: false,
           durationMs: Date.now() - openAiStart,
@@ -411,7 +430,7 @@ export const ImageRouter = {
           url: result.url,
           base64: result.base64,
           provider: 'openai',
-          model: AI_CONFIG.OPENAI_IMAGE_MODEL,
+          model: modelUsed,
           metadata: {
             prompt_used: prompt,
             style: request.style,
