@@ -21,6 +21,9 @@ interface AdminUsageData {
     totalOutputTokens: number;
     totalCost: number;
     totalCalls: number;
+    totalImages?: number;
+    totalImageCost?: number;
+    totalLlmCost?: number;
     activeAgents: number;
     modelsUsed: number;
   };
@@ -46,6 +49,7 @@ interface AdminUsageData {
   byModel: Array<{
     model: string;
     provider: string;
+    apiType?: string;
     calls: number;
     inTokens: number;
     outTokens: number;
@@ -66,6 +70,7 @@ interface AdminUsageData {
     agent: string;
     model: string;
     provider: string;
+    apiType?: string;
     inputTokens: number;
     outputTokens: number;
     totalTokens: number;
@@ -79,9 +84,40 @@ interface TenantUsageData {
   totalCost: number;
   remainingCredits: number;
   usedPercent: number;
+  totalTokens?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCalls?: number;
+  totalImages?: number;
+  totalImageCost?: number;
+  totalLlmCost?: number;
   totalDrafts: number;
   totalWords: number;
   activeWebsites: number;
+  byModel?: Array<{
+    model: string;
+    provider: string;
+    apiType?: string;
+    calls: number;
+    cost: number;
+    tokens: number;
+  }>;
+  byAgent?: Array<{
+    agent: string;
+    calls: number;
+    cost: number;
+    tokens: number;
+  }>;
+  recentEvents?: Array<{
+    id: string;
+    agent: string;
+    model: string;
+    provider: string;
+    apiType?: string;
+    totalTokens: number;
+    cost: number;
+    createdAt: string;
+  }>;
 }
 
 const AGENT_COLORS: Record<string, string> = {
@@ -224,12 +260,15 @@ export default function UsagePage() {
   };
 
   // Aggregated values
-  const totalTokens = adminData?.summary?.totalTokens || 1473516;
-  const promptTokens = adminData?.summary?.totalInputTokens || 1072500;
-  const completionTokens = adminData?.summary?.totalOutputTokens || 401016;
-  const totalCost = adminData?.summary?.totalCost || 4.23;
-  const totalCalls = adminData?.summary?.totalCalls || 402;
-  const budgetBurnPercent = Math.min(100, Math.round((totalTokens / tokenBudget) * 100));
+  const totalTokens = adminData?.summary?.totalTokens ?? 0;
+  const promptTokens = adminData?.summary?.totalInputTokens ?? 0;
+  const completionTokens = adminData?.summary?.totalOutputTokens ?? 0;
+  const totalCost = adminData?.summary?.totalCost ?? 0;
+  const totalCalls = adminData?.summary?.totalCalls ?? 0;
+  const totalImages = adminData?.summary?.totalImages ?? 0;
+  const totalImageCost = adminData?.summary?.totalImageCost ?? 0;
+  const totalLlmCost = adminData?.summary?.totalLlmCost ?? 0;
+  const budgetBurnPercent = tokenBudget > 0 ? Math.min(100, Math.round((totalTokens / tokenBudget) * 100)) : 0;
 
   const filteredEvents = (adminData?.recentEvents || []).filter((ev) => {
     const matchesAgent = filterAgent === "all" || ev.agent.toLowerCase() === filterAgent.toLowerCase();
@@ -337,8 +376,8 @@ export default function UsagePage() {
                 </div>
               </div>
 
-              {/* 4 Main KPI Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* 5 Main KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl">
@@ -348,12 +387,12 @@ export default function UsagePage() {
                       Tokens Burned
                     </span>
                   </div>
-                  <div className="text-3xl font-black text-neutral-900">
+                  <div className="text-2xl font-black text-neutral-900">
                     {totalTokens.toLocaleString()}
                   </div>
-                  <div className="text-xs text-neutral-500 mt-1 flex justify-between">
-                    <span>Prompt: {promptTokens.toLocaleString()}</span>
-                    <span>Comp: {completionTokens.toLocaleString()}</span>
+                  <div className="text-[11px] text-neutral-500 mt-1 flex justify-between">
+                    <span>In: {promptTokens.toLocaleString()}</span>
+                    <span>Out: {completionTokens.toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -363,14 +402,31 @@ export default function UsagePage() {
                       <DollarSign className="w-4 h-4 text-emerald-600" />
                     </div>
                     <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                      Total Cost
+                      Total Spend
                     </span>
                   </div>
-                  <div className="text-3xl font-black text-neutral-900">
+                  <div className="text-2xl font-black text-neutral-900">
                     ${totalCost.toFixed(3)}
                   </div>
-                  <div className="text-xs text-neutral-500 mt-1">
-                    Monthly budget: ${costBudget.toFixed(2)} USD
+                  <div className="text-[11px] text-neutral-500 mt-1">
+                    Text: ${totalLlmCost.toFixed(2)} | Img: ${totalImageCost.toFixed(2)}
+                  </div>
+                </div>
+
+                <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="p-2 bg-pink-50 border border-pink-100 rounded-xl">
+                      <Sparkles className="w-4 h-4 text-pink-600" />
+                    </div>
+                    <span className="text-xs font-bold text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-100">
+                      AI Images
+                    </span>
+                  </div>
+                  <div className="text-2xl font-black text-neutral-900">
+                    {totalImages.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-neutral-500 mt-1">
+                    Cost: ${totalImageCost.toFixed(2)} USD
                   </div>
                 </div>
 
@@ -383,11 +439,11 @@ export default function UsagePage() {
                       Invocations
                     </span>
                   </div>
-                  <div className="text-3xl font-black text-neutral-900">
+                  <div className="text-2xl font-black text-neutral-900">
                     {totalCalls.toLocaleString()}
                   </div>
-                  <div className="text-xs text-neutral-500 mt-1">
-                    Avg ~{Math.round(totalTokens / (totalCalls || 1)).toLocaleString()} tokens/run
+                  <div className="text-[11px] text-neutral-500 mt-1">
+                    Avg ~{Math.round(totalTokens / (totalCalls || 1)).toLocaleString()} tok/run
                   </div>
                 </div>
 
@@ -400,11 +456,11 @@ export default function UsagePage() {
                       Active Agents
                     </span>
                   </div>
-                  <div className="text-3xl font-black text-neutral-900">
-                    {adminData?.summary?.activeAgents || 9}
+                  <div className="text-2xl font-black text-neutral-900">
+                    {adminData?.summary?.activeAgents ?? 0}
                   </div>
-                  <div className="text-xs text-neutral-500 mt-1">
-                    Content, Keyword, Crawler, etc.
+                  <div className="text-[11px] text-neutral-500 mt-1">
+                    Autonomous agents active
                   </div>
                 </div>
               </div>
@@ -887,7 +943,7 @@ export default function UsagePage() {
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-black text-neutral-900">
-                      ${(tenantData?.totalCost ?? 16.0).toFixed(2)}
+                      ${(tenantData?.totalCost ?? 0).toFixed(2)}
                     </div>
                     <div className="text-sm text-neutral-500">
                       of ${(tenantData?.creditLimit ?? 50.0).toFixed(2)} monthly quota
@@ -898,27 +954,30 @@ export default function UsagePage() {
                 <div className="h-3 bg-neutral-100 rounded-full overflow-hidden mb-2">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      (tenantData?.usedPercent ?? 32) > 80 ? "bg-amber-500" : "bg-indigo-600"
+                      (tenantData?.usedPercent ?? 0) > 80 ? "bg-amber-500" : "bg-indigo-600"
                     }`}
-                    style={{ width: `${Math.min(tenantData?.usedPercent ?? 32, 100)}%` }}
+                    style={{ width: `${Math.min(tenantData?.usedPercent ?? 0, 100)}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-xs text-neutral-500">
-                  <span>{tenantData?.usedPercent ?? 32}% used</span>
-                  <span>${(tenantData?.remainingCredits ?? 34.0).toFixed(2)} remaining</span>
+                  <span>{tenantData?.usedPercent ?? 0}% used</span>
+                  <span>${(tenantData?.remainingCredits ?? (tenantData?.creditLimit ?? 50.0)).toFixed(2)} remaining</span>
                 </div>
               </div>
 
               {/* Tenant KPI Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
                   <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl w-fit mb-3">
                     <DollarSign className="w-4 h-4 text-indigo-600" />
                   </div>
                   <div className="text-2xl font-black text-neutral-900">
-                    ${(tenantData?.totalCost ?? 16.0).toFixed(2)}
+                    ${(tenantData?.totalCost ?? 0).toFixed(2)}
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Credits Consumed</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">
+                    Text: ${(tenantData?.totalLlmCost ?? 0).toFixed(2)} | Img: ${(tenantData?.totalImageCost ?? 0).toFixed(2)}
+                  </div>
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
@@ -926,9 +985,10 @@ export default function UsagePage() {
                     <FileText className="w-4 h-4 text-purple-600" />
                   </div>
                   <div className="text-2xl font-black text-neutral-900">
-                    {tenantData?.totalDrafts ?? 9}
+                    {tenantData?.totalDrafts ?? 0}
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Articles Drafted</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">Ready in Planner</div>
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
@@ -936,9 +996,23 @@ export default function UsagePage() {
                     <Sparkles className="w-4 h-4 text-cyan-600" />
                   </div>
                   <div className="text-2xl font-black text-neutral-900">
-                    {((tenantData?.totalWords ?? 17721) / 1000).toFixed(1)}k
+                    {((tenantData?.totalWords ?? 0) / 1000).toFixed(1)}k
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Words Written</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">Target 1.2k–1.6k/post</div>
+                </div>
+
+                <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+                  <div className="p-2 bg-pink-50 border border-pink-100 rounded-xl w-fit mb-3">
+                    <Zap className="w-4 h-4 text-pink-600" />
+                  </div>
+                  <div className="text-2xl font-black text-neutral-900">
+                    {tenantData?.totalImages ?? 0}
+                  </div>
+                  <div className="text-xs text-neutral-500 font-medium mt-0.5">AI Visuals</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">
+                    ${(tenantData?.totalImageCost ?? 0).toFixed(2)} USD
+                  </div>
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
@@ -946,11 +1020,72 @@ export default function UsagePage() {
                     <Activity className="w-4 h-4 text-emerald-600" />
                   </div>
                   <div className="text-2xl font-black text-neutral-900">
-                    {tenantData?.activeWebsites ?? 1}
+                    {tenantData?.activeWebsites ?? 0}
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Connected Sites</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">Multi-tenant scope</div>
                 </div>
               </div>
+
+              {/* Tenant Live Usage Breakdown by Model & Type */}
+              {tenantData?.byModel && tenantData.byModel.length > 0 && (
+                <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-neutral-900 text-base">Current Month Usage Breakdown</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">Live itemized charges across writing models and visual generators</p>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-neutral-700 bg-neutral-100 px-2.5 py-1 rounded-lg">
+                      {tenantData.totalCalls ?? 0} Invocations
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-neutral-50 text-neutral-500 text-xs uppercase font-semibold border-b border-neutral-200">
+                        <tr>
+                          <th className="px-4 py-3">Model / Engine</th>
+                          <th className="px-4 py-3">Provider</th>
+                          <th className="px-4 py-3">Type</th>
+                          <th className="px-4 py-3 text-right">Invocations</th>
+                          <th className="px-4 py-3 text-right">Tokens / Units</th>
+                          <th className="px-4 py-3 text-right">Cost (USD)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {tenantData.byModel.map((m) => (
+                          <tr key={m.model} className="hover:bg-neutral-50/80 transition-colors">
+                            <td className="px-4 py-3 font-mono font-semibold text-neutral-900 text-xs">
+                              {m.model}
+                            </td>
+                            <td className="px-4 py-3 capitalize text-neutral-600 text-xs">
+                              {m.provider}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                m.apiType === 'image'
+                                  ? 'bg-pink-100 text-pink-700 border border-pink-200'
+                                  : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                              }`}>
+                                {m.apiType === 'image' ? 'Image' : 'LLM'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {m.calls}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {m.tokens > 0 ? m.tokens.toLocaleString() : `${m.calls} img`}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-xs text-neutral-900">
+                              ${m.cost.toFixed(4)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Tenant Security Guarantee Note */}
               <div className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-2xl p-5 text-sm text-neutral-600">

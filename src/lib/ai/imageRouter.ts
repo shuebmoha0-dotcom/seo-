@@ -564,7 +564,7 @@ export const ImageRouter = {
 };
 
 /**
- * Helper to record image generation usage metrics in Supabase
+ * Helper to record image generation usage metrics in Supabase (usage_events table)
  */
 async function recordImageUsage(data: {
   provider: 'openai' | 'gemini' | 'leonardo' | 'editorial_fallback';
@@ -578,24 +578,51 @@ async function recordImageUsage(data: {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
 
-    const estimatedCost = IMAGE_PRICING_ESTIMATES[data.model] || 0.0;
+    const estimatedCost = IMAGE_PRICING_ESTIMATES[data.model] ?? 0.04;
 
-    await supabase.from('ai_usage_logs').insert({
+    const isValidUuid = (val?: string) =>
+      typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+
+    let userId = isValidUuid(data.context?.user_id) ? data.context?.user_id : null;
+    let projectId = isValidUuid(data.context?.project_id) ? data.context?.project_id : null;
+
+    // If website_id is provided, resolve user_id and project_id if missing
+    if ((!userId || !projectId) && isValidUuid(data.context?.website_id)) {
+      const { data: site } = await supabase
+        .from('websites')
+        .select('user_id, project_id')
+        .eq('id', data.context!.website_id)
+        .maybeSingle();
+
+      if (site) {
+        if (!userId && isValidUuid(site.user_id)) userId = site.user_id;
+        if (!projectId && isValidUuid(site.project_id)) projectId = site.project_id;
+      }
+    }
+
+    const { error } = await supabase.from('usage_events').insert({
+      user_id: userId,
+      project_id: projectId,
+      task_id: isValidUuid(data.context?.task_id) ? data.context?.task_id : null,
+      task_execution_id: isValidUuid(data.context?.task_execution_id) ? data.context?.task_execution_id : null,
+      agent_execution_id: isValidUuid(data.context?.agent_execution_id) ? data.context?.agent_execution_id : null,
       provider: data.provider,
       model: data.model,
-      task_type: 'image_generation',
-      status: data.status,
-      fallback_used: data.fallbackUsed,
-      duration_ms: data.durationMs,
-      estimated_cost_usd: estimatedCost,
-      user_id: data.context?.user_id,
-      project_id: data.context?.project_id,
-      website_id: data.context?.website_id,
-      task_id: data.context?.task_id,
-      task_execution_id: data.context?.task_execution_id,
-      agent_execution_id: data.context?.agent_execution_id,
-      metadata: { dimensions: '16:9' },
+      api_type: 'image',
+      agent_type: 'ImageAgent',
+      input_tokens: 0,
+      output_tokens: 0,
+      api_calls: 1,
+      external_units: 1,
+      estimated_cost: Number(estimatedCost.toFixed(6)),
+      currency: 'USD',
     });
+
+    if (error) {
+      console.warn('[Image Router] Failed to insert usage_event:', error.message);
+    } else {
+      console.log(`[Image Router] Live usage tracked: ${data.model} ($${estimatedCost.toFixed(3)})`);
+    }
   } catch (err: any) {
     console.warn('[Image Router] Failed to record usage to database:', err.message);
   }

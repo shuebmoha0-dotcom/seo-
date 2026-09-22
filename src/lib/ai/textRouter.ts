@@ -139,30 +139,45 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
   );
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { createAdminClient } = await import('@/lib/supabase/admin');
+    const supabase = createAdminClient();
 
-    if (supabaseUrl && !supabaseUrl.includes('placeholder') && supabaseKey) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    const isValidUuid = (val?: string) =>
+      typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
-      await supabase.from('usage_events').insert({
-        user_id: options.context?.user_id || null,
-        project_id: options.context?.project_id || null,
-        task_id: options.context?.task_id || null,
-        task_execution_id: options.context?.task_execution_id || null,
-        agent_execution_id: options.context?.agent_execution_id || null,
-        provider: log.provider,
-        model: log.model,
-        api_type: 'llm',
-        agent_type: options.agent,
-        input_tokens: inputTokens,
-        output_tokens: outputTokens,
-        api_calls: 1,
-        estimated_cost: parseFloat(cost.toFixed(6)),
-        currency: 'USD',
-      });
+    let userId = isValidUuid(options.context?.user_id) ? options.context?.user_id : null;
+    let projectId = isValidUuid(options.context?.project_id) ? options.context?.project_id : null;
+
+    // Auto-resolve user_id and project_id from website_id if missing
+    if ((!userId || !projectId) && isValidUuid(options.context?.website_id)) {
+      const { data: site } = await supabase
+        .from('websites')
+        .select('user_id, project_id')
+        .eq('id', options.context!.website_id)
+        .maybeSingle();
+
+      if (site) {
+        if (!userId && isValidUuid(site.user_id)) userId = site.user_id;
+        if (!projectId && isValidUuid(site.project_id)) projectId = site.project_id;
+      }
     }
+
+    await supabase.from('usage_events').insert({
+      user_id: userId,
+      project_id: projectId,
+      task_id: isValidUuid(options.context?.task_id) ? options.context?.task_id : null,
+      task_execution_id: isValidUuid(options.context?.task_execution_id) ? options.context?.task_execution_id : null,
+      agent_execution_id: isValidUuid(options.context?.agent_execution_id) ? options.context?.agent_execution_id : null,
+      provider: log.provider,
+      model: log.model,
+      api_type: 'llm',
+      agent_type: options.agent,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      api_calls: 1,
+      estimated_cost: parseFloat(cost.toFixed(6)),
+      currency: 'USD',
+    });
   } catch (err) {
     console.warn('[Model Router] Usage tracking record failed:', err);
   }

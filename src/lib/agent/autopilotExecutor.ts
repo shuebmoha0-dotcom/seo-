@@ -73,7 +73,7 @@ export class AutopilotExecutor {
     edit_instructions?: string;
     siteInventory?: import('./siteContentGapDetector').SiteInventory;
   }): Promise<AutopilotExecutionResult> {
-    const { instruction, website_id, website_domain, website_url, siteInventory: preloadedInventory } = params;
+    const { instruction, website_id, website_domain, website_url, user_id, project_id, siteInventory: preloadedInventory } = params;
     let supabase: any;
     try {
       supabase = await createClient();
@@ -1314,6 +1314,13 @@ export class AutopilotExecutor {
         const { ImageRouter } = await import('@/lib/ai/imageRouter');
         console.log(`[AutopilotExecutor] Generating hero image via OpenAI for "${articleTitle}"...`);
 
+        const imageContext = {
+          user_id,
+          project_id,
+          website_id,
+          task_id: targetDraft?.id,
+        };
+
         const heroImagePromise = ImageRouter.generate({
           topic: articleTitle,
           target_keyword: primaryKw,
@@ -1322,7 +1329,7 @@ export class AutopilotExecutor {
           dimensions: '1792x1008',
           image_placement: 'hero',
           desired_visual_style: 'Premium editorial hero visual with cinematic lighting, rich textures, 16:9 widescreen framing, no text overlay',
-        });
+        }, imageContext);
 
         const bodyDiagramPromise = ImageRouter.generate({
           topic: articleTitle,
@@ -1332,7 +1339,7 @@ export class AutopilotExecutor {
           dimensions: '1792x1008',
           image_placement: 'body',
           desired_visual_style: 'Minimalist modern architectural workflow visualization, elegant geometric data flow, 16:9 widescreen, no text overlay',
-        });
+        }, imageContext);
 
         const [heroResult, bodyResult] = await Promise.all([heroImagePromise, bodyDiagramPromise]);
 

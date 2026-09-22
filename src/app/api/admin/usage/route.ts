@@ -80,9 +80,12 @@ export async function GET(req: NextRequest) {
     let totalTokens = 0;
     let totalCost = 0;
     let totalCalls = allEvents.length;
+    let totalImages = 0;
+    let totalImageCost = 0;
+    let totalLlmCost = 0;
 
     const agentMap = new Map<string, { calls: number; inTokens: number; outTokens: number; totalTokens: number; cost: number }>();
-    const modelMap = new Map<string, { provider: string; calls: number; inTokens: number; outTokens: number; totalTokens: number; cost: number }>();
+    const modelMap = new Map<string, { provider: string; apiType: string; calls: number; inTokens: number; outTokens: number; totalTokens: number; cost: number }>();
     const dailyMap = new Map<string, { date: string; calls: number; inTokens: number; outTokens: number; totalTokens: number; cost: number }>();
 
     for (const ev of allEvents) {
@@ -93,12 +96,20 @@ export async function GET(req: NextRequest) {
       const agent = ev.agent_type || "Unknown Agent";
       const model = ev.model || "Unknown Model";
       const provider = ev.provider || "openai";
+      const apiType = ev.api_type || "llm";
       const date = ev.created_at ? ev.created_at.split("T")[0] : "Recent";
 
       totalInputTokens += inTok;
       totalOutputTokens += outTok;
       totalTokens += totTok;
       totalCost += cost;
+
+      if (apiType === 'image') {
+        totalImages += 1;
+        totalImageCost += cost;
+      } else {
+        totalLlmCost += cost;
+      }
 
       // Group by Agent
       const existingAgent = agentMap.get(agent) || { calls: 0, inTokens: 0, outTokens: 0, totalTokens: 0, cost: 0 };
@@ -110,7 +121,7 @@ export async function GET(req: NextRequest) {
       agentMap.set(agent, existingAgent);
 
       // Group by Model
-      const existingModel = modelMap.get(model) || { provider, calls: 0, inTokens: 0, outTokens: 0, totalTokens: 0, cost: 0 };
+      const existingModel = modelMap.get(model) || { provider, apiType, calls: 0, inTokens: 0, outTokens: 0, totalTokens: 0, cost: 0 };
       existingModel.calls += 1;
       existingModel.inTokens += inTok;
       existingModel.outTokens += outTok;
@@ -138,19 +149,20 @@ export async function GET(req: NextRequest) {
         cost: Number(data.cost.toFixed(4)),
         tokenShare: totalTokens > 0 ? Number(((data.totalTokens / totalTokens) * 100).toFixed(1)) : 0,
       }))
-      .sort((a, b) => b.totalTokens - a.totalTokens);
+      .sort((a, b) => b.cost - a.cost);
 
     const byModel = Array.from(modelMap.entries())
       .map(([model, data]) => ({
         model,
         provider: data.provider,
+        apiType: data.apiType,
         calls: data.calls,
         inTokens: data.inTokens,
         outTokens: data.outTokens,
         totalTokens: data.totalTokens,
         cost: Number(data.cost.toFixed(4)),
       }))
-      .sort((a, b) => b.totalTokens - a.totalTokens);
+      .sort((a, b) => b.cost - a.cost);
 
     const timeline = Array.from(dailyMap.values())
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -169,6 +181,7 @@ export async function GET(req: NextRequest) {
       agent: ev.agent_type || "System",
       model: ev.model,
       provider: ev.provider,
+      apiType: ev.api_type || "llm",
       inputTokens: ev.input_tokens || 0,
       outputTokens: ev.output_tokens || 0,
       totalTokens: ev.total_tokens || (ev.input_tokens || 0) + (ev.output_tokens || 0),
@@ -183,6 +196,9 @@ export async function GET(req: NextRequest) {
         totalOutputTokens,
         totalCost: Number(totalCost.toFixed(4)),
         totalCalls,
+        totalImages,
+        totalImageCost: Number(totalImageCost.toFixed(4)),
+        totalLlmCost: Number(totalLlmCost.toFixed(4)),
         activeAgents: agentMap.size,
         modelsUsed: modelMap.size,
       },

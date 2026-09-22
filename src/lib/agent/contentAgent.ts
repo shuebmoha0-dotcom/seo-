@@ -222,7 +222,8 @@ export class ContentAgent {
     rules: ContentRules,
     revisionNotes?: string,
     projectInstructions?: string,
-    projectMemory?: string
+    projectMemory?: string,
+    usageContext?: any
   ): Promise<string> {
     const headingOutline = brief.h2_h3_structure
       .map(h => `${h.level.toUpperCase()}: ${h.heading} (${h.notes})`)
@@ -237,6 +238,7 @@ export class ContentAgent {
         agent: 'ContentAgent',
         taskType: 'long_form_article',
         complexity: 'complex',
+        context: usageContext,
         system: `You are an elite enterprise SEO content strategist and authoritative industry author. Follow these instructions and guidelines strictly:
 
 ${projectMemory ? `==================================================
@@ -558,6 +560,10 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
     }
 
     const brief = await this.generateBrief(input);
+    const usageContext = {
+      website_id: input.website_id,
+      task_id: input.draft_id,
+    };
 
     // ── Run Article Writing (Claude Sonnet 5) & Image Generation IN PARALLEL ──
     const writeDraftPromise = this.writeDraft(
@@ -565,7 +571,8 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
       input.rules,
       revisionNotes,
       input.project_instructions,
-      input.project_memory
+      input.project_memory,
+      usageContext
     );
 
     const generateImagesPromise = (async () => {
@@ -598,7 +605,7 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               image_placement: req.placement_context,
               desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,
-            });
+            }, usageContext);
             const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45000));
             const generatedImage = await Promise.race([imgGenPromise, timeoutPromise]);
 
