@@ -812,38 +812,68 @@ export class AutopilotExecutor {
         };
       }
 
-      // ── ACTION: GROWTH ACCELERATION (STRIKING DISTANCE) ───────────────
+      // ── ACTION: GROWTH ACCELERATION & FAST-RANK ENGINE ────────────────
       if (instruction.action_type === 'growth_acceleration') {
-        console.log(`[AutopilotExecutor] Running Striking-Distance Click Accelerator for "${website_domain}"...`);
+        console.log(`[AutopilotExecutor] Running Growth Acceleration & Fast-Rank Engine for "${website_domain}"...`);
+        const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+        const siteProfile = await SiteNicheProfiler.profileSite({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
+        // 1. Check if domain has striking-distance queries (established site with GSC history)
         const report = await RankRecoveryEngine.scanAndAnalyze({
           websiteId: website_id,
           domain: website_domain,
           siteUrl: website_url,
         });
 
-        const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
-          websiteId: website_id,
-          report,
-        });
+        // 2. If the site has real striking-distance positions (pos 4-20):
+        if (report.striking_distance_count > 0) {
+          const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+            websiteId: website_id,
+            report,
+          });
 
-        let growthSummary = `⚡ *Fast-Rank Growth Opportunities for ${website_domain}:*\n\n`;
-        growthSummary += `Identified ${report.striking_distance_count} striking-distance queries (positions 4–20) with potential unlock of +${report.total_potential_clicks_gain.toLocaleString()} monthly clicks!\n\n`;
+          let growthSummary = `⚡ *Fast-Rank Growth Opportunities for ${website_domain}:*\n\n`;
+          growthSummary += `Identified ${report.striking_distance_count} striking-distance queries (positions 4–20) with potential unlock of +${report.total_potential_clicks_gain.toLocaleString()} monthly clicks!\n\n`;
 
-        for (const opp of report.striking_distance_opportunities.slice(0, 3)) {
-          growthSummary += `• *"${opp.keyword}"* (Position #${opp.current_position} · ${opp.impressions.toLocaleString()} imps)\n`;
-          growthSummary += `  ↳ _Action:_ Rewrite title to high-CTR formula & expand missing H2 subtopics.\n`;
-          growthSummary += `  ↳ _Target:_ Push to Top 3 (${opp.estimated_click_multiplier})\n\n`;
+          for (const opp of report.striking_distance_opportunities.slice(0, 3)) {
+            growthSummary += `• *"${opp.keyword}"* (Position #${opp.current_position} · ${opp.impressions.toLocaleString()} imps)\n`;
+            growthSummary += `  ↳ _Action:_ Rewrite title to high-CTR formula & expand missing H2 subtopics.\n`;
+            growthSummary += `  ↳ _Target:_ Push to Top 3 (${opp.estimated_click_multiplier})\n\n`;
+          }
+          growthSummary += `Saved ${savedCount} high-leverage opportunities queued for 1-click execution.`;
+
+          return {
+            success: true,
+            intent_type: 'immediate_action',
+            action_type: 'growth_acceleration',
+            summary: growthSummary,
+            link_url: '/rank-tracking',
+            link_label: 'View Growth Opportunities',
+            data: report,
+          };
         }
-        growthSummary += `Saved ${savedCount} high-leverage opportunities queued for 1-click execution.`;
+
+        // 3. NEW SITE / LOW-AUTHORITY ACCELERATION PLAYBOOK (0 striking distance queries)
+        console.log(`[AutopilotExecutor] ${website_domain} has 0 striking-distance queries. Deploying New Site Fast-Rank Silo Engine...`);
+        const { FastRankEngine } = await import('./fastRankEngine');
+        const fastRankPlaybook = await FastRankEngine.generateFastRankPlaybook({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
 
         return {
           success: true,
           intent_type: 'immediate_action',
           action_type: 'growth_acceleration',
-          summary: growthSummary,
-          link_url: '/rank-tracking',
-          link_label: 'View Growth Opportunities',
-          data: report,
+          summary: fastRankPlaybook.executive_summary_markdown,
+          link_url: '/keywords',
+          link_label: 'View Fast-Rank Silo',
+          data: fastRankPlaybook,
         };
       }
 

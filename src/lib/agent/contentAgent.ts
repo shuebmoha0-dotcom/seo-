@@ -279,6 +279,10 @@ WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
   - The human explicitly requested a ${rules.word_count_min}–${rules.word_count_max} word article.
   - You MUST stay strictly within this target. For each H2/H3 section, write ONLY 1 to 2 compact, actionable paragraphs (around 120–180 words per heading) so the TOTAL article word count stays under ${rules.word_count_max} words.
   - Do NOT write bloated fluff, multiple repeated explanations, or long multi-page dissertations. Keep every sentence high-signal and punchy.
+- 🏆 POSITION 0 & FEATURED SNIPPET ACCELERATION (MANDATORY FOR FAST RANKING):
+  - In the first 80–120 words directly under the H1/intro, write a crisp Direct Answer Box answering "${brief.primary_keyword}" directly. State the core definition, key steps, or standard benchmarks in 40–60 words so Google can extract it as a Featured Snippet (Position 0).
+- ❓ HIGH-INTENT FAQ SECTION (RICH SNIPPET SCHEMA):
+  - Include a "## Frequently Asked Questions" section near the conclusion with 3 to 4 real questions that searchers ask about "${brief.primary_keyword}", each followed by a concise 2-sentence direct answer for search snippet indexing.
 - Short paragraphs. Clear sentences. High information density.
 - Place image markers exactly where specified: [IMAGE: ...]
 - DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
