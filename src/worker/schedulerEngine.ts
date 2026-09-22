@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Database-Backed Recurring Schedule Engine for Worker
  */
 
@@ -48,6 +48,19 @@ export class SchedulerEngine {
               continue;
             }
 
+            // Check if task is Zero-Touch Full Autopilot
+            const isFullAutopilot = task.name === 'Zero-Touch Full Autopilot' || task.schedule_config?.full_autopilot === true;
+            let websiteId = task.schedule_config?.website_id;
+            if (!websiteId && task.project_id) {
+              const { data: site } = await this.supabase
+                .from('websites')
+                .select('id')
+                .eq('project_id', task.project_id)
+                .limit(1)
+                .maybeSingle();
+              if (site) websiteId = site.id;
+            }
+
             // Enqueue new task_execution
             const { data: newExecution, error: execErr } = await this.supabase
               .from('task_executions')
@@ -56,6 +69,9 @@ export class SchedulerEngine {
                 project_id: task.project_id,
                 status: 'queued',
                 execution_payload: {
+                  type: isFullAutopilot ? 'full_autopilot' : 'orchestrator_goal',
+                  full_autopilot: isFullAutopilot,
+                  website_id: websiteId,
                   goal: task.natural_language_instruction || task.name,
                   task_name: task.name,
                   schedule_type: task.schedule_type,

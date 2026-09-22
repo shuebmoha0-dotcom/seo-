@@ -69,7 +69,7 @@ export class FullAutopilotEngine {
     // 1. Get website info
     const { data: website } = await supabase
       .from('websites')
-      .select('id, project_id, domain, url')
+      .select('id, project_id, domain, url, user_id')
       .eq('id', websiteId)
       .maybeSingle();
 
@@ -77,11 +77,25 @@ export class FullAutopilotEngine {
       throw new Error(`Website ${websiteId} not found.`);
     }
 
+    let projectId = website.project_id;
+    if (!projectId) {
+      const { data: userProj } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5')
+        .limit(1)
+        .maybeSingle();
+      if (userProj) {
+        projectId = userProj.id;
+        await supabase.from('websites').update({ project_id: projectId }).eq('id', website.id);
+      }
+    }
+
     // 2. Query dedicated full autopilot task
     const { data: task } = await supabase
       .from('tasks')
       .select('*')
-      .eq('project_id', website.project_id)
+      .eq('project_id', projectId || '37e402e1-ab72-4b81-8397-a4b81a0009c6')
       .eq('name', 'Zero-Touch Full Autopilot')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -151,11 +165,38 @@ export class FullAutopilotEngine {
 
     if (!website) throw new Error(`Website not found: ${params.website_id}`);
 
+    let projectId = website.project_id;
+    if (!projectId) {
+      const { data: userProj } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5')
+        .limit(1)
+        .maybeSingle();
+
+      if (userProj) {
+        projectId = userProj.id;
+      } else {
+        const { data: newProj } = await supabase
+          .from('projects')
+          .insert({
+            user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+            name: `${website.domain} SEO`,
+            status: 'active',
+          })
+          .select('id')
+          .single();
+        projectId = newProj?.id || '37e402e1-ab72-4b81-8397-a4b81a0009c6';
+      }
+
+      await supabase.from('websites').update({ project_id: projectId }).eq('id', website.id);
+    }
+
     // Fetch existing task to preserve cumulative stats
     const { data: existingTask } = await supabase
       .from('tasks')
       .select('*')
-      .eq('project_id', website.project_id)
+      .eq('project_id', projectId)
       .eq('name', 'Zero-Touch Full Autopilot')
       .maybeSingle();
 
@@ -174,6 +215,7 @@ export class FullAutopilotEngine {
     };
 
     const dbScheduleType = cadence === 'twice_weekly' ? 'custom' : cadence;
+    let taskId = existingTask?.id;
 
     if (existingTask) {
       const { error: updateErr } = await supabase
@@ -188,8 +230,8 @@ export class FullAutopilotEngine {
         .eq('id', existingTask.id);
       if (updateErr) throw new Error(`Failed to update autopilot task: ${updateErr.message}`);
     } else {
-      const { error: insertErr } = await supabase.from('tasks').insert({
-        project_id: website.project_id,
+      const { data: insertedTask, error: insertErr } = await supabase.from('tasks').insert({
+        project_id: projectId,
         user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
         name: 'Zero-Touch Full Autopilot',
         natural_language_instruction: '24/7 continuous autonomous SEO engine: finding unwritten keywords, drafting comprehensive articles, generating visual assets, publishing to WordPress, and fixing technical SEO.',
@@ -198,8 +240,27 @@ export class FullAutopilotEngine {
         schedule_config: updatedConfig,
         timezone: 'UTC',
         next_run_at: nextRunAt,
-      });
+      }).select('id').single();
       if (insertErr) throw new Error(`Failed to insert autopilot task: ${insertErr.message}`);
+      taskId = insertedTask?.id;
+    }
+
+    // Pre-enqueue execution for background worker pick-up
+    if (taskId) {
+      try {
+        await supabase.from('task_executions').insert({
+          task_id: taskId,
+          project_id: projectId,
+          status: 'queued',
+          execution_payload: {
+            type: 'full_autopilot',
+            full_autopilot: true,
+            website_id: params.website_id,
+            goal: updatedConfig.goal,
+            task_name: 'Zero-Touch Full Autopilot',
+          },
+        });
+      } catch (_) {}
     }
 
     // Also sync scheduled_agent_configs table
@@ -235,20 +296,33 @@ export class FullAutopilotEngine {
 
     const { data: website } = await supabase
       .from('websites')
-      .select('id, project_id, domain')
+      .select('id, project_id, domain, user_id')
       .eq('id', websiteId)
       .single();
 
     if (!website) throw new Error(`Website not found: ${websiteId}`);
 
-    await supabase
-      .from('tasks')
-      .update({
-        status: 'paused',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('project_id', website.project_id)
-      .eq('name', 'Zero-Touch Full Autopilot');
+    let projectId = website.project_id;
+    if (!projectId) {
+      const { data: userProj } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5')
+        .limit(1)
+        .maybeSingle();
+      if (userProj) projectId = userProj.id;
+    }
+
+    if (projectId) {
+      await supabase
+        .from('tasks')
+        .update({
+          status: 'paused',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('project_id', projectId)
+        .eq('name', 'Zero-Touch Full Autopilot');
+    }
 
     await supabase
       .from('scheduled_agent_configs')
@@ -295,6 +369,33 @@ export class FullAutopilotEngine {
 
     if (!website) throw new Error(`Website not found: ${websiteId}`);
 
+    let projectId = website.project_id;
+    if (!projectId) {
+      const { data: userProj } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5')
+        .limit(1)
+        .maybeSingle();
+
+      if (userProj) {
+        projectId = userProj.id;
+      } else {
+        const { data: newProj } = await supabase
+          .from('projects')
+          .insert({
+            user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
+            name: `${website.domain} SEO`,
+            status: 'active',
+          })
+          .select('id')
+          .single();
+        projectId = newProj?.id || '37e402e1-ab72-4b81-8397-a4b81a0009c6';
+      }
+
+      await supabase.from('websites').update({ project_id: projectId }).eq('id', website.id);
+    }
+
     const domain = website.domain;
     const siteUrl = website.url || `https://${domain}`;
 
@@ -308,7 +409,7 @@ export class FullAutopilotEngine {
     const { data: execution } = await supabase
       .from('task_executions')
       .insert({
-        project_id: website.project_id,
+        project_id: projectId,
         status: 'running',
         started_at: startTime.toISOString(),
         result_summary: `Autonomous Autopilot Cycle [${cycleId}] in progress for ${domain}...`,
@@ -568,7 +669,7 @@ export class FullAutopilotEngine {
           },
           updated_at: new Date().toISOString(),
         })
-        .eq('project_id', website.project_id)
+        .eq('project_id', projectId)
         .eq('name', 'Zero-Touch Full Autopilot');
 
       // Update execution record

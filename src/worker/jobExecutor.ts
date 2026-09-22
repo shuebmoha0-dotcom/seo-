@@ -9,6 +9,7 @@ import { Orchestrator } from '../lib/agent/orchestrator';
 import { ScheduleAgent } from '../lib/agent/scheduleAgent';
 import { ContentAgent } from '../lib/agent/contentAgent';
 import { CrawlService } from '../lib/crawler/crawlService';
+import { FullAutopilotEngine } from '../lib/agent/fullAutopilotEngine';
 import { createAdminClient } from '../lib/supabase/admin';
 
 export class JobExecutor {
@@ -27,9 +28,26 @@ export class JobExecutor {
 
     try {
       const payload = job.execution_payload || {};
-      const jobType = payload.type || 'orchestrator_goal';
+      let jobType = payload.type;
+
+      // Automatically route Full Autopilot tasks without human approval bottleneck
+      if (
+        jobType === 'full_autopilot' ||
+        payload.full_autopilot === true ||
+        payload.task_name === 'Zero-Touch Full Autopilot' ||
+        payload.goal?.includes('Zero-Touch Full Autopilot')
+      ) {
+        jobType = 'full_autopilot';
+      } else if (!jobType) {
+        jobType = 'orchestrator_goal';
+      }
 
       switch (jobType) {
+        case 'full_autopilot': {
+          await this.executeFullAutopilot(job, payload);
+          break;
+        }
+
         case 'scheduled_agent_run': {
           await this.executeScheduledAgentRun(job, payload);
           break;
@@ -389,4 +407,44 @@ export class JobExecutor {
     const summary = `Crawl finished: ${crawlResult.result?.summary?.total_urls_crawled || 0} pages indexed.`;
     await this.queueManager.completeJob(job.id, summary);
   }
+
+  /**
+   * 6. Zero-Touch Full Autopilot Execution (Fully Autonomous, No Human Pause)
+   */
+  private async executeFullAutopilot(job: TaskExecutionJob, payload: Record<string, any>): Promise<void> {
+    WorkerLogger.info(`Executing Zero-Touch Full Autopilot for job [${job.id}] (task: ${job.task_id})`);
+
+    let websiteId = payload.website_id;
+    if (!websiteId && job.project_id) {
+      const { data: site } = await this.supabase
+        .from('websites')
+        .select('id')
+        .eq('project_id', job.project_id)
+        .limit(1)
+        .maybeSingle();
+      if (site) websiteId = site.id;
+    }
+
+    if (!websiteId) {
+      const { data: firstSite } = await this.supabase
+        .from('websites')
+        .select('id')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (firstSite) websiteId = firstSite.id;
+    }
+
+    if (!websiteId) {
+      throw new Error(`Cannot execute Full Autopilot: no website found for project [${job.project_id}]`);
+    }
+
+    const cycleRes = await FullAutopilotEngine.runAutonomousCycle(websiteId);
+    if (!cycleRes.success) {
+      throw new Error(cycleRes.summary || 'Full Autopilot cycle failed');
+    }
+
+    await this.queueManager.completeJob(job.id, cycleRes.summary);
+  }
 }
+

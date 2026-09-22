@@ -561,9 +561,18 @@ Your agent will process the request in the background and ping you when finished
 
         await telegram.sendMessage(
           chatId,
-          `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Website:* \`${currentSite.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Touch Needed)\n• *Cadence:* Twice Weekly Continuous Cycles\n• *Auto-Publish:* Enabled (Direct live sync to WordPress)\n• *Auto-Fix Technical SEO:* Enabled\n\n_Operating continuously for months without stopping. Send \`/autopilot off\` to pause or \`/autopilot run\` to trigger an immediate cycle._`,
+          `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Website:* \`${currentSite.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Touch Needed)\n• *Cadence:* Twice Weekly Continuous Cycles\n• *Auto-Publish:* Enabled (Direct live sync to WordPress)\n• *Auto-Fix Technical SEO:* Enabled\n\n_Initiating your first autonomous cycle now..._`,
           { parse_mode: 'Markdown' }
         );
+
+        safeBackground(async () => {
+          try {
+            await FullAutopilotEngine.runAutonomousCycle(currentSite.id, { force: true });
+          } catch (runErr: any) {
+            console.error('[Telegram /autopilot on Cycle Error]:', runErr);
+          }
+        });
+
         return NextResponse.json({ ok: true });
       }
 

@@ -93,7 +93,11 @@ export default function AutopilotPage() {
         if (res.ok) {
           const data = await res.json();
           setFullAutopilot(data.status);
-          setStatusFeedback({ message: '🚀 Zero-Touch Full Autopilot activated! Autonomous operations are now running 24/7.', ok: true });
+          setStatusFeedback({ message: '🚀 Zero-Touch Full Autopilot activated! Initiating first autonomous cycle now...', ok: true });
+          await fetchTasks(true);
+          // Automatically launch initial autonomous cycle so user gets immediate results
+          handleRunFullCycleNow();
+          return;
         }
       }
       await fetchTasks(true);
@@ -535,6 +539,22 @@ export default function AutopilotPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Active Execution Banner */}
+                {runningFullCycle && (
+                  <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 flex items-center gap-3.5 relative z-10 shadow-xs animate-pulse">
+                    <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-indigo-900 flex items-center gap-2">
+                        <span>Autonomous Cycle In Progress...</span>
+                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">Zero-Touch Mode</span>
+                      </div>
+                      <div className="text-[11px] text-indigo-700">
+                        Analyzing topical authority, detecting keyword gaps, drafting article via Claude Sonnet 5, creating visual assets, and auto-publishing to WordPress.
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Real-time Metrics Dashboard Strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
