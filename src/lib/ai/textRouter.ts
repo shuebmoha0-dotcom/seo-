@@ -145,15 +145,28 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
     const isValidUuid = (val?: string) =>
       typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
+    let websiteId = isValidUuid(options.context?.website_id) ? options.context?.website_id : null;
     let userId = isValidUuid(options.context?.user_id) ? options.context?.user_id : null;
     let projectId = isValidUuid(options.context?.project_id) ? options.context?.project_id : null;
 
+    // If websiteId is missing, check if task_id belongs to a content_draft
+    if (!websiteId && isValidUuid(options.context?.task_id)) {
+      const { data: draft } = await supabase
+        .from('content_drafts')
+        .select('website_id')
+        .eq('id', options.context!.task_id)
+        .maybeSingle();
+      if (draft?.website_id && isValidUuid(draft.website_id)) {
+        websiteId = draft.website_id;
+      }
+    }
+
     // Auto-resolve user_id and project_id from website_id if missing
-    if ((!userId || !projectId) && isValidUuid(options.context?.website_id)) {
+    if ((!userId || !projectId) && websiteId) {
       const { data: site } = await supabase
         .from('websites')
         .select('user_id, project_id')
-        .eq('id', options.context!.website_id)
+        .eq('id', websiteId)
         .maybeSingle();
 
       if (site) {
@@ -165,6 +178,7 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
     await supabase.from('usage_events').insert({
       user_id: userId,
       project_id: projectId,
+      website_id: websiteId,
       task_id: isValidUuid(options.context?.task_id) ? options.context?.task_id : null,
       task_execution_id: isValidUuid(options.context?.task_execution_id) ? options.context?.task_execution_id : null,
       agent_execution_id: isValidUuid(options.context?.agent_execution_id) ? options.context?.agent_execution_id : null,

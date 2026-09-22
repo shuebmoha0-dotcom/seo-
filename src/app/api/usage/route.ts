@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,48 +14,66 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const adminSupabase = createAdminClient();
+    // Parse query parameters
+    const requestedWebsiteId = req.nextUrl.searchParams.get("website_id");
+    const period = req.nextUrl.searchParams.get("period") || "current_month";
 
-    // 1. Get user's websites
-    const { data: websites } = await adminSupabase
+    // 1. Get user's connected websites (strictly scoped to user.id - Rule 10)
+    const { data: websites, error: websitesErr } = await supabase
       .from("websites")
       .select("id, domain, project_id")
       .eq("user_id", user.id);
 
-    const websiteList = websites || [];
-    const websiteIds = websiteList.map((w: { id: string }) => w.id);
-    const projectIds = Array.from(
-      new Set(websiteList.map((w: any) => w.project_id).filter(Boolean))
-    ) as string[];
-
-    // 2. Get user's projects
-    const { data: userProjects } = await adminSupabase
-      .from("projects")
-      .select("id")
-      .eq("user_id", user.id);
-
-    (userProjects || []).forEach((p: any) => {
-      if (p.id && !projectIds.includes(p.id)) projectIds.push(p.id);
-    });
-
-    // 3. Get user's drafts count & words
-    let totalDrafts = 0;
-    let totalWords = 0;
-    if (websiteIds.length > 0) {
-      const { data: drafts } = await adminSupabase
-        .from("content_drafts")
-        .select("id, word_count")
-        .in("website_id", websiteIds);
-
-      totalDrafts = drafts?.length || 0;
-      totalWords = (drafts || []).reduce(
-        (acc: number, d: { word_count?: number | null }) => acc + (d.word_count || 0),
-        0
-      );
+    if (websitesErr) {
+      console.error("[Usage API] Error loading websites:", websitesErr.message);
     }
 
-    // 4. Fetch custom tenant limit from usage_limits (if configured)
-    const { data: limitRecord } = await adminSupabase
+    const websiteList = websites || [];
+    const allWebsiteIds = websiteList.map((w: { id: string }) => w.id);
+    const websiteMap = new Map(websiteList.map((w: any) => [w.id, w.domain]));
+
+    // If specific website requested, ensure tenant owns it
+    let targetWebsiteIds = allWebsiteIds;
+    let selectedWebsiteDomain: string | null = null;
+
+    if (requestedWebsiteId && requestedWebsiteId !== "all") {
+      const owned = websiteList.find((w: any) => w.id === requestedWebsiteId);
+      if (!owned) {
+        return NextResponse.json(
+          { error: "Website not found or access denied" },
+          { status: 404 }
+        );
+      }
+      targetWebsiteIds = [requestedWebsiteId];
+      selectedWebsiteDomain = owned.domain;
+    }
+
+    // 2. Fetch drafts count & words for target websites
+    let totalDrafts = 0;
+    let totalWords = 0;
+    const draftsByWebsite = new Map<string, { drafts: number; words: number }>();
+
+    if (targetWebsiteIds.length > 0) {
+      const { data: drafts } = await supabase
+        .from("content_drafts")
+        .select("id, website_id, word_count")
+        .in("website_id", targetWebsiteIds);
+
+      totalDrafts = drafts?.length || 0;
+      for (const d of drafts || []) {
+        const wc = d.word_count || 0;
+        totalWords += wc;
+        if (d.website_id) {
+          const prev = draftsByWebsite.get(d.website_id) || { drafts: 0, words: 0 };
+          prev.drafts += 1;
+          prev.words += wc;
+          draftsByWebsite.set(d.website_id, prev);
+        }
+      }
+    }
+
+    // 3. Fetch custom tenant limit from usage_limits
+    const { data: limitRecord } = await supabase
       .from("usage_limits")
       .select("monthly_credit_limit, monthly_api_call_limit")
       .eq("user_id", user.id)
@@ -64,16 +81,20 @@ export async function GET(req: NextRequest) {
 
     const monthlyCreditLimit = Number(limitRecord?.monthly_credit_limit) || 50.0;
 
-    // 5. Query REAL usage_events for this user/tenant for the current month
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-
-    let query = adminSupabase
+    // 4. Query usage_events with date filter
+    let query = supabase
       .from("usage_events")
-      .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at")
-      .gte("created_at", startOfMonth);
+      .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at, website_id");
 
-    if (projectIds.length > 0) {
-      query = query.or(`user_id.eq.${user.id},project_id.in.(${projectIds.join(",")})`);
+    if (period !== "all_time") {
+      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+      query = query.gte("created_at", startOfMonth);
+    }
+
+    if (requestedWebsiteId && requestedWebsiteId !== "all") {
+      query = query.eq("website_id", requestedWebsiteId);
+    } else if (allWebsiteIds.length > 0) {
+      query = query.or(`user_id.eq.${user.id},website_id.in.(${allWebsiteIds.join(",")})`);
     } else {
       query = query.eq("user_id", user.id);
     }
@@ -86,7 +107,7 @@ export async function GET(req: NextRequest) {
 
     const eventList = events || [];
 
-    // Empirical metrics
+    // 5. Aggregate metrics
     let totalCost = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
@@ -95,8 +116,31 @@ export async function GET(req: NextRequest) {
     let totalImageCost = 0;
     let totalLlmCost = 0;
 
+    // Category aggregations
+    const categories = {
+      writing: { name: "AI Articles & Content", cost: 0, calls: 0, tokens: 0, words: totalWords, drafts: totalDrafts },
+      visuals: { name: "AI Featured Visuals", cost: 0, calls: 0, images: 0 },
+      research: { name: "SEO Research & Intelligence", cost: 0, calls: 0, tokens: 0 },
+      automation: { name: "Autonomous Workflows & Sync", cost: 0, calls: 0, tokens: 0 },
+    };
+
     const modelMap = new Map<string, { model: string; provider: string; apiType: string; calls: number; cost: number; tokens: number }>();
     const agentMap = new Map<string, { agent: string; calls: number; cost: number; tokens: number }>();
+    const siteMap = new Map<string, { websiteId: string; domain: string; cost: number; calls: number; tokens: number; images: number; drafts: number; words: number }>();
+
+    for (const site of websiteList) {
+      const siteDraftData = draftsByWebsite.get(site.id) || { drafts: 0, words: 0 };
+      siteMap.set(site.id, {
+        websiteId: site.id,
+        domain: site.domain,
+        cost: 0,
+        calls: 0,
+        tokens: 0,
+        images: 0,
+        drafts: siteDraftData.drafts,
+        words: siteDraftData.words,
+      });
+    }
 
     for (const ev of eventList) {
       const inTok = Number(ev.input_tokens) || 0;
@@ -104,6 +148,7 @@ export async function GET(req: NextRequest) {
       const totTok = Number(ev.total_tokens) || inTok + outTok;
       const cost = Number(ev.estimated_cost) || 0;
       const isImg = ev.api_type === "image";
+      const agent = ev.agent_type || "System";
 
       totalCost += cost;
       totalInputTokens += inTok;
@@ -113,10 +158,27 @@ export async function GET(req: NextRequest) {
       if (isImg) {
         totalImages += 1;
         totalImageCost += cost;
+        categories.visuals.cost += cost;
+        categories.visuals.calls += 1;
+        categories.visuals.images += 1;
       } else {
         totalLlmCost += cost;
+        if (agent === "ContentAgent" || ev.model?.includes("sonnet") || ev.model?.includes("claude")) {
+          categories.writing.cost += cost;
+          categories.writing.calls += 1;
+          categories.writing.tokens += totTok;
+        } else if (["KeywordAgent", "CompetitorAgent", "MonitoringAgent", "DiagnosticAgent"].includes(agent) || ev.api_type === "crawl") {
+          categories.research.cost += cost;
+          categories.research.calls += 1;
+          categories.research.tokens += totTok;
+        } else {
+          categories.automation.cost += cost;
+          categories.automation.calls += 1;
+          categories.automation.tokens += totTok;
+        }
       }
 
+      // Per-model aggregation
       const mKey = ev.model || "Unknown";
       const mExisting = modelMap.get(mKey) || {
         model: mKey,
@@ -131,12 +193,22 @@ export async function GET(req: NextRequest) {
       mExisting.tokens += totTok;
       modelMap.set(mKey, mExisting);
 
-      const aKey = ev.agent_type || "System";
+      // Per-agent aggregation
+      const aKey = agent;
       const aExisting = agentMap.get(aKey) || { agent: aKey, calls: 0, cost: 0, tokens: 0 };
       aExisting.calls += 1;
       aExisting.cost += cost;
       aExisting.tokens += totTok;
       agentMap.set(aKey, aExisting);
+
+      // Per-website aggregation
+      if (ev.website_id && siteMap.has(ev.website_id)) {
+        const sRecord = siteMap.get(ev.website_id)!;
+        sRecord.cost += cost;
+        sRecord.calls += 1;
+        sRecord.tokens += totTok;
+        if (isImg) sRecord.images += 1;
+      }
     }
 
     const roundedCost = Number(totalCost.toFixed(4));
@@ -157,11 +229,30 @@ export async function GET(req: NextRequest) {
       totalLlmCost: Number(totalLlmCost.toFixed(4)),
       totalDrafts,
       totalWords,
-      activeWebsites: websiteIds.length,
-      byModel: Array.from(modelMap.values()).sort((a, b) => b.cost - a.cost),
-      byAgent: Array.from(agentMap.values()).sort((a, b) => b.cost - a.cost),
-      recentEvents: eventList.slice(0, 25).map((ev: any) => ({
+      activeWebsites: targetWebsiteIds.length,
+      selectedWebsiteId: requestedWebsiteId || null,
+      selectedWebsiteDomain,
+      period,
+      websites: websiteList.map((w: any) => ({ id: w.id, domain: w.domain })),
+      categories: {
+        writing: { ...categories.writing, cost: Number(categories.writing.cost.toFixed(4)) },
+        visuals: { ...categories.visuals, cost: Number(categories.visuals.cost.toFixed(4)) },
+        research: { ...categories.research, cost: Number(categories.research.cost.toFixed(4)) },
+        automation: { ...categories.automation, cost: Number(categories.automation.cost.toFixed(4)) },
+      },
+      byWebsite: Array.from(siteMap.values())
+        .map((s) => ({ ...s, cost: Number(s.cost.toFixed(4)) }))
+        .sort((a, b) => b.cost - a.cost),
+      byModel: Array.from(modelMap.values())
+        .map((m) => ({ ...m, cost: Number(m.cost.toFixed(4)) }))
+        .sort((a, b) => b.cost - a.cost),
+      byAgent: Array.from(agentMap.values())
+        .map((a) => ({ ...a, cost: Number(a.cost.toFixed(4)) }))
+        .sort((a, b) => b.cost - a.cost),
+      recentEvents: eventList.slice(0, 50).map((ev: any) => ({
         id: ev.id,
+        websiteId: ev.website_id || null,
+        domain: ev.website_id ? (websiteMap.get(ev.website_id) || null) : null,
         agent: ev.agent_type || "System",
         model: ev.model,
         provider: ev.provider,

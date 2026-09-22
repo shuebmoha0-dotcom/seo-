@@ -583,15 +583,28 @@ async function recordImageUsage(data: {
     const isValidUuid = (val?: string) =>
       typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
 
+    let websiteId = isValidUuid(data.context?.website_id) ? data.context?.website_id : null;
     let userId = isValidUuid(data.context?.user_id) ? data.context?.user_id : null;
     let projectId = isValidUuid(data.context?.project_id) ? data.context?.project_id : null;
 
-    // If website_id is provided, resolve user_id and project_id if missing
-    if ((!userId || !projectId) && isValidUuid(data.context?.website_id)) {
+    // If websiteId is missing, check if task_id belongs to a content_draft
+    if (!websiteId && isValidUuid(data.context?.task_id)) {
+      const { data: draft } = await supabase
+        .from('content_drafts')
+        .select('website_id')
+        .eq('id', data.context!.task_id)
+        .maybeSingle();
+      if (draft?.website_id && isValidUuid(draft.website_id)) {
+        websiteId = draft.website_id;
+      }
+    }
+
+    // Auto-resolve user_id and project_id from website_id if missing
+    if ((!userId || !projectId) && websiteId) {
       const { data: site } = await supabase
         .from('websites')
         .select('user_id, project_id')
-        .eq('id', data.context!.website_id)
+        .eq('id', websiteId)
         .maybeSingle();
 
       if (site) {
@@ -603,6 +616,7 @@ async function recordImageUsage(data: {
     const { error } = await supabase.from('usage_events').insert({
       user_id: userId,
       project_id: projectId,
+      website_id: websiteId,
       task_id: isValidUuid(data.context?.task_id) ? data.context?.task_id : null,
       task_execution_id: isValidUuid(data.context?.task_execution_id) ? data.context?.task_execution_id : null,
       agent_execution_id: isValidUuid(data.context?.agent_execution_id) ? data.context?.agent_execution_id : null,

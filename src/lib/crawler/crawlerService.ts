@@ -73,6 +73,7 @@ export class CrawlerService {
       await supabase.from('usage_events').insert({
         user_id: user.id,
         project_id: options.projectId || null,
+        website_id: options.websiteId || null,
         provider: 'dataforseo',
         model: 'on_page_crawl',
         api_type: 'crawl',

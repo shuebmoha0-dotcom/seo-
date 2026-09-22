@@ -11,7 +11,8 @@ import {
 import {
   Zap, Bot, DollarSign, Activity, TrendingUp, Clock, AlertCircle,
   CheckCircle2, Shield, Sliders, RefreshCw, Cpu, Database, Server,
-  ArrowUpRight, ArrowDownRight, Layers, FileText, Check, Search, Sparkles
+  ArrowUpRight, ArrowDownRight, Layers, FileText, Check, Search, Sparkles,
+  Globe, Filter, Calendar, BarChart3, ChevronDown
 } from "lucide-react";
 
 interface AdminUsageData {
@@ -94,6 +95,26 @@ interface TenantUsageData {
   totalDrafts: number;
   totalWords: number;
   activeWebsites: number;
+  selectedWebsiteId?: string | null;
+  selectedWebsiteDomain?: string | null;
+  period?: string;
+  websites?: Array<{ id: string; domain: string }>;
+  categories?: {
+    writing: { name: string; cost: number; calls: number; tokens: number; words: number; drafts: number };
+    visuals: { name: string; cost: number; calls: number; images: number };
+    research: { name: string; cost: number; calls: number; tokens: number };
+    automation: { name: string; cost: number; calls: number; tokens: number };
+  };
+  byWebsite?: Array<{
+    websiteId: string;
+    domain: string;
+    cost: number;
+    calls: number;
+    tokens: number;
+    images: number;
+    drafts: number;
+    words: number;
+  }>;
   byModel?: Array<{
     model: string;
     provider: string;
@@ -110,6 +131,8 @@ interface TenantUsageData {
   }>;
   recentEvents?: Array<{
     id: string;
+    websiteId?: string | null;
+    domain?: string | null;
     agent: string;
     model: string;
     provider: string;
@@ -155,6 +178,12 @@ export default function UsagePage() {
   const [savingControls, setSavingControls] = useState<boolean>(false);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
+  // Client / Tenant view filters
+  const [selectedWebsite, setSelectedWebsite] = useState<string>("all");
+  const [selectedPeriod, setSelectedPeriod] = useState<"current_month" | "all_time">("current_month");
+  const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
+  const [clientFilterType, setClientFilterType] = useState<"all" | "writing" | "images" | "research">("all");
+
   useEffect(() => {
     async function initUserAndData() {
       try {
@@ -184,7 +213,7 @@ export default function UsagePage() {
         if (adminStatus) {
           await loadAdminTelemetry();
         } else {
-          await loadTenantUsage();
+          await loadTenantUsage("all", "current_month");
         }
       } catch (err) {
         console.error("Failed to load telemetry:", err);
@@ -216,9 +245,12 @@ export default function UsagePage() {
     }
   };
 
-  const loadTenantUsage = async () => {
+  const loadTenantUsage = async (websiteId: string = selectedWebsite, period: string = selectedPeriod) => {
     try {
-      const res = await fetch("/api/usage");
+      const params = new URLSearchParams();
+      if (websiteId && websiteId !== "all") params.set("website_id", websiteId);
+      if (period) params.set("period", period);
+      const res = await fetch(`/api/usage?${params.toString()}`);
       if (res.ok) {
         const data: TenantUsageData = await res.json();
         setTenantData(data);
@@ -329,7 +361,10 @@ export default function UsagePage() {
                     Admin Cockpit
                   </button>
                   <button
-                    onClick={() => setViewMode("client")}
+                    onClick={() => {
+                      setViewMode("client");
+                      loadTenantUsage(selectedWebsite, selectedPeriod);
+                    }}
                     className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                       viewMode === "client"
                         ? "bg-white text-indigo-700 shadow-sm"
@@ -345,7 +380,7 @@ export default function UsagePage() {
               <button
                 onClick={() => {
                   if (isAdmin && viewMode === "admin") loadAdminTelemetry();
-                  else loadTenantUsage();
+                  else loadTenantUsage(selectedWebsite, selectedPeriod);
                 }}
                 disabled={loading}
                 className="p-2 border border-neutral-300 rounded-xl bg-white hover:bg-neutral-100 transition-colors text-neutral-600"
@@ -934,12 +969,93 @@ export default function UsagePage() {
           {/* ========================================================================= */}
           {(!isAdmin || viewMode === "client") && (
             <div className="space-y-8">
-              {/* Credit Meter */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
+              {/* Property & Period Selector Bar */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-600">
+                    <Globe className="w-5 h-5" />
+                  </div>
                   <div>
-                    <h2 className="font-bold text-neutral-900 text-lg">Monthly Credit Allowance</h2>
-                    <p className="text-sm text-neutral-500 mt-0.5">Allocated credits reset on the 1st of each calendar month</p>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 block mb-0.5">
+                      Target Property Filter
+                    </label>
+                    <select
+                      value={selectedWebsite}
+                      onChange={(e) => {
+                        const newSite = e.target.value;
+                        setSelectedWebsite(newSite);
+                        loadTenantUsage(newSite, selectedPeriod);
+                      }}
+                      className="bg-transparent font-bold text-neutral-900 text-base focus:outline-none cursor-pointer pr-4"
+                    >
+                      <option value="all">
+                        All Connected Websites ({tenantData?.websites?.length || tenantData?.activeWebsites || 1})
+                      </option>
+                      {(tenantData?.websites || []).map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.domain}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 self-end md:self-auto">
+                  <div className="flex bg-neutral-100 p-1 rounded-xl text-xs font-semibold text-neutral-600">
+                    <button
+                      onClick={() => {
+                        setSelectedPeriod("current_month");
+                        loadTenantUsage(selectedWebsite, "current_month");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg transition-all ${
+                        selectedPeriod === "current_month"
+                          ? "bg-white text-indigo-700 shadow-sm font-bold"
+                          : "hover:text-neutral-900"
+                      }`}
+                    >
+                      Current Month
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedPeriod("all_time");
+                        loadTenantUsage(selectedWebsite, "all_time");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg transition-all ${
+                        selectedPeriod === "all_time"
+                          ? "bg-white text-indigo-700 shadow-sm font-bold"
+                          : "hover:text-neutral-900"
+                      }`}
+                    >
+                      All Time
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Monthly Credit Allowance & Quota Meter */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-bold text-neutral-900 text-lg">Monthly Credit Allowance</h2>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
+                        (tenantData?.usedPercent ?? 0) >= 100
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : (tenantData?.usedPercent ?? 0) >= 80
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      }`}>
+                        {(tenantData?.usedPercent ?? 0) >= 100
+                          ? "Quota Exceeded"
+                          : (tenantData?.usedPercent ?? 0) >= 80
+                          ? "High Usage"
+                          : "Healthy Allowance"}
+                      </span>
+                    </div>
+                    <p className="text-sm text-neutral-500 mt-0.5">
+                      {selectedPeriod === "all_time" ? "Cumulative historical credit consumption" : "Allocated credits reset on the 1st of each calendar month"}
+                      {tenantData?.selectedWebsiteDomain ? ` · Filtered to ${tenantData.selectedWebsiteDomain}` : ""}
+                    </p>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-black text-neutral-900">
@@ -954,14 +1070,18 @@ export default function UsagePage() {
                 <div className="h-3 bg-neutral-100 rounded-full overflow-hidden mb-2">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      (tenantData?.usedPercent ?? 0) > 80 ? "bg-amber-500" : "bg-indigo-600"
+                      (tenantData?.usedPercent ?? 0) >= 100
+                        ? "bg-red-500"
+                        : (tenantData?.usedPercent ?? 0) > 80
+                        ? "bg-amber-500"
+                        : "bg-indigo-600"
                     }`}
                     style={{ width: `${Math.min(tenantData?.usedPercent ?? 0, 100)}%` }}
                   />
                 </div>
                 <div className="flex justify-between text-xs text-neutral-500">
-                  <span>{tenantData?.usedPercent ?? 0}% used</span>
-                  <span>${(tenantData?.remainingCredits ?? (tenantData?.creditLimit ?? 50.0)).toFixed(2)} remaining</span>
+                  <span>{tenantData?.usedPercent ?? 0}% quota consumed</span>
+                  <span>${(tenantData?.remainingCredits ?? (tenantData?.creditLimit ?? 50.0)).toFixed(2)} credits available</span>
                 </div>
               </div>
 
@@ -988,7 +1108,7 @@ export default function UsagePage() {
                     {tenantData?.totalDrafts ?? 0}
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Articles Drafted</div>
-                  <div className="text-[11px] text-neutral-400 mt-1">Ready in Planner</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">Ready in Content Planner</div>
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
@@ -999,7 +1119,7 @@ export default function UsagePage() {
                     {((tenantData?.totalWords ?? 0) / 1000).toFixed(1)}k
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Words Written</div>
-                  <div className="text-[11px] text-neutral-400 mt-1">Target 1.2k–1.6k/post</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">By Claude Sonnet 5</div>
                 </div>
 
                 <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm">
@@ -1023,17 +1143,170 @@ export default function UsagePage() {
                     {tenantData?.activeWebsites ?? 0}
                   </div>
                   <div className="text-xs text-neutral-500 font-medium mt-0.5">Connected Sites</div>
-                  <div className="text-[11px] text-neutral-400 mt-1">Multi-tenant scope</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">Airtight isolation</div>
                 </div>
               </div>
 
-              {/* Tenant Live Usage Breakdown by Model & Type */}
+              {/* Operational Categories Breakdown */}
+              <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div>
+                  <h3 className="font-bold text-neutral-900 text-base">Operational Allocation</h3>
+                  <p className="text-xs text-neutral-500 mt-0.5">Credit consumption divided by feature and autonomous agent role</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Category: AI Writing */}
+                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                        AI Articles (Sonnet 5)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-indigo-600">
+                        ${(tenantData?.categories?.writing?.cost ?? tenantData?.totalLlmCost ?? 0).toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="text-lg font-black text-neutral-900">
+                      {tenantData?.totalDrafts ?? 0} articles
+                    </div>
+                    <div className="text-[11px] text-neutral-500">
+                      {((tenantData?.totalWords ?? 0) / 1000).toFixed(1)}k words · {(tenantData?.categories?.writing?.tokens ?? 0).toLocaleString()} tokens
+                    </div>
+                  </div>
+
+                  {/* Category: AI Visuals */}
+                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-pink-600" />
+                        AI Visuals & Media
+                      </span>
+                      <span className="text-xs font-mono font-bold text-pink-600">
+                        ${(tenantData?.categories?.visuals?.cost ?? tenantData?.totalImageCost ?? 0).toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="text-lg font-black text-neutral-900">
+                      {tenantData?.totalImages ?? 0} visuals
+                    </div>
+                    <div className="text-[11px] text-neutral-500">
+                      Gemini 2.5 Flash · ~$0.030 / graphic
+                    </div>
+                  </div>
+
+                  {/* Category: SEO Research */}
+                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                        <Search className="w-3.5 h-3.5 text-cyan-600" />
+                        SEO & Competitors
+                      </span>
+                      <span className="text-xs font-mono font-bold text-cyan-600">
+                        ${(tenantData?.categories?.research?.cost ?? 0).toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="text-lg font-black text-neutral-900">
+                      {tenantData?.categories?.research?.calls ?? 0} audits
+                    </div>
+                    <div className="text-[11px] text-neutral-500">
+                      Keywords, competitors, & SERP crawls
+                    </div>
+                  </div>
+
+                  {/* Category: Autonomous Autopilot */}
+                  <div className="p-4 rounded-xl border border-neutral-200 bg-neutral-50/50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                        <Bot className="w-3.5 h-3.5 text-purple-600" />
+                        Autopilot & Sync
+                      </span>
+                      <span className="text-xs font-mono font-bold text-purple-600">
+                        ${(tenantData?.categories?.automation?.cost ?? 0).toFixed(3)}
+                      </span>
+                    </div>
+                    <div className="text-lg font-black text-neutral-900">
+                      {tenantData?.categories?.automation?.calls ?? 0} runs
+                    </div>
+                    <div className="text-[11px] text-neutral-500">
+                      Orchestrator & background automation
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-Website Consumption Overview (when viewing all sites or multiple sites exist) */}
+              {tenantData?.byWebsite && tenantData.byWebsite.length > 0 && selectedWebsite === "all" && (
+                <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-neutral-900 text-base">Per-Property Usage Distribution</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">Resource consumption and content production across connected websites</p>
+                    </div>
+                    <span className="text-xs font-semibold text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-lg">
+                      {tenantData.byWebsite.length} Properties
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-neutral-50 text-neutral-500 text-xs uppercase font-semibold border-b border-neutral-200">
+                        <tr>
+                          <th className="px-4 py-3">Website Domain</th>
+                          <th className="px-4 py-3 text-right">Articles</th>
+                          <th className="px-4 py-3 text-right">Words</th>
+                          <th className="px-4 py-3 text-right">AI Visuals</th>
+                          <th className="px-4 py-3 text-right">Invocations</th>
+                          <th className="px-4 py-3 text-right">Total Cost</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {tenantData.byWebsite.map((site) => (
+                          <tr key={site.websiteId} className="hover:bg-neutral-50/80 transition-colors">
+                            <td className="px-4 py-3 font-semibold text-neutral-900 text-xs flex items-center gap-2">
+                              <Globe className="w-3.5 h-3.5 text-neutral-400" />
+                              {site.domain}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {site.drafts}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {(site.words / 1000).toFixed(1)}k
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {site.images}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-neutral-700">
+                              {site.calls}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold text-xs text-neutral-900">
+                              ${site.cost.toFixed(3)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => {
+                                  setSelectedWebsite(site.websiteId);
+                                  loadTenantUsage(site.websiteId, selectedPeriod);
+                                }}
+                                className="px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+                              >
+                                Filter Site
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Engine & Model Breakdown */}
               {tenantData?.byModel && tenantData.byModel.length > 0 && (
                 <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-bold text-neutral-900 text-base">Current Month Usage Breakdown</h3>
-                      <p className="text-xs text-neutral-500 mt-0.5">Live itemized charges across writing models and visual generators</p>
+                      <h3 className="font-bold text-neutral-900 text-base">AI Engine Cost Transparency</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">Itemized telemetry across writing models and visual generators</p>
                     </div>
                     <span className="text-xs font-mono font-bold text-neutral-700 bg-neutral-100 px-2.5 py-1 rounded-lg">
                       {tenantData.totalCalls ?? 0} Invocations
@@ -1087,11 +1360,108 @@ export default function UsagePage() {
                 </div>
               )}
 
-              {/* Tenant Security Guarantee Note */}
+              {/* Itemized Activity Ledger */}
+              {tenantData?.recentEvents && tenantData.recentEvents.length > 0 && (
+                <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-neutral-900 text-base">Recent Usage Activity Ledger</h3>
+                      <p className="text-xs text-neutral-500 mt-0.5">Live itemized charges per autonomous operation</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search operations..."
+                          value={clientSearchQuery}
+                          onChange={(e) => setClientSearchQuery(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 text-xs bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:border-indigo-500 text-neutral-800 w-44"
+                        />
+                      </div>
+                      <select
+                        value={clientFilterType}
+                        onChange={(e) => setClientFilterType(e.target.value as any)}
+                        className="py-1.5 px-2.5 text-xs bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-700 font-medium focus:outline-none cursor-pointer"
+                      >
+                        <option value="all">All Types</option>
+                        <option value="writing">AI Writing</option>
+                        <option value="images">AI Visuals</option>
+                        <option value="research">SEO Research</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-96">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-neutral-50 text-neutral-500 text-xs uppercase font-semibold border-b border-neutral-200 sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2.5">Time</th>
+                          <th className="px-4 py-2.5">Property</th>
+                          <th className="px-4 py-2.5">Agent / Role</th>
+                          <th className="px-4 py-2.5">Engine / Model</th>
+                          <th className="px-4 py-2.5 text-right">Units / Tokens</th>
+                          <th className="px-4 py-2.5 text-right">Cost (USD)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-100">
+                        {(tenantData.recentEvents || [])
+                          .filter((ev) => {
+                            const query = clientSearchQuery.toLowerCase();
+                            const matchesSearch =
+                              query === "" ||
+                              ev.agent.toLowerCase().includes(query) ||
+                              ev.model.toLowerCase().includes(query) ||
+                              (ev.domain && ev.domain.toLowerCase().includes(query));
+
+                            const matchesType =
+                              clientFilterType === "all" ||
+                              (clientFilterType === "writing" && (ev.agent === "ContentAgent" || ev.model.includes("sonnet") || ev.model.includes("claude"))) ||
+                              (clientFilterType === "images" && (ev.apiType === "image" || ev.agent === "ImageAgent")) ||
+                              (clientFilterType === "research" && ["KeywordAgent", "CompetitorAgent", "MonitoringAgent", "DiagnosticAgent"].includes(ev.agent));
+
+                            return matchesSearch && matchesType;
+                          })
+                          .slice(0, 30)
+                          .map((ev) => (
+                            <tr key={ev.id} className="hover:bg-neutral-50/80 transition-colors text-xs">
+                              <td className="px-4 py-2.5 text-neutral-500 font-mono">
+                                {new Date(ev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="px-4 py-2.5 text-neutral-700 font-medium">
+                                {ev.domain || "Primary"}
+                              </td>
+                              <td className="px-4 py-2.5 font-semibold text-neutral-900">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className="w-2 h-2 rounded-full"
+                                    style={{ backgroundColor: AGENT_COLORS[ev.agent] || "#6366f1" }}
+                                  />
+                                  {ev.agent}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-neutral-600">
+                                {ev.model}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono text-neutral-700">
+                                {ev.apiType === "image" ? "1 image" : ev.totalTokens.toLocaleString()}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono font-bold text-neutral-900">
+                                ${ev.cost.toFixed(4)}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Tenant Security & Privacy Reassurance */}
               <div className="flex items-start gap-3 bg-neutral-50 border border-neutral-200 rounded-2xl p-5 text-sm text-neutral-600">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
                 <p>
-                  Your website data and credits are strictly private and isolated to your account. External provider keys and system telemetry are fully managed and protected by the platform.
+                  <strong>Airtight Multi-Tenant Privacy Guarantee:</strong> Your website analytics, generated content, and credit balances are strictly private and isolated to your authenticated account. Provider API tokens and infrastructure keys are protected at the Edge and never exposed.
                 </p>
               </div>
             </div>
