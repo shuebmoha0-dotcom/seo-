@@ -148,6 +148,7 @@ export class KeywordAgent {
 
       const isEstablished = (params.mode ? params.mode === 'established' : profile?.authorityTier === 'established');
       const primaryNiche = profile?.primaryNiche || params.seedTopic || params.domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ');
+      const contentPillars = profile?.contentPillars?.length ? profile.contentPillars : [];
       const coreOfferings = profile?.coreOfferings?.length ? profile.coreOfferings.join(', ') : primaryNiche;
       const targetAudience = profile?.targetAudience || 'Core target customers and readers';
       const negativeBoundaries = profile?.negativeBoundaries?.length ? profile.negativeBoundaries.join('; ') : 'Do not recommend unrelated cross-niche topics';
@@ -181,6 +182,7 @@ export class KeywordAgent {
         prompt: `Conduct an in-depth SEO keyword research and topical clustering analysis for:
 Domain: "${params.domain}"
 Verified Primary Niche: "${primaryNiche}"
+${contentPillars.length > 0 ? `CORE CONTENT PILLARS (CLUSTERS MUST MAP DIRECTLY TO THESE PILLARS):\n${contentPillars.map(p => `• ${p}`).join('\n')}\n` : ''}
 Core Offerings & Solutions: "${coreOfferings}"
 Target Audience: "${targetAudience}"
 ${params.siteDescription ? `Site Description: ${params.siteDescription}` : ''}
@@ -188,7 +190,7 @@ Mode / Authority Tier: ${isEstablished ? 'Established site (authority backlink e
 
 NEGATIVE NICHE BOUNDARIES (STRICT PROHIBITION):
 ${negativeBoundaries}
-NEVER recommend keywords from unrelated niches (e.g. cold email, crypto, or unrelated tools unless this site is specifically in that industry).
+NEVER recommend keywords from unrelated niches outside of "${primaryNiche}".
 
 ${params.categories && params.categories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES:\n${params.categories.map(c => `• ${c}`).join('\n')}\n` : ''}
 ${params.existingArticles && params.existingArticles.length > 0 ? `ALREADY PUBLISHED ARTICLES (DO NOT CANNIBALIZE OR DUPLICATE):\n${params.existingArticles.slice(0, 30).map(t => `- "${t}"`).join('\n')}\n` : ''}

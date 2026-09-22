@@ -44,14 +44,29 @@ export class CompetitorAgent {
 
   /**
    * Discovers and classifies real SEO and industry competitors autonomously
-   * without requiring third-party DataForSEO API keys.
+   * without requiring third-party DataForSEO API keys. Grounded in verified niche profile.
    */
   async discoverCompetitorsDirect(
     customerDomain: string,
     targetKeywords: string[],
-    siteDescription?: string
+    siteDescription?: string,
+    nicheProfile?: {
+      primaryNiche?: string;
+      contentPillars?: string[];
+      coreOfferings?: string[];
+      liveCategories?: Array<{ name: string; count?: number }>;
+      negativeBoundaries?: string[];
+    }
   ) {
     console.log('[CompetitorAgent] Discovering competitors autonomously via AI intelligence...');
+
+    const primaryNiche = nicheProfile?.primaryNiche || siteDescription || 'Online Software & Services';
+    const pillars = nicheProfile?.contentPillars?.length ? nicheProfile.contentPillars.join(', ') : '';
+    const categories = nicheProfile?.liveCategories?.length
+      ? nicheProfile.liveCategories.map(c => `${c.name} (${c.count || 0} articles)`).join(', ')
+      : '';
+    const offerings = nicheProfile?.coreOfferings?.length ? nicheProfile.coreOfferings.join(', ') : '';
+    const negativeBoundaries = nicheProfile?.negativeBoundaries?.length ? nicheProfile.negativeBoundaries.join('; ') : '';
 
     const { object } = await LLMProvider.generateObject({
       agent: 'CompetitorAgent',
@@ -66,14 +81,25 @@ export class CompetitorAgent {
       }),
       prompt: `
         You are an expert SEO Competitor Intelligence Agent.
-        Discover and analyze the top real competitors for:
-        Target Domain: "${customerDomain}"
-        Target Keywords: ${JSON.stringify(targetKeywords)}
-        ${siteDescription ? `Site Description: "${siteDescription}"` : ''}
+        Discover and analyze 5 to 8 REAL, legitimate competitor domains that directly or organically compete in this EXACT niche:
 
-        Identify 5 to 8 real competitor domains that directly or organically compete in this exact space.
-        Include direct product competitors, SERP competitors, and authoritative content competitors.
-        Provide concrete reasons, relevance scores (65-98), and 3 to 5 overlapping keywords.
+        Target Domain: "${customerDomain}"
+        Verified Primary Niche: "${primaryNiche}"
+        ${pillars ? `Core Content Pillars: ${pillars}` : ''}
+        ${categories ? `Live Published Categories: ${categories}` : ''}
+        ${offerings ? `Core Offerings / Solutions: ${offerings}` : ''}
+        Target Search Keywords: ${JSON.stringify(targetKeywords)}
+        ${negativeBoundaries ? `Negative Boundaries (Do NOT include competitors from these unrelated niches): ${negativeBoundaries}` : ''}
+
+        CRITICAL GROUNDING RULES:
+        1. Do NOT guess the niche merely from arbitrary words in the domain name. The verified primary niche and content pillars above take absolute precedence.
+        2. Identify real, functioning competitor domains that rank for and specialize in these topics.
+        3. Classify each competitor accurately:
+           - "direct": Direct product/software/service alternative.
+           - "serp": Dominates search rankings for the same high-intent queries.
+           - "content": Authoritative publication or blog covering the same content pillars.
+           - "commercial": Adjacent commercial player competing for the same business audience.
+        4. Provide concrete reasons for why they compete, realistic relevance scores (65-98), and 3 to 5 realistic overlapping search keywords.
       `
     });
 

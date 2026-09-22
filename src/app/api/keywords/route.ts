@@ -138,7 +138,23 @@ export async function POST(request: Request) {
 
     const effectiveMode = (mode === 'new' || mode === 'established') ? mode : siteProfile.authorityTier;
 
-    // 3. Run AI-driven topical clustering and discovery
+    // 3. Mark previous cached clusters as outdated
+    try {
+      await supabase
+        .from('project_memory')
+        .update({ is_outdated: true })
+        .eq('website_id', website_id)
+        .eq('source', 'cached_keyword_clusters');
+    } catch (_) {}
+
+    if (body.force_fresh) {
+      try {
+        await supabase.from('keyword_opportunities').delete().eq('website_id', website_id);
+        await supabase.from('keyword_clusters').delete().eq('website_id', website_id);
+      } catch (_) {}
+    }
+
+    // 4. Run AI-driven topical clustering and discovery
     const { clusters, opportunities } = await agent.discoverOpportunities({
       domain: website.domain,
       websiteId: website_id,
@@ -148,9 +164,10 @@ export async function POST(request: Request) {
       projectMemory,
       projectInstructions,
       mode: effectiveMode,
+      categories: siteProfile.liveCategories?.map(c => c.name),
     });
 
-    // 3. Save clusters and opportunities to Supabase
+    // 5. Save clusters and opportunities to Supabase
     let saveFailedWithRLS = false;
     for (const c of clusters) {
       try {

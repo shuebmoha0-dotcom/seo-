@@ -668,6 +668,12 @@ export class AutopilotExecutor {
 
         // Cache fallback in project_memory
         try {
+          await supabase
+            .from('project_memory')
+            .update({ is_outdated: true })
+            .eq('website_id', website_id)
+            .eq('source', 'cached_keyword_clusters');
+
           await supabase.from('project_memory').insert({
             website_id,
             source: 'cached_keyword_clusters',
@@ -1029,63 +1035,105 @@ export class AutopilotExecutor {
       // ── ACTION: COMPETITOR ANALYSIS ──────────────────────────────────
       if (instruction.action_type === 'competitor_analysis') {
         console.log(`[AutopilotExecutor] Running competitor analysis for "${website_domain}"...`);
+        const { SiteNicheProfiler } = await import('./siteNicheProfiler');
+        const { CompetitorAgent } = await import('./competitorAgent');
+
+        const siteProfile = await SiteNicheProfiler.profileSite({
+          websiteId: website_id,
+          domain: website_domain,
+          siteUrl: website_url,
+        });
+
         let { data: competitors } = await supabase
           .from('competitors')
           .select('id, domain, type, overlap_score, overlap_keywords, status')
           .eq('website_id', website_id)
-          .limit(6);
+          .order('overlap_score', { ascending: false })
+          .limit(8);
 
         // If no competitors are configured in database, discover them autonomously!
         if (!competitors || competitors.length === 0) {
-          console.log(`[AutopilotExecutor] No competitors in database for ${website_domain}. Autonomously discovering competitors...`);
+          console.log(`[AutopilotExecutor] No competitors in database for ${website_domain}. Autonomously discovering competitors grounded in ${siteProfile.primaryNiche}...`);
           try {
-            const { SiteNicheProfiler } = await import('./siteNicheProfiler');
-            const { CompetitorAgent } = await import('./competitorAgent');
-            const siteProfile = await SiteNicheProfiler.profileSite({
-              websiteId: website_id,
-              domain: website_domain,
-              siteUrl: website_url,
-            });
-
             const competitorAgent = new CompetitorAgent();
-            const targetKeywords = siteProfile.coreOfferings?.length > 0
-              ? siteProfile.coreOfferings.slice(0, 5)
-              : [`${siteProfile.primaryNiche} software`, `${siteProfile.primaryNiche} platform`, `${siteProfile.primaryNiche} tools`];
+            const targetKeywords = (siteProfile.nicheSeedKeywords && siteProfile.nicheSeedKeywords.length > 0)
+              ? siteProfile.nicheSeedKeywords.slice(0, 5)
+              : (siteProfile.coreOfferings?.length > 0
+                ? siteProfile.coreOfferings.slice(0, 5)
+                : [`${siteProfile.primaryNiche} tools`, `${siteProfile.primaryNiche} software`]);
 
             const discovered = await competitorAgent.discoverCompetitorsDirect(
               website_domain,
               targetKeywords,
-              `Industry: ${siteProfile.primaryNiche}. Audience: ${siteProfile.targetAudience}`
+              `Primary Niche: ${siteProfile.primaryNiche}`,
+              siteProfile
             );
 
             if (discovered && discovered.length > 0) {
-              const insertRows = discovered.slice(0, 6).map((c: any) => ({
+              const insertRows = discovered.slice(0, 8).map((c: any) => ({
                 website_id,
                 domain: c.domain,
                 type: c.classification === 'direct' ? 'Direct' : c.classification === 'content' ? 'Content' : 'Organic',
                 overlap_score: c.relevance_score || 75,
                 overlap_keywords: (c.overlap_keywords || []).length || 5,
                 status: 'active',
+                trend: 0.0,
                 last_analyzed_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               }));
 
               await supabase.from('competitors').upsert(insertRows, { onConflict: 'website_id,domain' });
-
               competitors = insertRows as any;
+
+              // Insert threats and content gaps
+              for (const comp of discovered.slice(0, 4)) {
+                if (comp.overlap_keywords && comp.overlap_keywords.length > 0) {
+                  const kw = comp.overlap_keywords[0];
+                  const wordCount = kw.split(/\s+/).length;
+                  const vol = wordCount <= 2 ? 1800 : wordCount === 3 ? 950 : 480;
+
+                  await supabase.from('content_gaps').insert({
+                    website_id,
+                    keyword: kw,
+                    gap_type: 'Missing Topic',
+                    search_volume: vol,
+                    difficulty: comp.relevance_score > 80 ? 'Medium' : 'Low',
+                    competitor_domain: comp.domain,
+                    note: `Competitor ${comp.domain} covers this topic extensively.`,
+                    status: 'open',
+                  });
+                }
+              }
             }
           } catch (compErr) {
             console.warn('[AutopilotExecutor] Autonomous competitor discovery fallback warning:', compErr);
           }
         }
 
-        let compSummary = `🕵️ *Competitor Search Intelligence: ${website_domain}*\n\n`;
+        // Fetch active content gaps
+        const { data: contentGaps } = await supabase
+          .from('content_gaps')
+          .select('competitor_domain, keyword, search_volume, difficulty')
+          .eq('website_id', website_id)
+          .limit(4);
+
+        let compSummary = `🕵️ *Competitor Search Intelligence: ${website_domain}*\n`;
+        compSummary += `🎯 *Verified Niche:* ${siteProfile.primaryNiche}\n\n`;
+
         if (competitors && competitors.length > 0) {
-          compSummary += `Monitoring ${competitors.length} primary competitors in your niche:\n\n`;
-          for (const c of competitors) {
-            compSummary += `• *${c.domain}* (${c.type || 'Direct'}):\n  ↳ Overlap Score: \`${c.overlap_score || 80}%\` · Status: \`${c.status || 'Tracked'}\`\n`;
+          compSummary += `Monitoring *${competitors.length} primary competitors* in this space:\n\n`;
+          for (const c of competitors.slice(0, 5)) {
+            compSummary += `• *${c.domain}* (${c.type || 'Direct'}):\n  ↳ Overlap Score: \`${c.overlap_score || 80}%\` · Status: \`${c.status || 'Active'}\`\n`;
           }
-          compSummary += `\n🎯 *Intelligence Insights:*\nOur agents continuously analyze competitor keyword shifts to capture high-intent rankings and defend your topical authority.`;
+
+          if (contentGaps && contentGaps.length > 0) {
+            compSummary += `\n⚡ *High-Opportunity Content Gaps:*\n`;
+            for (const g of contentGaps) {
+              compSummary += `• *"${g.keyword}"* (vs \`${g.competitor_domain}\`) · ~${g.search_volume || 800}/mo · ${g.difficulty || 'Medium'} KD\n`;
+            }
+          }
+
+          compSummary += `\n💡 _Reply with "Write an article about [competitor topic]" to capture this search traffic immediately!_`;
         } else {
           compSummary += `Analyzing SERP landscape for *${website_domain}*...\nReply with *"Track competitor competitor.com"* to benchmark against any specific rival!`;
         }
@@ -1097,7 +1145,7 @@ export class AutopilotExecutor {
           summary: compSummary,
           link_url: '/competitors',
           link_label: 'Open Competitor Center',
-          data: { competitors },
+          data: { competitors, niche: siteProfile.primaryNiche, contentGaps },
         };
       }
 

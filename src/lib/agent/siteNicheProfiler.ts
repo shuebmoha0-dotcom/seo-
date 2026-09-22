@@ -11,7 +11,10 @@ export interface SiteNicheProfile {
   primaryNiche: string;
   coreOfferings: string[];
   targetAudience: string;
+  contentPillars: string[];
+  nicheSeedKeywords: string[];
   negativeBoundaries: string[]; // What the site explicitly does NOT do
+  liveCategories?: Array<{ name: string; count?: number }>;
   authorityTier: AuthorityTier;
   authorityMetrics: {
     pageCount: number;
@@ -61,7 +64,14 @@ export class SiteNicheProfiler {
 
         if (cached?.content) {
           const parsed = JSON.parse(cached.content) as SiteNicheProfile;
-          if (parsed.primaryNiche && parsed.authorityTier) {
+          if (
+            parsed.primaryNiche &&
+            parsed.authorityTier &&
+            Array.isArray(parsed.contentPillars) &&
+            parsed.contentPillars.length > 0 &&
+            Array.isArray(parsed.nicheSeedKeywords) &&
+            parsed.nicheSeedKeywords.length > 0
+          ) {
             return parsed;
           }
         }
@@ -153,17 +163,22 @@ export class SiteNicheProfiler {
     }
 
     // 4. Also fetch WordPress categories if available
+    let categoriesWithCounts: Array<{ name: string; count?: number }> = [];
     try {
-      const catRes = await fetch(`${siteUrl}/wp-json/wp/v2/categories?per_page=15`, {
-        signal: AbortSignal.timeout(2500),
+      const catRes = await fetch(`${siteUrl}/wp-json/wp/v2/categories?per_page=20`, {
+        signal: AbortSignal.timeout(3000),
         headers: { 'User-Agent': 'SEO-Autopilot-Profiler/1.0' },
       });
       if (catRes.ok) {
         const rawCats = await catRes.json();
         if (Array.isArray(rawCats)) {
-          categoriesData = rawCats
-            .filter(c => c.slug !== 'uncategorized' && c.name)
-            .map(c => c.name.replace(/&amp;/g, '&'));
+          for (const c of rawCats) {
+            if (c.slug !== 'uncategorized' && c.name) {
+              const cleanName = c.name.replace(/&amp;/g, '&');
+              categoriesData.push(cleanName);
+              categoriesWithCounts.push({ name: cleanName, count: c.count || 0 });
+            }
+          }
         }
       }
     } catch (_) {}
@@ -192,7 +207,6 @@ export class SiteNicheProfiler {
         };
 
     // 6. Synthesize Exact Site Niche Profile via AI
-    // Package all collected evidence
     const homepage = pagesData.find(p => p.path === '/' || p.path === '') || pagesData[0];
     const evidenceSummary = {
       domain,
@@ -201,18 +215,21 @@ export class SiteNicheProfiler {
       homepageMetaDescription: homepage?.meta_description || '',
       homepageH1: homepage?.h1 || '',
       otherSamplePages: pagesData.slice(1, 6).map(p => ({ path: p.path, title: p.title, h1: p.h1 })),
-      categories: categoriesData,
-      existingArticlesSample: existingArticleTitles.slice(0, 10),
+      categoriesWithPostCounts: categoriesWithCounts,
+      existingArticlesSample: existingArticleTitles.slice(0, 15),
       contentRulesAudience: contentRulesData?.audience || '',
-      projectMemoryExcerpt: projectMemoryContent.slice(0, 500),
+      projectMemoryExcerpt: projectMemoryContent.slice(0, 800),
     };
 
     let primaryNiche = `${domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ')}`;
     let coreOfferings: string[] = [];
+    let contentPillars: string[] = categoriesData.length > 0 ? categoriesData.slice(0, 5) : [primaryNiche];
+    let nicheSeedKeywords: string[] = [];
     let targetAudience = contentRulesData?.audience || `Prospective customers and visitors of ${domain}`;
     let negativeBoundaries: string[] = [
-      'Do not recommend cold email or sales outreach unless this site is specifically in that industry',
-      'Do not recommend unrelated generic tech topics',
+      'Do not recommend unrelated generic software',
+      'Do not recommend business plan templates unless specifically an online business planning tool',
+      'Do not recommend unrelated coding tutorials',
     ];
 
     try {
@@ -220,30 +237,45 @@ export class SiteNicheProfiler {
         agent: 'DiagnosticAgent',
         complexity: 'simple',
         schema: z.object({
-          primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "Dental Implants & Cosmetic Dentistry Clinic", "AI Video Editing SaaS", "Specialty Coffee Roaster")'),
+          primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "B2B Cold Email Outreach & Sales Automation", "Dental Implants Clinic", "AI Video Editing SaaS")'),
           core_offerings: z.array(z.string()).describe('3-5 core products, services, or solutions this website provides'),
           target_audience: z.string().describe('Specific buyer persona or reader audience who uses this website'),
+          content_pillars: z.array(z.string()).describe('3-5 foundational content pillars derived directly from verified site categories and articles'),
+          niche_seed_keywords: z.array(z.string()).describe('6-10 real, high-intent Google search keywords that potential customers/readers use to find information in this exact niche (e.g. "cold email templates", "email warm up guide", "cold email deliverability", "b2b sales email", "cold outreach follow up")'),
           negative_boundaries: z.array(z.string()).describe('3-5 unrelated niches or topic areas that this website DOES NOT belong to, to prevent cross-niche hallucination'),
         }),
-        system: `You are an elite Business Analyst and Niche Classification Engineer.
-Your task is to analyze evidence from the website "${domain}" and identify its EXACT, HIGH-PRECISION NICHE.
+        system: `You are an elite Business Analyst and SEO Growth Architect.
+Your task is to analyze evidence from the website "${domain}" and identify its EXACT, HIGH-PRECISION NICHE, CONTENT PILLARS, and SEARCH SEED KEYWORDS.
 
-STRICT MANDATE:
-- Rely ONLY on the provided homepage title, meta description, H1, categories, and page signals.
-- Under NO circumstance may you assume this is a cold email or sales tool unless the homepage explicitly says so.
-- Provide a razor-sharp primary niche and declare negative boundaries of what this site is NOT.`,
-        prompt: `Analyze the site evidence for "${domain}" and extract the exact niche, offerings, target audience, and negative boundaries:\n\n${JSON.stringify(evidenceSummary, null, 2)}`
+STRICT GROUNDING MANDATE:
+- Heavily weigh the site's ACTUAL categories, published article titles, and knowledge bank.
+- If the site has articles about Cold Email, Deliverability, and Outreach, the niche IS Cold Email Outreach & Sales Automation.
+- Do NOT guess generic niches from bare domain syllables. Use the empirical evidence provided.
+- Provide 6 to 10 realistic search queries that people in this niche actually search for in Google.`,
+        prompt: `Analyze the site evidence for "${domain}" and extract the exact niche, offerings, target audience, content pillars, seed keywords, and negative boundaries:\n\n${JSON.stringify(evidenceSummary, null, 2)}`
       });
 
       if (object.primary_niche) primaryNiche = object.primary_niche;
       if (object.core_offerings?.length > 0) coreOfferings = object.core_offerings;
       if (object.target_audience) targetAudience = object.target_audience;
+      if (object.content_pillars?.length > 0) contentPillars = object.content_pillars;
+      if (object.niche_seed_keywords?.length > 0) nicheSeedKeywords = object.niche_seed_keywords;
       if (object.negative_boundaries?.length > 0) negativeBoundaries = object.negative_boundaries;
     } catch (llmErr) {
       console.warn('[SiteNicheProfiler] AI profiling fallback:', llmErr);
       if (homepage?.title) {
         primaryNiche = homepage.title.replace(/\s*[-|]\s*.*$/, '').trim();
       }
+      if (nicheSeedKeywords.length === 0 && categoriesData.length > 0) {
+        nicheSeedKeywords = categoriesData.map(c => c.toLowerCase());
+      }
+    }
+
+    if (nicheSeedKeywords.length === 0) {
+      nicheSeedKeywords = [
+        primaryNiche.toLowerCase(),
+        ...contentPillars.map(p => p.toLowerCase()),
+      ].slice(0, 8);
     }
 
     const profile: SiteNicheProfile = {
@@ -253,7 +285,10 @@ STRICT MANDATE:
       primaryNiche,
       coreOfferings,
       targetAudience,
+      contentPillars,
+      nicheSeedKeywords,
       negativeBoundaries,
+      liveCategories: categoriesWithCounts,
       authorityTier,
       authorityMetrics: {
         pageCount,
