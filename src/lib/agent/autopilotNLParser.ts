@@ -125,8 +125,11 @@ INTENT CLASSIFICATION TAXONOMY:
    - Questions about performance, traffic, overview, or discoveries: "how is my site doing?", "what's my traffic?", "what are my rankings?", "what did you find?", "give me a status update", "show stats", "any updates?".
    - Set intent_type: 'immediate_action', action_type: 'site_status_summary'.
 
-2. 'growth_acceleration' (RANK FASTER & GET MORE CLICKS):
-   - Requests to rank faster, boost rankings, find striking distance queries (pos 4-20), or get more clicks: "how can I rank faster?", "how to get more clicks", "boost my rankings", "striking distance keywords", "low hanging fruit".
+2. 'growth_acceleration' (RANK FASTER & DO EVERYTHING TO RANK FAST):
+   - Requests to rank faster, rank them fast, boost rankings, find striking distance queries (pos 4-20), or get more clicks:
+     "the agent should everything to achieve task like eg ranking them fast", "the agent should do everything to help users rank faster",
+     "rank them fast", "ranking them fast", "rank faster", "how can I rank faster?", "how to get more clicks", "boost my rankings",
+     "striking distance keywords", "low hanging fruit", "rank my site fast", "do everything to rank me fast", "help me rank fast".
    - Set intent_type: 'immediate_action', action_type: 'growth_acceleration'.
 
 3. 'rank_recovery' (FORENSIC DROP DIAGNOSIS & RECOVERY):
@@ -283,12 +286,12 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
     }
 
     // C. Fast-Rank Growth & Striking Distance
-    if (/(rank.*faster|get.*more.*clicks|boost.*(ranks?|rankings?|traffic|clicks)|striking.*distance|low.*hanging.*fruit|push.*to.*top\s*3|click.*accelerator)/i.test(lower)) {
+    if (/(rank.*fast|ranking.*fast|rank.*faster|get.*more.*clicks|boost.*(ranks?|rankings?|traffic|clicks)|striking.*distance|low.*hanging.*fruit|push.*to.*top\s*3|click.*accelerator|do.*everything.*to.*rank|achieve.*task.*rank)/i.test(lower)) {
       return {
         intent_type: 'immediate_action',
         action_type: 'growth_acceleration',
         goal: prompt,
-        summary: `Mine striking-distance queries (positions 4–20) for rapid ranking acceleration on ${domain}`,
+        summary: `Execute full Fast-Rank Pipeline and rapid ranking acceleration for ${domain}`,
       };
     }
 
