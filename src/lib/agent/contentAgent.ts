@@ -594,12 +594,12 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
               target_keyword: input.primary_keyword,
               purpose: req.purpose,
               style: visualStyle,
-              dimensions: '1792x1008', // Always 16:9 widescreen landscape for article visuals
+              dimensions: '1536x1024', // Standard 16:9 / 3:2 landscape for article visuals
               image_placement: req.placement_context,
               desired_visual_style: visualStyle,
               brand_instructions: input.rules.brand_rules,
             });
-            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 40000));
+            const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 45000));
             const generatedImage = await Promise.race([imgGenPromise, timeoutPromise]);
 
             if (generatedImage && generatedImage.url) {

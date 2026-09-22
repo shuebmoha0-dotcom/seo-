@@ -31,12 +31,12 @@ export const AI_CONFIG = {
 
   // ── Image Models ────────────────────────────────────────────────────────────
   // OpenAI Flagship Image Generation (High-Fidelity Photorealism & Editorial Design)
-  OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare',
-  OPENAI_IMAGE_FALLBACK_MODEL: 'gpt-image-2',
+  OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-sunburst',
+  OPENAI_IMAGE_FALLBACK_MODEL: 'gpt-image-2.5-flare',
   OPENAI_IMAGE_QUALITY: (process.env.OPENAI_IMAGE_QUALITY || 'high') as 'low' | 'medium' | 'high' | 'auto',
 
   // Gemini Image Generation via Google AI Studio (Fallback)
-  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+  GEMINI_IMAGE_MODEL: process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-image',
 
   // Leonardo AI (Fallback Image Provider)
   LEONARDO_IMAGE_MODEL: process.env.LEONARDO_IMAGE_MODEL || 'leonardo-kino-xl',
@@ -62,14 +62,14 @@ export const PRICING_RATES: Record<string, ModelPricing> = {
 
 export const IMAGE_PRICING_ESTIMATES: Record<string, number> = {
   [AI_CONFIG.OPENAI_IMAGE_MODEL]: 0.04, // High-quality flagship image (~$0.04 per image)
-  'gpt-image-2.5-flare': 0.04,
-  'gpt-image-2': 0.04,
-  'gpt-image-1-mini': 0.008,
-  'gpt-image-1': 0.03,
+  'gpt-image-2.5-sunburst': 0.04,
+  'gpt-image-2.5-flare': 0.03,
+  'chatgpt-image-latest': 0.04,
+  'gpt-image-2': 0.03,
+  'gpt-image-1': 0.02,
   [AI_CONFIG.GEMINI_IMAGE_MODEL]: 0.03, // ~$0.030 per image
   'imagen-3.0-generate-002': 0.03,
   [AI_CONFIG.LEONARDO_IMAGE_MODEL]: 0.025, // ~$0.025 per image
-  'pollinations': 0.0,
   'editorial_fallback': 0.0,
 };
 
@@ -83,13 +83,12 @@ export interface ProviderHealth {
 }
 
 // In-memory provider health tracking
-export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'openai_image' | 'gemini_image' | 'leonardo_image' | 'pollinations_image', ProviderHealth> = {
+export const PROVIDER_HEALTH: Record<'luna' | 'sonnet' | 'openai_image' | 'gemini_image' | 'leonardo_image', ProviderHealth> = {
   luna: { status: 'operational', consecutiveFailures: 0 },
   sonnet: { status: 'operational', consecutiveFailures: 0 },
   openai_image: { status: 'operational', consecutiveFailures: 0 },
   gemini_image: { status: 'operational', consecutiveFailures: 0 },
   leonardo_image: { status: 'operational', consecutiveFailures: 0 },
-  pollinations_image: { status: 'operational', consecutiveFailures: 0 },
 };
 
 export function recordProviderSuccess(provider: keyof typeof PROVIDER_HEALTH) {

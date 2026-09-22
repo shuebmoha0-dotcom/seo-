@@ -23,7 +23,7 @@ export interface ImageGenerationRequest {
 export interface ImageGenerationResult {
   url: string;
   base64?: string;
-  provider: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  provider: 'openai' | 'gemini' | 'leonardo' | 'editorial_fallback';
   model: string;
   metadata: {
     prompt_used: string;
@@ -35,7 +35,7 @@ export interface ImageGenerationResult {
 }
 
 export interface ImageProvider {
-  name: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  name: 'openai' | 'gemini' | 'leonardo' | 'editorial_fallback';
   generateImage(prompt: string, dimensions?: string): Promise<{ url: string; base64?: string; modelUsed?: string }>;
 }
 
@@ -43,10 +43,19 @@ export interface ImageProvider {
  * 1. Automatic Image Prompt Generator (Instant Art Direction, 0ms)
  */
 export function buildInstantImagePrompt(request: ImageGenerationRequest): string {
-  const topic = request.topic || request.target_keyword || 'Tech strategy';
-  const style = request.desired_visual_style || request.style || 'High-end editorial digital visual';
-  const purpose = request.purpose || 'Editorial article visual';
-  return `${style} visually representing "${topic}" for ${purpose}. Cinematic studio lighting, sophisticated composition, ultra-high resolution, photorealistic depth and rich textures, 16:9 widescreen landscape framing, no text overlay, no logos.`;
+  const topic = request.topic || request.target_keyword || 'Enterprise Strategy';
+  const isWorkflow = (
+    request.purpose?.toLowerCase().includes('workflow') || 
+    request.purpose?.toLowerCase().includes('process') || 
+    request.purpose?.toLowerCase().includes('diagram') ||
+    request.style?.toLowerCase().includes('diagram')
+  );
+
+  if (isWorkflow) {
+    return `A modern, clean technical architecture and process workflow visualization representing "${topic}". Minimalist geometric layout, subtle glowing node connections on a deep slate background, refined data pathways, crisp vector lines, elegant tech company visual style, 16:9 widescreen layout, no illegible text.`;
+  }
+
+  return `A high-end editorial candid photograph representing "${topic}". Modern tech workspace or business setting, warm natural morning sunlight, clean minimalist aesthetic, shallow depth of field, rich authentic textures, architectural interior design elements, 16:9 horizontal landscape composition, no text overlay, no logos.`;
 }
 
 export async function generateImagePrompt(request: ImageGenerationRequest, _context?: UsageContext): Promise<string> {
@@ -64,9 +73,8 @@ export const OpenAIImageProvider: ImageProvider = {
       throw new Error('OPENAI_API_KEY is not configured.');
     }
 
-    const primaryModel = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-flare';
-    const fallbackModel = AI_CONFIG.OPENAI_IMAGE_FALLBACK_MODEL || 'gpt-image-2';
-    const quality = AI_CONFIG.OPENAI_IMAGE_QUALITY || 'high';
+    const primaryModel = AI_CONFIG.OPENAI_IMAGE_MODEL || 'gpt-image-2.5-sunburst';
+    const fallbackModel = AI_CONFIG.OPENAI_IMAGE_FALLBACK_MODEL || 'gpt-image-2.5-flare';
 
     // Map requested dimensions to supported OpenAI sizes: 1024x1024, 1536x1024, 1024x1536, or auto
     let size: '1024x1024' | '1536x1024' | '1024x1536' = '1536x1024';
@@ -82,11 +90,17 @@ export const OpenAIImageProvider: ImageProvider = {
     if (fallbackModel && fallbackModel !== primaryModel) {
       modelsToTry.push(fallbackModel);
     }
+    if (!modelsToTry.includes('chatgpt-image-latest')) {
+      modelsToTry.push('chatgpt-image-latest');
+    }
+    if (!modelsToTry.includes('gpt-image-2')) {
+      modelsToTry.push('gpt-image-2');
+    }
 
     let lastError: Error | null = null;
     for (const model of modelsToTry) {
       try {
-        console.log(`[OpenAIImageProvider] Generating image using ${model} (quality: ${quality}, size: ${size})...`);
+        console.log(`[OpenAIImageProvider] Generating image using ${model} (size: ${size})...`);
         const response = await fetch('https://api.openai.com/v1/images/generations', {
           method: 'POST',
           headers: {
@@ -95,12 +109,11 @@ export const OpenAIImageProvider: ImageProvider = {
           },
           body: JSON.stringify({
             model,
-            prompt: `${prompt}. High-end editorial visual design, cinematic studio lighting, elegant composition, photorealistic textures, 16:9 widescreen landscape framing, zero text, zero typography, zero watermarks.`,
+            prompt,
             n: 1,
             size,
-            quality,
           }),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(35000),
         });
 
         if (!response.ok) {
@@ -117,32 +130,65 @@ export const OpenAIImageProvider: ImageProvider = {
         let publicUrl = item.url || '';
         const base64Data = item.b64_json;
 
-        // Upload base64 to Supabase storage to get permanent public CDN URL
+        // Convert base64 to optimized WebP and upload to Supabase storage for instant public CDN delivery
         if (base64Data) {
           try {
             const { createAdminClient } = await import('@/lib/supabase/admin');
             const supabase = createAdminClient();
-            const buffer = Buffer.from(base64Data, 'base64');
-            const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+            let uploadBuffer = Buffer.from(base64Data, 'base64');
+            let contentType = 'image/webp';
+            let fileExt = 'webp';
 
-            const { error } = await supabase.storage.from('content-images').upload(filename, buffer, {
-              contentType: 'image/png',
+            try {
+              const sharp = (await import('sharp')).default;
+              uploadBuffer = await sharp(uploadBuffer)
+                .webp({ quality: 85, effort: 4 })
+                .toBuffer();
+            } catch (sharpErr) {
+              console.warn('[ImageRouter] WebP conversion fallback to PNG:', sharpErr);
+              contentType = 'image/png';
+              fileExt = 'png';
+            }
+
+            const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage.from('content-images').upload(filename, uploadBuffer, {
+              contentType,
               upsert: true,
             });
 
-            if (!error) {
+            if (!uploadError) {
               const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
               if (urlData?.publicUrl) {
                 publicUrl = urlData.publicUrl;
               }
+            } else {
+              console.warn('[ImageRouter] Supabase upload returned error:', uploadError.message);
             }
           } catch (uploadErr) {
-            console.warn('[ImageRouter] Upload to Supabase storage failed, using data URI fallback:', uploadErr);
+            console.warn('[ImageRouter] Upload to Supabase storage failed:', uploadErr);
           }
-
-          if (!publicUrl) {
-            publicUrl = `data:image/png;base64,${base64Data}`;
-          }
+        } else if (publicUrl && !publicUrl.includes('supabase.co')) {
+          // If OpenAI returned a temporary expiring URL, download and save permanently
+          try {
+            const fetchRes = await fetch(publicUrl, { signal: AbortSignal.timeout(10000) });
+            if (fetchRes.ok) {
+              const arrBuf = await fetchRes.arrayBuffer();
+              const sharp = (await import('sharp')).default;
+              const webpBuf = await sharp(Buffer.from(arrBuf)).webp({ quality: 85 }).toBuffer();
+              const { createAdminClient } = await import('@/lib/supabase/admin');
+              const supabase = createAdminClient();
+              const filename = `generated/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.webp`;
+              const { error } = await supabase.storage.from('content-images').upload(filename, webpBuf, {
+                contentType: 'image/webp',
+                upsert: true,
+              });
+              if (!error) {
+                const { data: urlData } = supabase.storage.from('content-images').getPublicUrl(filename);
+                if (urlData?.publicUrl) publicUrl = urlData.publicUrl;
+              }
+            }
+          } catch (_) {}
         }
 
         return {
@@ -351,45 +397,29 @@ export const LeonardoImageProvider: ImageProvider = {
 };
 
 /**
- * 3.5. Pollinations AI Image Engine
- * Ultra-fast, high-resolution 16:9 widescreen editorial illustration generator
- */
-export const PollinationsImageProvider: ImageProvider = {
-  name: 'pollinations',
-  async generateImage(prompt: string, dimensions = '1200x675'): Promise<{ url: string }> {
-    const seed = Math.floor(Math.random() * 1000000);
-    const cleanPrompt = prompt
-      .replace(/[\r\n]+/g, ' ')
-      .replace(/[^\w\s.,\-']/gi, ' ')
-      .trim()
-      .slice(0, 240);
-
-    const [wStr, hStr] = dimensions.split('x');
-    const width = parseInt(wStr) || 1200;
-    const height = parseInt(hStr) || 675;
-
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}?width=${width}&height=${height}&nologo=true&seed=${seed}`;
-    return { url };
-  },
-};
-
-/**
- * 3.6. Curated High-Resolution Editorial Tech Fallback
+ * 3.5. Curated High-Resolution Editorial Tech Visuals
+ * 100% authentic, high-resolution candid photography with zero cartoonish AI artifacts
  */
 export const CuratedEditorialProvider = {
   name: 'editorial_fallback' as const,
   generateImage(topic: string): { url: string } {
     const t = (topic || '').toLowerCase();
-    let unsplashId = 'photo-1557804506-669a67965ba0'; // Modern collaborative strategy
+    let unsplashId = 'photo-1557804506-669a67965ba0'; // Modern tech strategy / architecture
+
     if (t.includes('linkedin') || t.includes('outreach') || t.includes('message') || t.includes('email') || t.includes('sales')) {
-      unsplashId = 'photo-1551836022-d5d88e9218df'; // Business messaging / networking
+      unsplashId = 'photo-1551836022-d5d88e9218df'; // Modern business communication
     } else if (t.includes('seo') || t.includes('keyword') || t.includes('search') || t.includes('rank') || t.includes('google')) {
-      unsplashId = 'photo-1460925895917-afdab827c52f'; // Analytics & search insights
-    } else if (t.includes('code') || t.includes('developer') || t.includes('tech') || t.includes('software') || t.includes('ai')) {
-      unsplashId = 'photo-1555066931-4365d14bab8c'; // Modern engineering & technology
+      unsplashId = 'photo-1460925895917-afdab827c52f'; // Analytics & growth dashboards
+    } else if (t.includes('code') || t.includes('developer') || t.includes('tech') || t.includes('software') || t.includes('engineering')) {
+      unsplashId = 'photo-1555066931-4365d14bab8c'; // Software engineering & modern code
+    } else if (t.includes('ai') || t.includes('artificial') || t.includes('automation') || t.includes('machine learning')) {
+      unsplashId = 'photo-1485827404703-89b55fcc595e'; // Clean, elegant technology & robotics
+    } else if (t.includes('analytics') || t.includes('metric') || t.includes('data') || t.includes('growth')) {
+      unsplashId = 'photo-1504868584819-f8e8b4b6d7e3'; // Data insights & charts
     }
+
     return {
-      url: `https://images.unsplash.com/${unsplashId}?auto=format&fit=crop&w=1200&h=675&q=80`,
+      url: `https://images.unsplash.com/${unsplashId}?auto=format&fit=crop&w=1536&h=1024&q=85`,
     };
   },
 };
@@ -402,13 +432,13 @@ export const ImageRouter = {
   async generate(request: ImageGenerationRequest, context?: UsageContext): Promise<ImageGenerationResult> {
     const startTime = Date.now();
 
-    // 1. Generate prompt using GPT-5.6 Luna
+    // 1. Generate prompt using GPT-5.6 Luna / Instant Art Direction
     const prompt = await generateImagePrompt(request, context);
 
     // Enforce 16:9 dimensions
-    const dimensions = request.dimensions || '1200x675';
+    const dimensions = request.dimensions || '1536x1024';
 
-    // 2. Primary: OpenAI Image Provider (gpt-image-2.5-flare / gpt-image-2 - High Fidelity & Photorealism)
+    // 2. Primary: OpenAI Flagship Image Provider (High Fidelity & Photorealism)
     if (process.env.OPENAI_API_KEY && PROVIDER_HEALTH.openai_image.status !== 'degraded') {
       try {
         const openAiStart = Date.now();
@@ -441,11 +471,11 @@ export const ImageRouter = {
         };
       } catch (openAiError: any) {
         recordProviderFailure('openai_image', openAiError?.message || 'OpenAI image generation failed');
-        console.warn(`[Image Router] OpenAI Image failed, failing over to Gemini: ${openAiError?.message || openAiError}`);
+        console.warn(`[Image Router] OpenAI Image failed: ${openAiError?.message || openAiError}`);
       }
     }
 
-    // 3. Secondary: Gemini via Google AI Studio (if key configured and not degraded)
+    // 3. Secondary: Gemini via Google AI Studio (if key configured and operational)
     const googleKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
     if (googleKey && PROVIDER_HEALTH.gemini_image.status !== 'degraded') {
       try {
@@ -477,11 +507,11 @@ export const ImageRouter = {
         };
       } catch (geminiError: any) {
         recordProviderFailure('gemini_image', geminiError?.message || 'Gemini image generation failed');
-        console.warn(`[Image Router] Gemini Image failed, routing to Pollinations AI: ${geminiError?.message || geminiError}`);
+        console.warn(`[Image Router] Gemini Image failed: ${geminiError?.message || geminiError}`);
       }
     }
 
-    // 3. Leonardo AI (if key configured)
+    // 4. Tertiary: Leonardo AI (if key configured)
     if (process.env.LEONARDO_API_KEY) {
       try {
         const leoStart = Date.now();
@@ -515,39 +545,8 @@ export const ImageRouter = {
       }
     }
 
-    // 4. Guaranteed High-Fidelity AI Image Engine (Pollinations AI)
-    try {
-      console.log(`[Image Router] Generating editorial 16:9 visual via Pollinations AI for "${request.topic}"...`);
-      const polyStart = Date.now();
-      const result = await PollinationsImageProvider.generateImage(prompt, dimensions);
-      recordProviderSuccess('pollinations_image');
-
-      await recordImageUsage({
-        provider: 'pollinations',
-        model: 'pollinations-flux',
-        status: 'fallback',
-        fallbackUsed: true,
-        durationMs: Date.now() - polyStart,
-        context,
-      });
-
-      return {
-        url: result.url,
-        provider: 'pollinations',
-        model: 'pollinations-flux',
-        metadata: {
-          prompt_used: prompt,
-          style: request.style,
-          duration_ms: Date.now() - startTime,
-          fallback_used: true,
-          timestamp: new Date().toISOString(),
-        },
-      };
-    } catch (polyErr: any) {
-      console.warn('[Image Router] Pollinations failed, using curated editorial visual:', polyErr?.message || polyErr);
-    }
-
-    // 5. Ultimate Zero-Fail Fallback: Curated High-Res Editorial Photography
+    // 5. Ultimate Zero-Fail Fallback: Curated High-Resolution Editorial Photography (0ms, 100% Reliable)
+    console.log(`[Image Router] Using curated high-resolution editorial visual for "${request.topic}"...`);
     const fallback = CuratedEditorialProvider.generateImage(request.topic);
     return {
       url: fallback.url,
@@ -568,7 +567,7 @@ export const ImageRouter = {
  * Helper to record image generation usage metrics in Supabase
  */
 async function recordImageUsage(data: {
-  provider: 'openai' | 'gemini' | 'leonardo' | 'pollinations' | 'editorial_fallback';
+  provider: 'openai' | 'gemini' | 'leonardo' | 'editorial_fallback';
   model: string;
   status: 'success' | 'failed' | 'fallback';
   fallbackUsed: boolean;
