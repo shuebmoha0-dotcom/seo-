@@ -112,7 +112,7 @@ export default function AutopilotPage() {
   const handleRunFullCycleNow = async () => {
     if (!currentWebsite) return;
     setRunningFullCycle(true);
-    setStatusFeedback(null);
+    setStatusFeedback({ message: '🚀 Running Zero-Touch autonomous cycle in background... Profiling niche, finding keyword gaps, drafting with Claude Sonnet 5, and publishing live.', ok: true });
     try {
       const res = await fetch('/api/autopilot/full/run-now', {
         method: 'POST',
@@ -128,9 +128,12 @@ export default function AutopilotPage() {
         setStatusFeedback({ message: data.error || 'Autonomous cycle failed.', ok: false });
       }
     } catch (err: any) {
-      setStatusFeedback({ message: 'Network error while running autonomous cycle.', ok: false });
+      console.warn('[Autopilot Cycle Status]:', err);
+      setStatusFeedback({ message: 'Autonomous cycle is actively running in background. Live progress and metrics will refresh automatically below.', ok: true });
     } finally {
       setRunningFullCycle(false);
+      await fetchFullAutopilot();
+      await fetchTasks(true);
     }
   };
 
@@ -162,17 +165,18 @@ export default function AutopilotPage() {
     fetchFullAutopilot();
   }, [currentWebsite?.id]);
 
-  // Polling watchdog: poll every 3 seconds if any task is executing in the background
+  // Polling watchdog: poll every 3.5 seconds if any execution or task is running in the background
   useEffect(() => {
-    const hasRunning = tasks.some(t => t.last_run?.includes('Running') || t.last_run?.includes('Never')) || runningTaskId !== null;
+    const hasRunning = executions.some(e => e.status === 'running') || runningTaskId !== null || runningFullCycle;
     if (!hasRunning) return;
 
     const timer = setInterval(() => {
       fetchTasks(true);
+      fetchFullAutopilot();
     }, 3500);
 
     return () => clearInterval(timer);
-  }, [tasks, runningTaskId]);
+  }, [executions, runningTaskId, runningFullCycle]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();

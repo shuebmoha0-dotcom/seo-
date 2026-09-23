@@ -5,6 +5,7 @@ import { DuplicateArticleChecker } from './duplicateChecker';
 import { ContentAgent } from './contentAgent';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
+import { createWordPressJob } from '@/lib/connectors/wordpressOutbound';
 
 export type AutopilotCadence = 'daily' | 'twice_weekly' | 'weekly';
 
@@ -433,6 +434,7 @@ export class FullAutopilotEngine {
       // ── STEP 2: CONTENT GAP DETECTION (ZERO CANNIBALIZATION) ─────────────
       const gaps = await SiteContentGapDetector.findContentGaps({
         inventory,
+        siteProfile: profile,
         limit: 5,
       });
 
@@ -535,10 +537,9 @@ export class FullAutopilotEngine {
       if (autoPublish && wpSite) {
         livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${articleSlug}/`;
 
-        await supabase.from('wordpress_jobs').insert({
-          site_id: wpSite.id,
-          website_id: websiteId,
-          job_type: 'create_post',
+        await createWordPressJob({
+          websiteId,
+          jobType: 'create_post',
           payload: {
             title: articleOutput.working_title,
             content: formattedHtml,
@@ -551,16 +552,17 @@ export class FullAutopilotEngine {
             primary_keyword: selectedGap.keyword,
             featured_image_url: articleOutput.featured_image_url,
           },
-          idempotency_key: `full_autopilot_post_${draftId}_${Date.now()}`,
-          status: 'pending',
+          idempotencyKey: `full_autopilot_post_${draftId}_${Date.now()}`,
         });
 
         isPublishedLive = true;
 
         // Wake up WordPress plugin to poll and publish immediately
         const siteApiUrl = wpSite.site_url.replace(/\/+$/, '');
-        fetch(`${siteApiUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
-        fetch(`${siteApiUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+        Promise.allSettled([
+          fetch(`${siteApiUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
+          fetch(`${siteApiUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
+        ]).catch(() => {});
       } else if (autoPublish && !wpSite) {
         livePostUrl = `${siteUrl.replace(/\/$/, '')}/${articleSlug}/`;
         isPublishedLive = true;
