@@ -1,4 +1,5 @@
 import { LLMProvider } from '../tools/llm';
+import { ContentPresentationAuditor } from '@/lib/crawler/contentPresentationAuditor';
 
 import { z } from 'zod';
 
@@ -487,6 +488,14 @@ If the content itself fails to satisfy search intent, set content_agent_needed=t
     if (pre.keywordDensity > 3) flaggedIssues.push(`Possible keyword stuffing (${pre.keywordDensity.toFixed(1)}% density)`);
     if (pre.missingAltImages > 0) flaggedIssues.push(`${pre.missingAltImages} image(s) missing alt text`);
 
+    // Presentation & Readability Layout Audit
+    const presentationAudit = ContentPresentationAuditor.auditHtml(page.content_body || '', page.url);
+    if (!presentationAudit.passed) {
+      for (const iss of presentationAudit.issues) {
+        flaggedIssues.push(`${iss.title}`);
+      }
+    }
+
     const internalLinksOk = (page.internal_links?.length || 0) > 0;
 
     const overallStatus = contentAgentNeeded
@@ -511,7 +520,7 @@ If the content itself fails to satisfy search intent, set content_agent_needed=t
       canonical_correct: pre.hasCanonical,
       schema_present: pre.hasSchema,
       content_covers_intent: !contentAgentNeeded,
-      readability_ok: (page.word_count || 0) > 300,
+      readability_ok: (page.word_count || 0) > 300 && presentationAudit.passed,
       url_clean: pre.urlIsClean,
       flagged_issues: flaggedIssues,
       overall_status: overallStatus,

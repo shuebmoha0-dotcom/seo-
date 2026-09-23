@@ -49,6 +49,14 @@ export async function POST(request: Request) {
     }
     await supabase.from('wordpress_outbound_sites').update(updatePayload).eq('id', site.id);
 
+    // Reclaim stale jobs that were claimed more than 5 minutes ago without completion
+    const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await supabase
+      .from('wordpress_jobs')
+      .update({ status: 'pending', claimed_at: null, claimed_by: null })
+      .eq('status', 'claimed')
+      .lt('claimed_at', staleThreshold);
+
     // 2. Concurrency-safe job claim
     // Select the oldest pending job for this site and atomically mark it 'claimed'
     let jobsQuery = supabase

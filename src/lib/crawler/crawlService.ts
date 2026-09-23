@@ -212,10 +212,20 @@ export class CrawlService {
       })
       .eq('id', crawlId);
 
+    // Fetch website_id from crawl session for relational integrity
+    const { data: crawlRecord } = await supabase
+      .from('technical_crawls')
+      .select('website_id')
+      .eq('id', crawlId)
+      .maybeSingle();
+
+    const websiteId = crawlRecord?.website_id || null;
+
     // Save crawled URLs
     if (normalized.pages.length > 0) {
       const pageRows = normalized.pages.map(p => ({
         crawl_id: crawlId,
+        website_id: websiteId,
         url: p.url,
         status_code: p.status_code,
         redirect_target: p.redirect_target,
@@ -241,11 +251,19 @@ export class CrawlService {
       await supabase.from('crawled_urls').insert(pageRows);
     }
 
-    // Save issues
+    // Save issues with valid category mapping for PostgreSQL check constraint
     if (normalized.deterministic_issues.length > 0) {
+      const validCategories = new Set([
+        'crawlability', 'indexability', 'redirects', 'broken_links',
+        'canonicals', 'sitemap', 'robots', 'performance', 'structured_data',
+        'duplicates', 'orphan_pages', 'javascript', 'hreflang',
+        'security', 'mobile', 'pagination', 'internal_links', 'other'
+      ]);
+
       const issueRows = normalized.deterministic_issues.map(issue => ({
         crawl_id: crawlId,
-        category: issue.category,
+        website_id: websiteId,
+        category: validCategories.has(issue.category) ? issue.category : 'other',
         severity: issue.severity,
         issue_type: issue.issue_type,
         title: issue.title,

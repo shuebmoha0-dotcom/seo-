@@ -38,6 +38,8 @@ interface TechnicalIssue {
   automation_level: AutomationLevel;
   status: IssueStatus;
   pr_url?: string;
+  fix_notes?: string;
+  fix_applied_at?: string;
 }
 
 interface CrawledUrl {
@@ -145,12 +147,19 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
 }
 
 function IssueCard({
-  issue, expanded, onToggle, onStatusChange,
+  issue,
+  expanded,
+  onToggle,
+  onStatusChange,
+  onApplyFix,
+  isFixing = false,
 }: {
   issue: TechnicalIssue;
   expanded: boolean;
   onToggle: () => void;
   onStatusChange: (id: string, status: IssueStatus) => void;
+  onApplyFix?: (issue: TechnicalIssue) => void;
+  isFixing?: boolean;
 }) {
   const sv = SEVERITY_CONFIG[issue.severity] || SEVERITY_CONFIG.low;
   const at = AUTOMATION_CONFIG[issue.automation_level] || AUTOMATION_CONFIG.manual;
@@ -225,13 +234,19 @@ function IssueCard({
 
             {issue.automation_level === "auto" && issue.status === "open" && (
               <button
+                disabled={isFixing}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onStatusChange(issue.id, "fixed");
+                  onApplyFix?.(issue);
                 }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 shadow-2xs"
               >
-                <Zap className="w-3 h-3" /> Auto-fix
+                {isFixing ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Zap className="w-3 h-3" />
+                )}
+                <span>{isFixing ? "Fixing..." : "Auto-fix"}</span>
               </button>
             )}
 
@@ -255,6 +270,15 @@ function IssueCard({
       {expanded && (
         <div className="border-t border-slate-100 p-4 space-y-3 text-xs bg-slate-50/50">
           <p className="text-slate-700 leading-relaxed">{issue.description}</p>
+
+          {issue.status === "fixed" && issue.fix_notes && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+              <p className="text-emerald-900 font-semibold mb-0.5 text-[11px] flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Remediation Applied
+              </p>
+              <p className="text-emerald-800 text-[11px] leading-relaxed">{issue.fix_notes}</p>
+            </div>
+          )}
 
           {issue.evidence && (
             <div className="bg-white border border-slate-200 rounded-lg p-3">
@@ -342,6 +366,9 @@ export default function TechnicalSEOPage() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [urlSearch, setUrlSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fixingIds, setFixingIds] = useState<string[]>([]);
+  const [isBatchFixing, setIsBatchFixing] = useState(false);
+  const [fixMessage, setFixMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     start_url: "",
     site_tech: "unknown",
@@ -393,6 +420,7 @@ export default function TechnicalSEOPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          website_id: currentWebsite?.id,
           start_url: form.start_url,
           site_tech: form.site_tech,
           max_urls: parseInt(form.max_urls),
@@ -412,6 +440,87 @@ export default function TechnicalSEOPage() {
       setCrawling(false);
       setActiveTab("overview");
     }
+  };
+
+  const handleApplyFix = async (issue: TechnicalIssue) => {
+    if (!currentWebsite) return;
+    setFixingIds((prev) => [...prev, issue.id]);
+    setFixMessage(null);
+    try {
+      const res = await fetch("/api/agent/technical/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          issue_id: issue.id,
+          issue_type: issue.issue_type,
+          affected_urls: issue.affected_urls,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issue.id
+              ? { ...i, status: "fixed" as IssueStatus, fix_notes: data.message }
+              : i
+          )
+        );
+        setFixMessage(data.message || `Remediation applied for "${issue.title}".`);
+      } else {
+        setError(data.error || "Failed to apply auto-fix.");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to dispatch fix.");
+    } finally {
+      setFixingIds((prev) => prev.filter((id) => id !== issue.id));
+    }
+  };
+
+  const handleApplyAllAutoFixes = async () => {
+    if (!currentWebsite) return;
+    const targets = issues.filter(
+      (i) => i.automation_level === "auto" && i.status === "open"
+    );
+    if (targets.length === 0) return;
+
+    setIsBatchFixing(true);
+    setFixMessage(null);
+    let successCount = 0;
+
+    for (const issue of targets) {
+      setFixingIds((prev) => [...prev, issue.id]);
+      try {
+        const res = await fetch("/api/agent/technical/fix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            website_id: currentWebsite.id,
+            issue_id: issue.id,
+            issue_type: issue.issue_type,
+            affected_urls: issue.affected_urls,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          successCount++;
+          setIssues((prev) =>
+            prev.map((i) =>
+              i.id === issue.id
+                ? { ...i, status: "fixed" as IssueStatus, fix_notes: data.message }
+                : i
+            )
+          );
+        }
+      } catch (err) {
+        console.error("Batch fix error for issue", issue.id, err);
+      } finally {
+        setFixingIds((prev) => prev.filter((id) => id !== issue.id));
+      }
+    }
+
+    setIsBatchFixing(false);
+    setFixMessage(`Autonomous remediation completed: ${successCount} of ${targets.length} issues resolved.`);
   };
 
   const handleStatusChange = (id: string, status: IssueStatus) => {
@@ -675,6 +784,22 @@ export default function TechnicalSEOPage() {
                   </div>
                 )}
 
+                {/* Fix Feedback Notification */}
+                {fixMessage && (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-emerald-900 shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="font-medium">{fixMessage}</span>
+                    </div>
+                    <button
+                      onClick={() => setFixMessage(null)}
+                      className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 text-xs rounded hover:bg-emerald-100/60 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
                 {/* Auto-fix Banner */}
                 {autoFixable > 0 && (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between shadow-2xs">
@@ -685,23 +810,26 @@ export default function TechnicalSEOPage() {
                           {autoFixable} issue{autoFixable > 1 ? "s" : ""} ready for 1-Click autonomous remediation
                         </p>
                         <p className="text-emerald-700 text-[11px]">
-                          Low-risk canonical fixes and metadata normalization.
+                          Automated fixes dispatched directly to CMS metadata and content presentation queue.
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() =>
-                        setIssues((prev) =>
-                          prev.map((i) =>
-                            i.automation_level === "auto" && i.status === "open"
-                              ? { ...i, status: "fixed" }
-                              : i
-                          )
-                        )
-                      }
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs"
+                      disabled={isBatchFixing}
+                      onClick={handleApplyAllAutoFixes}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-colors shadow-2xs flex items-center gap-1.5"
                     >
-                      Apply Auto-fixes
+                      {isBatchFixing ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Applying Remediations...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" />
+                          <span>Apply Auto-fixes</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 )}
@@ -754,6 +882,8 @@ export default function TechnicalSEOPage() {
                         expanded={expandedId === issue.id}
                         onToggle={() => setExpandedId(expandedId === issue.id ? null : issue.id)}
                         onStatusChange={handleStatusChange}
+                        onApplyFix={handleApplyFix}
+                        isFixing={fixingIds.includes(issue.id)}
                       />
                     ))}
                   </div>
@@ -898,10 +1028,21 @@ export default function TechnicalSEOPage() {
                           </span>
                         ) : (
                           <button
-                            onClick={() => handleStatusChange(issue.id, "fixed")}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors shadow-2xs"
+                            disabled={fixingIds.includes(issue.id)}
+                            onClick={() => handleApplyFix(issue)}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shrink-0 transition-colors shadow-2xs flex items-center gap-1"
                           >
-                            Apply Fix
+                            {fixingIds.includes(issue.id) ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>Applying...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-3 h-3" />
+                                <span>Apply Fix</span>
+                              </>
+                            )}
                           </button>
                         )}
                       </div>

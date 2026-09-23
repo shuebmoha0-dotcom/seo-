@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { encryptCredential, decryptCredential } from '@/lib/utils/encryption';
+import { ContentPresentationAuditor } from '@/lib/crawler/contentPresentationAuditor';
 
 export interface WordPressOutboundSite {
   id: string;
@@ -212,13 +213,31 @@ export async function createWordPressJob(params: {
     }
   }
 
+  const payload: Record<string, any> = { ...params.payload };
+
+  // Automatically enforce Rule 3 (Zero Table of Contents) & layout hygiene on all posts
+  if (params.jobType === 'create_post' || params.jobType === 'update_post') {
+    payload.meta = {
+      ...(payload.meta || {}),
+      '_ez-toc-disabled': '1',
+      'ez-toc-disabled': '1',
+      '_ez-toc-insert': '0',
+      'ez-toc-insert': '0',
+    };
+
+    if (typeof payload.content === 'string' && payload.content.length > 0) {
+      const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(payload.content);
+      payload.content = repairedHtml;
+    }
+  }
+
   const { data: job, error: jobErr } = await supabase
     .from('wordpress_jobs')
     .insert({
       site_id: site.id,
       website_id: params.websiteId,
       job_type: params.jobType,
-      payload: params.payload,
+      payload,
       idempotency_key: params.idempotencyKey || `job_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`,
       status: 'pending',
     })

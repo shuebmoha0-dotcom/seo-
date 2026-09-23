@@ -2,9 +2,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { LLMProvider } from '../tools/llm';
 import { z } from 'zod';
 import { DuplicateArticleChecker } from './duplicateChecker';
+import { ContentPresentationAuditor } from '@/lib/crawler/contentPresentationAuditor';
 
 export interface DiagnosticFinding {
-  category: 'technical_block' | 'cannibalization' | 'content_decay' | 'intent_shift' | 'link_equity' | 'algorithm_volatility';
+  category: 'technical_block' | 'cannibalization' | 'content_decay' | 'intent_shift' | 'link_equity' | 'algorithm_volatility' | 'presentation_readability';
   severity: 'critical' | 'high' | 'medium' | 'low';
   title: string;
   affected_url?: string;
@@ -245,6 +246,50 @@ export class DiagnosticAgent {
       return isErrorStatus || isNoindex || isMissingTitle || isGenericTitle || isMissingH1;
     });
 
+    // H. Content Quality & Presentation Audit (readability width, bloated TOCs, all-caps spam)
+    const presentationIssues: any[] = [];
+    try {
+      const urlsToCheck: string[] = [];
+      if (targetUrl) urlsToCheck.push(targetUrl);
+      
+      // Extract specific slug if user mentions it (e.g. /ai-email-template-generator)
+      const slugMatch = userQuery.match(/(?:https?:\/\/[^\s]+|\/[a-z0-9-]+|\b[a-z0-9]+-[a-z0-9-]+\b)/i);
+      if (slugMatch) {
+        let detected = slugMatch[0];
+        if (!detected.startsWith('http')) {
+          detected = `${siteUrl}/${detected.replace(/^\/+/, '')}`;
+        }
+        if (!urlsToCheck.includes(detected)) urlsToCheck.unshift(detected);
+      }
+
+      for (const p of pagesData.slice(0, 3)) {
+        if (p.path && !urlsToCheck.includes(p.path)) {
+          const full = p.path.startsWith('http') ? p.path : `${siteUrl}${p.path.startsWith('/') ? '' : '/'}${p.path}`;
+          urlsToCheck.push(full);
+        }
+      }
+
+      for (const url of urlsToCheck.slice(0, 3)) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(3500) });
+          if (res.ok) {
+            const html = await res.text();
+            const audit = ContentPresentationAuditor.auditHtml(html, url);
+            if (!audit.passed) {
+              for (const iss of audit.issues) {
+                presentationIssues.push({
+                  url,
+                  ...iss,
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+    } catch (presErr) {
+      console.warn('[DiagnosticAgent] Presentation audit notice:', presErr);
+    }
+
     // 2. Synthesize Evidence Context
     const evidenceContext = {
       domain,
@@ -282,6 +327,8 @@ export class DiagnosticAgent {
       })),
       recentDraftsCount: recentDrafts.length,
       potentialCannibalizationCount: potentialCannibalization.length,
+      presentationIssuesDetected: presentationIssues.length,
+      presentationIssuesSample: presentationIssues.slice(0, 5),
     };
 
     // 3. Multi-Agent Diagnostic Reasoning via LLM
@@ -293,7 +340,7 @@ export class DiagnosticAgent {
           overall_health: z.enum(['healthy', 'at_risk', 'critical_drop', 'recovering']),
           executive_summary: z.string().describe('Clear, decisive 2-3 sentence summary explaining why the ranking or traffic shifted and the core root cause.'),
           findings: z.array(z.object({
-            category: z.enum(['technical_block', 'cannibalization', 'content_decay', 'intent_shift', 'link_equity', 'algorithm_volatility']),
+            category: z.enum(['technical_block', 'cannibalization', 'content_decay', 'intent_shift', 'link_equity', 'algorithm_volatility', 'presentation_readability']),
             severity: z.enum(['critical', 'high', 'medium', 'low']),
             title: z.string(),
             affected_url: z.string().nullable(),
@@ -320,13 +367,15 @@ ${JSON.stringify(evidenceContext, null, 2)}
 DIAGNOSTIC FRAMEWORK:
 1. Technical Roadblock (crawl error, 4xx/5xx, noindex, broken canonical):
    - If technical issues are present, evaluate if Google de-indexed or demoted pages due to rendering/status errors.
-2. Keyword Cannibalization:
+2. Visual Presentation & Readability Defects (bad optimized size, bloated Table of Contents, all-caps spam):
+   - If presentation issues are present in evidenceContext, explain the exact visual defect (e.g. unconstrained container width stretching text across desktop screens, bloated TOC dominating viewport, shouting uppercase keywords). Provide immediate auto-repair action.
+3. Keyword Cannibalization:
    - If multiple articles target the same search query, Google splits click-through equity and often demotes both URLs.
-3. Content Decay & Competitor Leapfrogging:
+4. Content Decay & Competitor Leapfrogging:
    - If content is > 6 months old or lacks depth compared to SERP top 3, competitors updated their articles and captured position 1-3.
-4. Search Intent Shift:
+5. Search Intent Shift:
    - Google SERP evolved from general guides to practical tools/templates or vice-versa.
-5. Internal Link Starvation:
+6. Internal Link Starvation:
    - Dropped pages have few or zero internal links from top-traffic pages.
 
 OUTPUT MANDATE & ABSOLUTE GROUNDING CONTRACT:

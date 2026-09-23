@@ -13,7 +13,7 @@ export type IssueCategory =
   | 'crawlability' | 'indexability' | 'redirects' | 'broken_links'
   | 'canonicals' | 'sitemap' | 'robots' | 'performance' | 'structured_data'
   | 'duplicates' | 'orphan_pages' | 'javascript' | 'hreflang'
-  | 'security' | 'mobile' | 'pagination' | 'internal_links' | 'other';
+  | 'security' | 'mobile' | 'pagination' | 'internal_links' | 'presentation' | 'other';
 
 export type AutomationLevel = 'auto' | 'semi_auto' | 'manual' | 'requires_approval';
 export type RiskLevel = 'low' | 'medium' | 'high';
@@ -60,6 +60,8 @@ export interface CrawledUrl {
   has_duplicate_title?: boolean;
   has_duplicate_meta?: boolean;
   has_thin_content?: boolean;
+  has_multiple_h1?: boolean;
+  has_presentation_issue?: boolean;
 }
 
 export interface CrawlResult {
@@ -108,7 +110,7 @@ async function analyzeWithAI(params: {
             'crawlability', 'indexability', 'redirects', 'broken_links',
             'canonicals', 'sitemap', 'robots', 'performance', 'structured_data',
             'duplicates', 'orphan_pages', 'javascript', 'hreflang',
-            'security', 'mobile', 'pagination', 'internal_links', 'other',
+            'security', 'mobile', 'pagination', 'internal_links', 'presentation', 'other',
           ]),
           severity: z.enum(['critical', 'high', 'medium', 'low', 'info']),
           issue_type: z.string(),
@@ -124,15 +126,21 @@ async function analyzeWithAI(params: {
         })),
         strategic_summary: z.string(),
       }),
-      system: `You are an expert Technical SEO Specialist and Search Architect.
-You analyze pre-collected website crawl data provided by DataForSEO.
+      system: `You are an expert Technical SEO Specialist and Forensic Search Architect.
+You analyze pre-collected website crawl data, DOM hierarchy, and on-page visual presentation signals.
 Do NOT pretend to crawl the site yourself — analyze the supplied evidence.
 
-CRITICAL PRINCIPLES:
-- Only flag issues with genuine, measurable search indexability or crawlability impact.
-- High-risk changes (robots.txt, canonical loops, 301 redirect chains) must ALWAYS require human approval.
-- Explain clearly WHY an issue matters for search engines and user conversion.
-- Tailor recommended fixes specifically to the site technology: ${params.site_tech}.`,
+CRITICAL RANKING HINDRANCE PRINCIPLES:
+Proactively audit and classify every issue into one of four Direct Ranking Barrier tiers:
+1. FATAL CRAWL & INDEXING BLOCKERS (Severity: Critical): 5xx server errors, unintended noindex tags on published content, broken canonical loops, or robots.txt disallow barriers that physically prevent Googlebot from indexing pages.
+2. HELPFUL CONTENT & QUALITY DEMOTION RISKS (Severity: High): Thin content (< 350 words), multiple stacked H1 headings, cluttered desktop readability, unconstrained line lengths, or invasive dynamic widgets (e.g. bloated Table of Contents).
+3. KEYWORD CANNIBALIZATION & INTENT DILUTION (Severity: High): Duplicate title tags or identical H1 headings across multiple URLs splitting ranking authority.
+4. SERP CTR & RICH SNIPPET DEFICITS (Severity: Medium): Truncated titles (> 65 characters), under-optimized short titles (< 25 characters), missing meta descriptions, or lack of Schema.org Article/FAQ structured data.
+5. PAGERANK & EQUITY STARVATION (Severity: Medium/High): Orphan pages with zero internal links, or published articles starving for link equity with fewer than 3 inbound links.
+
+REMEDIATION DISCIPLINE:
+- Tailor recommended fixes specifically to the site technology: ${params.site_tech}.
+- Mark issues as 'auto' for automation_level whenever they can be resolved autonomously via CMS metadata updates or HTML repair without structural code rewrites.`,
       prompt: `Analyze the following DataForSEO crawl summary and deterministic findings:
 
 Website: ${params.start_url}
@@ -145,7 +153,7 @@ ${params.crawl_summary}
 DETERMINISTIC FINDINGS (${params.deterministic_issues.length}):
 ${params.deterministic_issues.map(i => `[${i.severity.toUpperCase()}] ${i.title}: ${i.description}`).join('\n')}
 
-Identify high-impact technical root-cause recommendations that can be routed to WordPress, GitHub PR, or Custom API fixes.`,
+Identify root-cause technical ranking hindrances and provide high-leverage recommendations ready for autonomous remediation via WordPress outbound queue or Git PR.`,
     });
 
     return object.additional_insights.map((insight: any, idx: number) => ({
