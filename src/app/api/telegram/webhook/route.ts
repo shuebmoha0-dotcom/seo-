@@ -28,14 +28,30 @@ function isDuplicateUpdate(updateId?: number): boolean {
   return false;
 }
 
-function safeBackground(fn: () => Promise<void>) {
-  after(async () => {
+async function safeBackground(fn: () => Promise<void>) {
+  let scheduled = false;
+  try {
+    after(async () => {
+      try {
+        await fn();
+      } catch (err: any) {
+        console.error('[Telegram Webhook Background Error]:', err?.message || err);
+      }
+    });
+    scheduled = true;
+  } catch {
+    // Next.js throws if after() is invoked after an await boundary outside synchronous request scope.
+    // Fall back to direct execution so tasks are never silently dropped!
+    scheduled = false;
+  }
+
+  if (!scheduled) {
     try {
       await fn();
     } catch (err: any) {
-      console.error('[Telegram Webhook Background Error]:', err?.message || err);
+      console.error('[Telegram Webhook Direct Execution Error]:', err?.message || err);
     }
-  });
+  }
 }
 
 export async function POST(request: Request) {
@@ -305,7 +321,7 @@ export async function POST(request: Request) {
             .maybeSingle();
           domain = ws?.domain || '';
 
-          after(async () => {
+          await safeBackground(async () => {
             try {
               const executor = new AutopilotExecutor();
               await executor.executeImmediateAction({
@@ -565,7 +581,7 @@ Your agent will process the request in the background and ping you when finished
           { parse_mode: 'Markdown' }
         );
 
-        safeBackground(async () => {
+        await safeBackground(async () => {
           try {
             await FullAutopilotEngine.runAutonomousCycle(currentSite.id, { force: true });
           } catch (runErr: any) {
@@ -594,7 +610,7 @@ Your agent will process the request in the background and ping you when finished
         );
 
         // Safe background execution
-        safeBackground(async () => {
+        await safeBackground(async () => {
           try {
             await FullAutopilotEngine.runAutonomousCycle(currentSite.id, { force: true });
           } catch (e: any) {
@@ -639,7 +655,7 @@ Your agent will process the request in the background and ping you when finished
           { parse_mode: 'Markdown' }
         );
 
-        after(async () => {
+        await safeBackground(async () => {
           try {
             // A. If recurring schedule requested, activate in database
             if (isDailySchedule) {
@@ -992,7 +1008,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         );
       }
 
-      after(async () => {
+      await safeBackground(async () => {
         try {
           const executor = new AutopilotExecutor();
           const execResult = await executor.executeImmediateAction({
