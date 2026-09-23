@@ -50,6 +50,16 @@ export class ContentPresentationAuditor {
     const issues: PresentationIssue[] = [];
     let score = 100;
 
+    // Extract article / main content scope if full page HTML is provided
+    let contentScope = html;
+    const articleMatch = html.match(/<article[\s\S]*?<\/article>/i);
+    const entryMatch = html.match(/class=["'][^"']*entry-content[^"']*["'][\s\S]*?(?:<\/article>|<\/main>|<\/div>\s*<\/div>)/i);
+    if (articleMatch) {
+      contentScope = articleMatch[0];
+    } else if (entryMatch) {
+      contentScope = entryMatch[0];
+    }
+
     // ── 1. Container Sizing & Readability Width Audit ─────────────────────────────
     // Check if article text is rendered inside a full-width container without max-width constraints
     const isFullWidthContainer = 
@@ -63,7 +73,7 @@ export class ContentPresentationAuditor {
       html.includes('max-w-prose') || 
       html.includes('max-w-3xl') || 
       html.includes('max-width: 8') || 
-      html.includes('max-width:8') ||
+      html.includes('max-width:8') || 
       html.includes('max-width: 7') ||
       html.includes('max-width:7') ||
       html.includes('entry-content-optimized') ||
@@ -92,14 +102,15 @@ export class ContentPresentationAuditor {
     }
 
     // ── 2. Table of Contents Audit (Rule 3 Compliance) ───────────────────────────
-    const hasEzToc = html.includes('ez-toc-container') || html.includes('id="ez-toc-container"');
-    const hasLwpToc = html.includes('lwptoc') || html.includes('table-of-contents');
-    const tocMatches = html.match(/class=["'][^"']*(?:ez-toc-link|lwptoc-item)[^"']*["']/gi) || [];
+    // Check exclusively within content scope to avoid false positives on site navigation & scripts
+    const hasEzToc = contentScope.includes('ez-toc-container') || contentScope.includes('id="ez-toc-container"');
+    const hasLwpToc = contentScope.includes('class="lwptoc') || contentScope.includes('id="lwptoc') || contentScope.includes('id="toc_container"') || /class=["'][^"']*\btable-of-contents\b[^"']*["']/i.test(contentScope);
+    const tocMatches = contentScope.match(/class=["'][^"']*(?:ez-toc-link|lwptoc-item)[^"']*["']/gi) || [];
     const tocLinkCount = tocMatches.length;
 
-    // Check for large nav lists at top of article
-    const topNavMatches = html.match(/<nav[^>]*>[\s\S]{500,}?<\/nav>/gi) || [];
-    const hasExcessiveToc = hasEzToc || hasLwpToc || tocLinkCount > 8 || topNavMatches.length > 0;
+    // Check for large in-article nav jump lists with anchor links (#)
+    const inArticleNavMatches = contentScope.match(/<nav[^>]*>[\s\S]*?href=["']#[^"']+[\s\S]*?<\/nav>/gi) || [];
+    const hasExcessiveToc = hasEzToc || hasLwpToc || tocLinkCount > 0 || inArticleNavMatches.length > 0;
 
     if (hasExcessiveToc) {
       score -= 30;
