@@ -21,29 +21,36 @@ export default function BlogIndexPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.posts && Array.isArray(data.posts) && data.posts.length > 0) {
+          const staticPosts = getAllBlogPosts();
           const published = data.posts
             .filter((p: any) => p.status === "published")
-            .map((d: any) => ({
-              slug: d.slug,
-              title: d.title,
-              excerpt: d.excerpt,
-              content: d.content,
-              category: d.category,
-              author: {
-                name: d.author_name || "Editorial Team",
-                role: d.author_role || "SEO Intelligence & Engineering",
-                avatarUrl: d.author_avatar,
-              },
-              publishedAt: d.published_at ? d.published_at.slice(0, 10) : "2026-03-01",
-              updatedAt: d.updated_at,
-              readingTime: d.reading_time || "5 min read",
-              coverImage: d.cover_image,
-              coverImageAlt: d.cover_image_alt || d.title,
-              metaTitle: d.meta_title || d.title,
-              metaDescription: d.meta_description || d.excerpt,
-              keywords: d.keywords || [],
-              featured: Boolean(d.featured),
-            }));
+            .map((d: any) => {
+              const staticMatch = staticPosts.find((sp) => sp.slug === d.slug);
+              return {
+                slug: d.slug,
+                title: d.title,
+                excerpt: d.excerpt,
+                content:
+                  staticMatch && !d.content?.includes("![") && staticMatch.content?.includes("![")
+                    ? staticMatch.content
+                    : d.content,
+                category: d.category,
+                author: {
+                  name: d.author_name || "Editorial Team",
+                  role: d.author_role || "SEO Intelligence & Engineering",
+                  avatarUrl: d.author_avatar,
+                },
+                publishedAt: d.published_at ? d.published_at.slice(0, 10) : "2026-03-01",
+                updatedAt: d.updated_at,
+                readingTime: d.reading_time || "5 min read",
+                coverImage: d.cover_image || staticMatch?.coverImage,
+                coverImageAlt: d.cover_image_alt || d.title,
+                metaTitle: d.meta_title || d.title,
+                metaDescription: d.meta_description || d.excerpt,
+                keywords: d.keywords || [],
+                featured: Boolean(d.featured),
+              };
+            });
           if (published.length > 0) {
             setPosts(published);
           }

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { BlogNavbar } from "@/components/blog/BlogNavbar";
 import { BlogFooter } from "@/components/blog/BlogFooter";
+import { renderMarkdownArticle } from "@/components/blog/MarkdownRenderer";
 import { getBlogPostBySlug, getAllBlogPosts, getRelatedPosts, getLiveBlogPostBySlug } from "@/lib/blog/posts";
 
 interface PageProps {
@@ -249,13 +250,15 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
         </header>
 
         {/* Cover Image */}
-        <div className="relative h-72 md:h-[420px] w-full rounded-3xl overflow-hidden shadow-sm border border-neutral-200">
-          <img
-            src={post.coverImage}
-            alt={post.coverImageAlt}
-            className="w-full h-full object-cover"
-          />
-        </div>
+        {post.coverImage && (
+          <div className="relative h-72 md:h-[420px] w-full rounded-3xl overflow-hidden shadow-sm border border-neutral-200">
+            <img
+              src={post.coverImage}
+              alt={post.coverImageAlt || post.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
 
         {/* Article Body (Markdown Formatted Presentation) */}
         <article className="prose prose-neutral max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-neutral-900 prose-h2:text-2xl md:prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3 prose-p:text-neutral-700 prose-p:leading-relaxed prose-p:text-base prose-li:text-neutral-700 prose-strong:text-neutral-900 prose-blockquote:border-l-indigo-600 prose-blockquote:bg-indigo-50/50 prose-blockquote:p-4 prose-blockquote:rounded-r-xl prose-table:border-neutral-200 prose-th:bg-neutral-50 prose-th:p-3 prose-td:p-3">
@@ -337,175 +340,3 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
   );
 }
 
-/**
- * Clean helper function to render Markdown blocks (H1-H3, lists, quotes, tables, paragraphs)
- */
-function renderMarkdownArticle(content: string) {
-  const lines = content.trim().split("\n");
-  const elements: React.ReactNode[] = [];
-  let inTable = false;
-  let tableRows: string[][] = [];
-
-  const flushTable = (key: string) => {
-    if (tableRows.length > 0) {
-      const headers = tableRows[0];
-      const rows = tableRows.slice(1).filter((r) => !r.every((c) => c.includes("---")));
-      elements.push(
-        <div key={key} className="overflow-x-auto my-8">
-          <table className="w-full border-collapse border border-neutral-200 text-sm rounded-xl overflow-hidden">
-            <thead>
-              <tr className="bg-neutral-50 border-b border-neutral-200">
-                {headers.map((h, i) => (
-                  <th key={i} className="p-3.5 text-left font-bold text-neutral-900">
-                    {h.trim()}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, rIdx) => (
-                <tr key={rIdx} className="border-b border-neutral-100 hover:bg-neutral-50/50">
-                  {row.map((cell, cIdx) => (
-                    <td key={cIdx} className="p-3.5 text-neutral-700">
-                      {cell.trim()}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
-      tableRows = [];
-    }
-    inTable = false;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const rawLine = lines[i];
-    const trimmed = rawLine.trim();
-
-    if (!trimmed) {
-      if (inTable) flushTable(`table-${i}`);
-      continue;
-    }
-
-    // Skip redundant top-level H1 (handled by article header)
-    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) {
-      continue;
-    }
-
-    // Horizontal Rule
-    if (trimmed === "---") {
-      if (inTable) flushTable(`table-${i}`);
-      elements.push(<hr key={i} className="my-8 border-neutral-200" />);
-      continue;
-    }
-
-    // Table Row
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      inTable = true;
-      const cols = trimmed
-        .slice(1, -1)
-        .split("|")
-        .map((c) => c.trim());
-      tableRows.push(cols);
-      continue;
-    } else if (inTable) {
-      flushTable(`table-${i}`);
-    }
-
-    // H2 Heading
-    if (trimmed.startsWith("## ")) {
-      elements.push(
-        <h2 key={i} className="text-2xl md:text-3xl font-extrabold text-neutral-900 mt-10 mb-4 tracking-tight">
-          {trimmed.replace("## ", "")}
-        </h2>
-      );
-      continue;
-    }
-
-    // H3 Heading
-    if (trimmed.startsWith("### ")) {
-      elements.push(
-        <h3 key={i} className="text-lg md:text-xl font-bold text-neutral-900 mt-6 mb-3 tracking-tight">
-          {trimmed.replace("### ", "")}
-        </h3>
-      );
-      continue;
-    }
-
-    // Blockquote
-    if (trimmed.startsWith("> ")) {
-      elements.push(
-        <blockquote key={i} className="border-l-4 border-indigo-600 bg-indigo-50/60 pl-4 py-3 pr-4 rounded-r-xl my-5 text-sm text-neutral-800 leading-relaxed">
-          {trimmed.replace("> ", "")}
-        </blockquote>
-      );
-      continue;
-    }
-
-    // Unordered List
-    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-      const text = trimmed.slice(2);
-      elements.push(
-        <div key={i} className="flex items-start gap-2.5 my-2 pl-2 text-sm md:text-base text-neutral-700 leading-relaxed">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 mt-2 shrink-0" />
-          <span>{renderInlineFormatting(text)}</span>
-        </div>
-      );
-      continue;
-    }
-
-    // Ordered List
-    if (/^\d+\.\s/.test(trimmed)) {
-      const numMatch = trimmed.match(/^(\d+)\.\s(.*)$/);
-      if (numMatch) {
-        elements.push(
-          <div key={i} className="flex items-start gap-3 my-2 pl-2 text-sm md:text-base text-neutral-700 leading-relaxed">
-            <span className="font-bold text-indigo-600 text-sm shrink-0">{numMatch[1]}.</span>
-            <span>{renderInlineFormatting(numMatch[2])}</span>
-          </div>
-        );
-        continue;
-      }
-    }
-
-    // Standard Paragraph
-    elements.push(
-      <p key={i} className="text-base text-neutral-700 leading-relaxed my-4">
-        {renderInlineFormatting(trimmed)}
-      </p>
-    );
-  }
-
-  if (inTable) flushTable("table-end");
-
-  return elements;
-}
-
-/**
- * Formats inline bold, code, and links cleanly
- */
-function renderInlineFormatting(text: string): React.ReactNode {
-  // Simple token parser for **bold** and `code`
-  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
-
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <strong key={index} className="font-semibold text-neutral-900">
-          {part.slice(2, -2)}
-        </strong>
-      );
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code key={index} className="px-1.5 py-0.5 rounded-md bg-neutral-100 text-indigo-700 font-mono text-xs border border-neutral-200">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
-  });
-}

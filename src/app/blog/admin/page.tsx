@@ -23,7 +23,9 @@ import {
   Loader2,
   X,
   BookOpen,
+  Image as ImageIcon,
 } from "lucide-react";
+import { MarkdownRenderer } from "@/components/blog/MarkdownRenderer";
 
 interface AdminPost {
   id?: string;
@@ -766,31 +768,118 @@ export default function PlatformBlogAdminPage() {
                   />
                 </div>
 
+                {/* Cover Image Input with Live Thumbnail & Presets */}
+                <div className="space-y-2 p-3.5 bg-neutral-50 border border-neutral-200 rounded-2xl">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Article Cover Image URL</span>
+                    </label>
+                    <span className="text-[11px] text-neutral-400">Recommended 1200×630</span>
+                  </div>
+
+                  <div className="flex gap-3 items-center">
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={formCoverImage}
+                      onChange={(e) => setFormCoverImage(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-white border border-neutral-200 rounded-xl text-xs text-neutral-900 outline-none focus:border-indigo-500"
+                    />
+                    {formCoverImage && (
+                      <div className="w-16 h-10 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shrink-0">
+                        <img
+                          src={formCoverImage}
+                          alt="Cover thumbnail"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Preset Buttons */}
+                  <div className="flex items-center gap-2 pt-1 text-[11px] text-neutral-500 flex-wrap">
+                    <span className="font-semibold text-neutral-400">Presets:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormCoverImage(
+                          "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded bg-white border border-neutral-200 hover:border-indigo-400 text-neutral-600 hover:text-indigo-600 transition-colors"
+                    >
+                      AI Network
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormCoverImage(
+                          "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded bg-white border border-neutral-200 hover:border-indigo-400 text-neutral-600 hover:text-indigo-600 transition-colors"
+                    >
+                      Analytics & Growth
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormCoverImage(
+                          "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80"
+                        )
+                      }
+                      className="px-2 py-0.5 rounded bg-white border border-neutral-200 hover:border-indigo-400 text-neutral-600 hover:text-indigo-600 transition-colors"
+                    >
+                      Technical Infrastructure
+                    </button>
+                  </div>
+                </div>
+
                 {/* Content Editor with Tab switcher */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-neutral-700">
                       Article Content (Markdown) *
                     </label>
-                    <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
-                      <button
-                        type="button"
-                        onClick={() => setEditorTab("write")}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                          editorTab === "write" ? "bg-white text-neutral-900 shadow-2xs" : "text-neutral-500"
-                        }`}
-                      >
-                        Editor
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditorTab("preview")}
-                        className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
-                          editorTab === "preview" ? "bg-white text-neutral-900 shadow-2xs" : "text-neutral-500"
-                        }`}
-                      >
-                        Preview
-                      </button>
+                    <div className="flex items-center gap-2">
+                      {editorTab === "write" && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const imgMarkdown = `\n\n![Workflow Architecture Diagram](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80 "Autonomous Execution Pipeline")\n\n`;
+                            setFormContent((prev) => prev + imgMarkdown);
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors"
+                          title="Insert Markdown Image"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>+ Insert Image</span>
+                        </button>
+                      )}
+                      <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab("write")}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                            editorTab === "write" ? "bg-white text-neutral-900 shadow-2xs" : "text-neutral-500"
+                          }`}
+                        >
+                          Editor
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditorTab("preview")}
+                          className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                            editorTab === "preview" ? "bg-white text-neutral-900 shadow-2xs" : "text-neutral-500"
+                          }`}
+                        >
+                          Preview
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -803,9 +892,12 @@ export default function PlatformBlogAdminPage() {
                       className="w-full font-mono text-xs px-3.5 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 outline-none focus:bg-white focus:border-indigo-500 leading-relaxed"
                     />
                   ) : (
-                    <div className="border border-neutral-200 rounded-xl p-5 bg-white min-h-[300px] overflow-y-auto prose prose-neutral max-w-none text-xs leading-relaxed">
-                      <p className="text-neutral-500 text-[11px] mb-2 font-mono">--- Live Article Preview ---</p>
-                      <pre className="whitespace-pre-wrap font-sans text-xs">{formContent}</pre>
+                    <div className="border border-neutral-200 rounded-xl p-6 bg-white min-h-[300px] max-h-[500px] overflow-y-auto">
+                      <div className="text-neutral-400 text-[11px] mb-3 font-mono flex items-center justify-between border-b border-neutral-100 pb-2">
+                        <span>Live Formatted Preview</span>
+                        <span>Full Markdown & Image Support</span>
+                      </div>
+                      <MarkdownRenderer content={formContent} />
                     </div>
                   )}
                 </div>

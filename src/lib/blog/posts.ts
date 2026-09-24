@@ -61,6 +61,8 @@ Rather than dumping generic regurgitations, the agent leverages accumulated proj
 ### 4. Direct CMS Publication & Auto-Repair
 The loop doesn't end with a text document. The agent connects to your CMS (via secure Application Passwords or Webhooks) to stage or publish posts, attach high-resolution hero visuals, and trigger immediate Google Indexing requests.
 
+![Autonomous Search Agent Workflow Diagram](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80 "Continuous Closed-Loop SEO Architecture: Ingestion, Analysis, Auto-Writing, and Indexing")
+
 ---
 
 ## The Three Pillars of Autonomous Search Dominance
@@ -136,6 +138,8 @@ Every top-ranking article follows a deliberate information architecture designed
 - Organize under clear H3 sub-headings (e.g., Step 1, Step 2, Step 3).
 - Provide concrete variables, formulas, or actionable workflows rather than abstract advice.
 - Embed contextual visual illustrations or data comparison tables.
+
+![High-Density Content Structure Model](https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80 "Information-Dense Editorial Pacing and Search Intent Mapping")
 
 ### 4. High-Intent H2: Common Pitfalls and Edge Cases (250–300 words)
 - Address frequent mistakes practitioners make when attempting the strategy.
@@ -249,6 +253,8 @@ Detection is only half the battle. True zero-touch systems bridge the gap betwee
 \`\`\`
 
 By automating technical hygiene, engineering teams save hundreds of hours of manual ticket resolution, while search engines reward your domain with rapid indexation and robust crawl efficiency.
+
+![Autonomous Technical Crawler Architecture](https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80 "Headless Crawler Node Graph: Depth-First URL Discovery & Canonical Verification")
 `
   },
   {
@@ -312,6 +318,8 @@ Rather than rewriting the entire post, surgically inject dedicated sections:
 ### Step 4: Internal Link Prioritization
 Point 3 to 5 internal links from your highest-authority existing pages directly to the target URL, using the striking distance query as the anchor text.
 
+![Google Search Console Striking Distance Growth Curve](https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?auto=format&fit=crop&w=1200&q=80 "Organic CTR Curve & Page 1 Search Position Multipliers")
+
 ---
 
 ## Exponential Returns: The Math of Page 1 Jumps
@@ -368,6 +376,8 @@ Successful programmatic SEO requires:
 1. **A Proprietary or Structured Dataset**: Real data, integration parameters, price points, city stats, or feature matrices that provide genuine utility.
 2. **Dynamic UI Modules**: Interactive calculators, comparison charts, copyable templates, or visual widgets unique to each page variation.
 3. **Intent-Specific Routing**: Matching queries where searchers specifically seek localized, comparative, or integration-specific answers.
+
+![Programmatic Content Architecture Schema](https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1200&q=80 "Database-Driven Page Generation Pipeline & Structured Index Architecture")
 
 ---
 
@@ -505,11 +515,19 @@ export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | un
       return getBlogPostBySlug(slug);
     }
 
+    const staticPost = getBlogPostBySlug(slug);
+    // If the database has an older seed copy that lacks the embedded visual diagrams,
+    // prefer the enriched static content so visitors always see rich illustrations.
+    const contentToUse =
+      staticPost && !d.content?.includes("![") && staticPost.content?.includes("![")
+        ? staticPost.content
+        : d.content;
+
     return {
       slug: d.slug,
       title: d.title,
       excerpt: d.excerpt,
-      content: d.content,
+      content: contentToUse,
       category: d.category as any,
       author: {
         name: d.author_name || 'Editorial Team',
@@ -519,7 +537,7 @@ export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | un
       publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
       updatedAt: d.updated_at,
       readingTime: d.reading_time || '5 min read',
-      coverImage: d.cover_image,
+      coverImage: d.cover_image || staticPost?.coverImage,
       coverImageAlt: d.cover_image_alt || d.title,
       metaTitle: d.meta_title || d.title,
       metaDescription: d.meta_description || d.excerpt,

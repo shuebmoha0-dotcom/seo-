@@ -56,6 +56,7 @@ Your task is to write a comprehensive, authoritative, high-density 1,200–1,500
 STRICT WRITING RULES:
 - High Information Density: Short paragraphs (2-3 sentences), crisp headings, zero conversational fluff ("In today's fast-paced world...").
 - Structure: Start directly with the H1 title. Follow with an immediate value introduction, 3-4 structured H2 sections, concrete real-world workflows, a comparative Markdown table, and a decisive conclusion.
+- In-Body Visuals & Architecture Diagrams: Include 1-2 high-resolution workflow diagrams or technical illustrations using standard Markdown image format with captions: ![Architecture Diagram](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80 "Autonomous Execution Pipeline") or ![Data Flow Graphic](https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80 "Continuous Search Signal Feedback Loop").
 - Tone: Technical, authoritative, experienced practitioner perspective.
 - Length: 1,200 to 1,500 words.
 - Internal Positioning: Naturally illustrate how autonomous AI agents, automated rank tracking, Search Console intelligence, and technical crawlers solve these pain points without being overly promotional.
