@@ -17,20 +17,7 @@ export async function GET(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const userRole = user.user_metadata?.role || (user as any).role;
-    let isAdmin = isPlatformAdmin(user.email, userRole);
-    if (!isAdmin) {
-      const { data: dbUser } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (isPlatformAdmin(user.email, dbUser?.role || userRole)) {
-        isAdmin = true;
-      }
-    }
-
-    if (!isAdmin) {
+    if (!isPlatformAdmin(user.email)) {
       return NextResponse.json(
         { error: "Forbidden: Platform administrator privileges required" },
         { status: 403 }
@@ -41,7 +28,7 @@ export async function GET(req: NextRequest) {
       .from("admin_usage_controls")
       .select("*")
       .eq("id", "global")
-      .single();
+      .maybeSingle();
 
     if (error && error.code !== "PGRST116") {
       console.error("[Admin Limits API] Error reading limits:", error);
@@ -77,20 +64,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const userRole = user.user_metadata?.role || (user as any).role;
-    let isAdmin = isPlatformAdmin(user.email, userRole);
-    if (!isAdmin) {
-      const { data: dbUser } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (isPlatformAdmin(user.email, dbUser?.role || userRole)) {
-        isAdmin = true;
-      }
-    }
-
-    if (!isAdmin) {
+    if (!isPlatformAdmin(user.email)) {
       return NextResponse.json(
         { error: "Forbidden: Platform administrator privileges required" },
         { status: 403 }
@@ -122,7 +96,7 @@ export async function POST(req: NextRequest) {
     if (max_tokens_per_run !== undefined) payload.max_tokens_per_run = Number(max_tokens_per_run);
     if (per_website_token_cap !== undefined) payload.per_website_token_cap = Number(per_website_token_cap);
 
-    const { data: updated, error: upsertError } = await supabase
+    const { data: updated, error: upsertError } = await authClient
       .from("admin_usage_controls")
       .upsert(payload)
       .select()

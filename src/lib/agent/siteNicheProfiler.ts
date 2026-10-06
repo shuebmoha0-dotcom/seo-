@@ -108,7 +108,7 @@ export class SiteNicheProfiler {
         supabase.from('acquired_backlinks').select('*', { count: 'exact', head: true }).eq('website_id', websiteId),
         supabase.from('search_console_data').select('impressions, clicks').eq('website_id', websiteId).limit(200),
         supabase.from('content_rules').select('*').eq('website_id', websiteId).maybeSingle(),
-        supabase.from('project_memory').select('content, category, source').or(`website_id.eq.${websiteId},website_id.is.null`).eq('is_outdated', false).limit(10),
+        supabase.from('project_memory').select('content, category, source').eq('website_id', websiteId).eq('is_outdated', false).limit(10),
       ]);
 
       if (pagesRes.data) {
@@ -223,7 +223,7 @@ export class SiteNicheProfiler {
 
     let primaryNiche = `${domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ')}`;
     let coreOfferings: string[] = [];
-    let contentPillars: string[] = categoriesData.length > 0 ? categoriesData.slice(0, 5) : [primaryNiche];
+    let contentPillars: string[] = categoriesData.length > 0 ? categoriesData.slice(0, 8) : [primaryNiche];
     let nicheSeedKeywords: string[] = [];
     let targetAudience = contentRulesData?.audience || `Prospective customers and visitors of ${domain}`;
     let negativeBoundaries: string[] = [
@@ -240,25 +240,33 @@ export class SiteNicheProfiler {
           primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "B2B Cold Email Outreach & Sales Automation", "Dental Implants Clinic", "AI Video Editing SaaS")'),
           core_offerings: z.array(z.string()).describe('3-5 core products, services, or solutions this website provides'),
           target_audience: z.string().describe('Specific buyer persona or reader audience who uses this website'),
-          content_pillars: z.array(z.string()).describe('3-5 foundational content pillars derived directly from verified site categories and articles'),
-          niche_seed_keywords: z.array(z.string()).describe('6-10 real, high-intent Google search keywords that potential customers/readers use to find information in this exact niche (e.g. "cold email templates", "email warm up guide", "cold email deliverability", "b2b sales email", "cold outreach follow up")'),
+          content_pillars: z.array(z.string()).describe('4-7 foundational content pillars representing the full breadth of the site. If verified categories exist, map them to these categories to ensure diverse coverage across all topics.'),
+          niche_seed_keywords: z.array(z.string()).describe('8-14 real, high-intent Google search keywords with balanced distribution across ALL content pillars/categories (provide 1-2 keywords per pillar so keywords are diverse and mixed, NOT repetitive)'),
           negative_boundaries: z.array(z.string()).describe('3-5 unrelated niches or topic areas that this website DOES NOT belong to, to prevent cross-niche hallucination'),
         }),
         system: `You are an elite Business Analyst and SEO Growth Architect.
-Your task is to analyze evidence from the website "${domain}" and identify its EXACT, HIGH-PRECISION NICHE, CONTENT PILLARS, and SEARCH SEED KEYWORDS.
+Your task is to analyze evidence from the website "${domain}" and identify its EXACT, HIGH-PRECISION NICHE, DIVERSE CONTENT PILLARS, and BALANCED SEED KEYWORDS.
 
-STRICT GROUNDING MANDATE:
+STRICT GROUNDING & MULTI-TENANT DIVERSITY MANDATE:
 - Heavily weigh the site's ACTUAL categories, published article titles, and knowledge bank.
-- If the site has articles about Cold Email, Deliverability, and Outreach, the niche IS Cold Email Outreach & Sales Automation.
-- Do NOT guess generic niches from bare domain syllables. Use the empirical evidence provided.
-- Provide 6 to 10 realistic search queries that people in this niche actually search for in Google.`,
+- Ground the niche strictly in the empirical evidence provided. Do not guess or hallucinate off-topic industries.
+- DIVERSITY REQUIREMENT: Content pillars MUST cover the site's entire topical scope across all verified categories (e.g., if the site has categories for tools, specific channels, deliverability, copywriting, strategy, include ALL of them as pillars).
+- SEED KEYWORDS MIX: Do NOT cluster all seed keywords around a single repetitive concept. Provide a mixed, balanced set of keywords spanning all content pillars.`,
         prompt: `Analyze the site evidence for "${domain}" and extract the exact niche, offerings, target audience, content pillars, seed keywords, and negative boundaries:\n\n${JSON.stringify(evidenceSummary, null, 2)}`
       });
 
       if (object.primary_niche) primaryNiche = object.primary_niche;
       if (object.core_offerings?.length > 0) coreOfferings = object.core_offerings;
       if (object.target_audience) targetAudience = object.target_audience;
-      if (object.content_pillars?.length > 0) contentPillars = object.content_pillars;
+      if (object.content_pillars?.length > 0) {
+        contentPillars = object.content_pillars;
+        // Guarantee all live categories are preserved in content pillars
+        for (const cat of categoriesData) {
+          if (!contentPillars.some(p => p.toLowerCase() === cat.toLowerCase())) {
+            contentPillars.push(cat);
+          }
+        }
+      }
       if (object.niche_seed_keywords?.length > 0) nicheSeedKeywords = object.niche_seed_keywords;
       if (object.negative_boundaries?.length > 0) negativeBoundaries = object.negative_boundaries;
     } catch (llmErr) {
@@ -275,7 +283,7 @@ STRICT GROUNDING MANDATE:
       nicheSeedKeywords = [
         primaryNiche.toLowerCase(),
         ...contentPillars.map(p => p.toLowerCase()),
-      ].slice(0, 8);
+      ].slice(0, 10);
     }
 
     const profile: SiteNicheProfile = {

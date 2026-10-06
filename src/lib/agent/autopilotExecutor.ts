@@ -107,7 +107,7 @@ export class AutopilotExecutor {
         const { data: memoryRows } = await supabase
           .from('project_memory')
           .select('*')
-          .or(`website_id.eq.${website_id},website_id.is.null`)
+          .eq('website_id', website_id)
           .eq('is_outdated', false)
           .order('is_important', { ascending: false });
 
@@ -198,18 +198,18 @@ export class AutopilotExecutor {
               siteProfile,
               projectMemory,
               projectInstructions,
-              limit: 3,
+              limit: 5,
             });
 
             if (gaps && gaps.length > 0) {
-              const bestGap = gaps[0];
+              const bestGap = SiteContentGapDetector.selectBalancedTopic(gaps, siteInventory) || gaps[0];
               targetKeyword = bestGap.keyword;
               workingTitle = bestGap.working_title;
               searchIntent = bestGap.search_intent;
               keywordSource = `Content gap analysis [${bestGap.target_category}] - ${bestGap.gap_rationale} (${bestGap.estimated_volume}/mo, KD ${bestGap.estimated_kd})`;
-              console.log(`[AutopilotExecutor] Selected content gap opportunity: "${workingTitle}" (Category: ${bestGap.target_category})`);
+              console.log(`[AutopilotExecutor] Selected balanced content gap opportunity: "${workingTitle}" (Category: ${bestGap.target_category})`);
             } else {
-              // Fallback to database opportunities if no live gap returned
+              // Fallback to database opportunities with balanced topic selection
               const { data: dbOpps } = await supabase
                 .from('keyword_opportunities')
                 .select('keyword, search_volume, keyword_difficulty, search_intent')
@@ -218,14 +218,19 @@ export class AutopilotExecutor {
                 .lte('keyword_difficulty', 35)
                 .order('priority', { ascending: true })
                 .order('search_volume', { ascending: false })
-                .limit(5);
+                .limit(20);
 
               if (dbOpps && dbOpps.length > 0) {
-                const best = dbOpps[0];
+                const candidates = (dbOpps as any[]).map((op: any) => ({
+                  ...op,
+                  working_title: `${op.keyword.charAt(0).toUpperCase() + op.keyword.slice(1)}: Practical Action Guide`,
+                }));
+                const best = SiteContentGapDetector.selectBalancedTopic(candidates, siteInventory) || candidates[0];
                 targetKeyword = best.keyword;
-                workingTitle = `${best.keyword.charAt(0).toUpperCase() + best.keyword.slice(1)}: Practical Action Guide`;
+                workingTitle = best.working_title;
                 searchIntent = best.search_intent || 'informational';
                 keywordSource = `database opportunity (${best.search_volume}/mo, KD ${best.keyword_difficulty})`;
+                console.log(`[AutopilotExecutor] Selected balanced database opportunity: "${workingTitle}"`);
               }
             }
           } catch (gapErr) {
@@ -920,28 +925,24 @@ export class AutopilotExecutor {
         }
 
         // Construct pristine end-to-end achievement summary
-        let fastRankSummary = `🚀 *Fast-Rank Execution Pipeline Completed for ${website_domain}!*\n`;
-        fastRankSummary += `🎯 *Niche Focus:* ${siteProfile.primaryNiche}\n`;
-        fastRankSummary += `🏗️ *Topical Authority Silo:* "${fastRankPlaybook.fast_rank_silo.silo_name}"\n\n`;
-
-        fastRankSummary += `✅ *ACTIONS EXECUTED AUTONOMOUSLY:*\n`;
-        fastRankSummary += `1. 🎯 *Engineered Zero-Competition Silo:* 1 Pillar + 3 Spokes targeting low-KD forum displacement queries (KD ${pillarTopic.estimated_kd}–18).\n`;
+        let fastRankSummary = `🚀 *Fast-Rank Pipeline Completed for ${website_domain}*\n\n`;
+        fastRankSummary += `• *Niche:* ${siteProfile.primaryNiche}\n`;
+        fastRankSummary += `• *Topic Silo:* "${fastRankPlaybook.fast_rank_silo.silo_name}"\n\n`;
+        fastRankSummary += `*Actions Executed:*\n`;
+        fastRankSummary += `1. 🎯 *Engineered Zero-Competition Silo:* 1 Pillar + 3 Spokes targeting low-KD queries (KD ${pillarTopic.estimated_kd}–18)\n`;
 
         if (pillarDraftResult && pillarDraftResult.success) {
           const draftOutput = pillarDraftResult.data?.output;
           const wordCount = draftOutput?.word_count || 1400;
-          fastRankSummary += `2. ✍️ *Drafted Core Pillar Guide:* "${draftOutput?.working_title || pillarTopic.working_title}"\n`;
-          fastRankSummary += `   ↳ _Word Count:_ ${wordCount} words (Claude Sonnet 5)\n`;
-          fastRankSummary += `   ↳ _Direct Answer Box:_ Position 0 snippet embedded under H1\n`;
-          fastRankSummary += `   ↳ _Structured Schema:_ FAQPage JSON-LD generated\n`;
-          fastRankSummary += `3. 🎨 *Visual Assets Created:* Featured hero visual & workflow diagram generated\n`;
-          fastRankSummary += `4. 🔗 *Topical Mesh & Spokes Queued:* 3 supporting spoke articles mapped with bi-directional internal links\n`;
-          fastRankSummary += `5. ⚡ *Instant Indexing Armed:* Google Indexing API & IndexNow (Bing/Yandex) ping ready upon approval\n\n`;
-          fastRankSummary += `📲 *Telegram Approval Card Delivered:* Tap \`[Approve & Publish]\` below to publish the Pillar live to WordPress!`;
+          fastRankSummary += `2. ✍️ *Drafted Core Pillar:* "${draftOutput?.working_title || pillarTopic.working_title}" (${wordCount} words, Claude Sonnet 5)\n`;
+          fastRankSummary += `3. 🎨 *Visual Assets:* Featured hero image & workflow diagram generated\n`;
+          fastRankSummary += `4. 🔗 *Internal Links:* 3 supporting spokes mapped with internal links\n`;
+          fastRankSummary += `5. ⚡ *Instant Indexing:* Prepared for Google Search Console & IndexNow\n\n`;
+          fastRankSummary += `Tap *[Approve & Publish]* below to publish live!`;
         } else {
-          fastRankSummary += `2. 📝 *Pillar Opportunity Queued:* "${pillarTopic.working_title}" (~${pillarTopic.estimated_volume}/mo, KD ${pillarTopic.estimated_kd})\n`;
-          fastRankSummary += `3. 🔗 *3 Supporting Spokes Mapped:* Ready in Content Planner\n`;
-          fastRankSummary += `4. ⚡ *Indexing & Schema Armed:* Ready for automated deployment\n`;
+          fastRankSummary += `2. 📝 *Pillar Queued:* "${pillarTopic.working_title}" (~${pillarTopic.estimated_volume}/mo, KD ${pillarTopic.estimated_kd})\n`;
+          fastRankSummary += `3. 🔗 *3 Spokes Mapped:* Ready in Content Planner\n`;
+          fastRankSummary += `4. ⚡ *Indexing & Schema:* Armed for deployment\n`;
         }
 
         return {
@@ -976,14 +977,54 @@ export class AutopilotExecutor {
             });
 
             try {
-              const pagesAnalyzed = analysis?.result?.pages?.length || 0;
-              const issuesCount = analysis?.result?.deterministic_issues?.length || 0;
               const { TelegramService } = await import('../telegram/telegramService');
               const telegram = new TelegramService();
-              await telegram.notifyWebsiteSubscribers(
-                website_id,
-                `✅ *Technical Audit Completed!*\n\n*Target:* \`${website_domain}\`\n*Pages Crawled:* ${pagesAnalyzed}\n*Issues Found:* ${issuesCount}\n\n[View Technical Report](/technical-seo)`
-              );
+
+              if (analysis.status === 'running') {
+                // Crawl is async — send honest "started" notification
+                const startedMsg = [
+                  `🚀 *Technical Audit Started: \`${website_domain}\`*`,
+                  '━━━━━━━━━━━━━━━━━━━━━',
+                  `🔗 *Target:* ${targetUrl}`,
+                  `⏳ *Status:* Crawling in background (this takes 1–3 minutes)`,
+                  '',
+                  'You will receive a second notification once the crawl completes with your full health score and issue list.',
+                  '\n━━━━━━━━━━━━━━━━━━━━━',
+                  '📍 Track progress at /technical-seo'
+                ].join('\n');
+
+                if (params.chat_id) {
+                  await telegram.sendMessage(params.chat_id, startedMsg, { parse_mode: 'Markdown' });
+                } else {
+                  await telegram.notifyWebsiteSubscribers(website_id, startedMsg);
+                }
+              } else {
+                // Crawl completed immediately (reused data or instant result)
+                const pagesAnalyzed = analysis?.result?.pages?.length || 0;
+                const issues = analysis?.result?.deterministic_issues || [];
+                const issuesCount = issues.length;
+                const healthScore = analysis?.result?.summary?.technical_health_score || 80;
+                const criticalIssues = issues.filter((i: any) => i.severity === 'critical');
+                const highIssues = issues.filter((i: any) => i.severity === 'high');
+                const issueSummaryLines = issues.slice(0, 3).map((iss: any) => `📌 ${iss.title}`);
+
+                const completedMsg = [
+                  `✅ *Technical Audit Completed: \`${website_domain}\`*`,
+                  '━━━━━━━━━━━━━━━━━━━━━',
+                  `🏆 *Technical Health Score:* *${healthScore}/100*`,
+                  `📄 *Pages Crawled:* ${pagesAnalyzed}`,
+                  `🔍 *Issues Found:* ${issuesCount} (${criticalIssues.length} critical, ${highIssues.length} high)`,
+                  ...(issueSummaryLines.length > 0 ? ['\n*Top Priority Findings:*', ...issueSummaryLines] : ['No issues detected ✅']),
+                  '\n━━━━━━━━━━━━━━━━━━━━━',
+                  '💡 *Next Step:* Reply with *"Fix technical issues"* or visit /technical-seo'
+                ].join('\n');
+
+                if (params.chat_id) {
+                  await telegram.sendMessage(params.chat_id, completedMsg, { parse_mode: 'Markdown' });
+                } else {
+                  await telegram.notifyWebsiteSubscribers(website_id, completedMsg);
+                }
+              }
             } catch (tErr) {
               console.warn('[AutopilotExecutor] Tech crawl telegram notify warning:', tErr);
             }

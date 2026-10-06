@@ -14,26 +14,38 @@ import {
   TrendingUp,
   Link as LinkIcon,
   Wrench,
-  Layers,
   Settings,
-  Sparkles,
-  Bot,
-  Crown,
-  Search,
   Brain,
+  Search,
   Image as ImageIcon,
   Plug2,
   Clock,
   Users,
-  Network,
   BookOpen,
+  Gauge,
+  type LucideIcon,
 } from "lucide-react";
 
+import { motion } from "framer-motion";
 import { WebsiteSwitcher } from "@/components/WebsiteSwitcher";
+import { useWebsite } from "@/lib/context/WebsiteContext";
+
+interface NavItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  tag?: string;
+}
+
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
+  const { websites, planLimit } = useWebsite();
 
   useEffect(() => {
     try {
@@ -57,112 +69,144 @@ export function Sidebar() {
     }
   }, []);
 
-  const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Autopilot", href: "/autopilot", icon: Clock, badge: "New" },
-    { name: "Project Memory", href: "/memory", icon: Brain },
-    { name: "Strategy Agent", href: "/strategy", icon: Compass, badge: "AI" },
-    { name: "Competitors", href: "/competitors", icon: Users, badge: "AI" },
-    { name: "Opportunities", href: "/opportunities", icon: Zap, badge: "8" },
-    { name: "Content Planner", href: "/content-planner", icon: FileText },
-    ...(isAdmin ? [{ name: "Platform Blog", href: "/blog/admin", icon: BookOpen, badge: "Admin" }] : []),
-    { name: "On-Page SEO", href: "/on-page-seo", icon: Search, badge: "AI" },
-    { name: "Internal Links", href: "/internal-linking", icon: LinkIcon, badge: "AI" },
-    { name: "Image Agent", href: "/image-agent", icon: ImageIcon, badge: "AI" },
-    { name: "Site Explorer", href: "/site-explorer", icon: Compass },
-    { name: "Keywords", href: "/keywords", icon: Key },
-    { name: "Rank Tracking", href: "/rank-tracking", icon: TrendingUp },
-    { name: "Backlinks", href: "/backlinks", icon: LinkIcon },
-    { name: "Technical SEO", href: "/technical-seo", icon: Wrench },
+  const groups: NavGroup[] = [
+    {
+      items: [
+        { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { name: "Autopilot", href: "/autopilot", icon: Clock },
+      ],
+    },
+    {
+      label: "Strategy",
+      items: [
+        { name: "Strategy", href: "/strategy", icon: Compass },
+        { name: "Opportunities", href: "/opportunities", icon: Zap },
+        { name: "Competitors", href: "/competitors", icon: Users },
+        { name: "Project Memory", href: "/memory", icon: Brain },
+      ],
+    },
+    {
+      label: "Content",
+      items: [
+        { name: "Content Planner", href: "/content-planner", icon: FileText },
+        { name: "On-Page SEO", href: "/on-page-seo", icon: Search },
+        { name: "Internal Links", href: "/internal-linking", icon: LinkIcon },
+        { name: "Images", href: "/image-agent", icon: ImageIcon },
+        ...(isAdmin ? [{ name: "Platform Blog", href: "/blog/admin", icon: BookOpen, tag: "Admin" }] : []),
+      ],
+    },
+    {
+      label: "Research",
+      items: [
+        { name: "Keywords", href: "/keywords", icon: Key },
+        { name: "Rank Tracking", href: "/rank-tracking", icon: TrendingUp },
+        { name: "Backlinks", href: "/backlinks", icon: LinkIcon },
+        { name: "Site Explorer", href: "/site-explorer", icon: Compass },
+      ],
+    },
+    {
+      label: "Technical",
+      items: [{ name: "Technical SEO", href: "/technical-seo", icon: Wrench }],
+    },
+  ];
+
+  const workspace: NavItem[] = [
     { name: "Integrations", href: "/integrations", icon: Plug2 },
-    { name: isAdmin ? "Token Controls" : "Usage", href: "/usage", icon: Zap, ...(isAdmin ? { badge: "Admin" } : {}) },
+    { name: isAdmin ? "Token Controls" : "Usage", href: "/usage", icon: Gauge, ...(isAdmin ? { tag: "Admin" } : {}) },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
-  return (
-    <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col justify-between min-h-screen p-4 select-none shrink-0">
-      <div>
-        {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-3 px-3 py-2 mb-4 group">
-          <div className="p-2 bg-indigo-600 rounded-xl shadow-[0_0_15px_rgba(79,70,229,0.3)] group-hover:scale-105 transition-transform">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="font-bold text-neutral-900 tracking-tight leading-none text-base">SEO Autopilot</h1>
-            <span className="text-[10px] text-neutral-500 font-medium tracking-wide">Autonomous SEO Agent</span>
-          </div>
-        </Link>
+  const isActiveRoute = (href: string) =>
+    pathname === href || (href === "/dashboard" && pathname === "/") || (href !== "/" && pathname?.startsWith(href + "/"));
 
-        {/* Central Website Switcher */}
-        <div className="mb-4">
-          <WebsiteSwitcher />
+  const renderItem = (item: NavItem) => {
+    const active = isActiveRoute(item.href);
+    const Icon = item.icon;
+    return (
+      <Link key={item.href} href={item.href} className="relative block group" aria-current={active ? "page" : undefined}>
+        {active && (
+          <motion.div
+            layoutId="sidebarActive"
+            className="absolute inset-0 rounded-md bg-neutral-200/60"
+            transition={{ type: "spring", stiffness: 500, damping: 40 }}
+          />
+        )}
+        <div
+          className={`relative z-10 flex h-8 items-center justify-between rounded-md px-2.5 text-[13px] transition-colors ${
+            active
+              ? "text-neutral-900 font-medium"
+              : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+          }`}
+        >
+          <span className="flex items-center gap-2.5 min-w-0">
+            <Icon
+              className={`h-4 w-4 shrink-0 ${active ? "text-neutral-900" : "text-neutral-400 group-hover:text-neutral-600"}`}
+              strokeWidth={1.75}
+            />
+            <span className="truncate">{item.name}</span>
+          </span>
+          {item.tag && <span className="text-[11px] font-medium text-neutral-400">{item.tag}</span>}
         </div>
+      </Link>
+    );
+  };
 
-        {/* Navigation */}
-        <nav className="space-y-1 max-h-[calc(100vh-270px)] overflow-y-auto pr-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href === "/dashboard" && pathname === "/");
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all ${
-                  isActive
-                    ? "bg-indigo-50/90 text-indigo-700 font-semibold border-l-2 border-indigo-600 pl-2.5 shadow-xs"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 font-medium"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-neutral-400"}`} />
-                  <span>{item.name}</span>
-                </div>
-                {item.badge && (
-                  <span className={`text-[10px] px-2 py-0.2 rounded-full font-semibold border ${
-                    isActive
-                      ? "bg-indigo-100/70 text-indigo-700 border-indigo-200"
-                      : "bg-neutral-100 text-neutral-600 border-neutral-200/80"
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+  const planName = planLimit?.plan_name || (isAdmin ? "Enterprise" : "Pro");
+  const siteCount = planLimit?.current_count ?? websites.length;
+  const maxSites = planLimit?.max_websites ?? (isAdmin ? 999 : 5);
+  const isUnlimited = isAdmin || maxSites >= 999;
+  const percent = isUnlimited ? 0 : Math.min(100, Math.round((siteCount / Math.max(1, maxSites)) * 100));
+
+  return (
+    <aside className="sticky top-0 z-20 flex h-screen w-60 shrink-0 select-none flex-col self-start border-r border-neutral-200 bg-neutral-50/70">
+      {/* Brand */}
+      <div className="px-4 pt-4 pb-3">
+        <Link href="/" className="flex items-center gap-2.5 px-1">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-900 text-white">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 17 9 11 13 15 21 7" />
+              <polyline points="15 7 21 7 21 13" />
+            </svg>
+          </span>
+          <span className="text-sm font-semibold tracking-tight text-neutral-900">SEO Autopilot</span>
+        </Link>
       </div>
 
-      <div className="space-y-3 pt-4 border-t border-neutral-200">
-        {/* Usage Card */}
-        <div className="bg-neutral-50 border border-neutral-200 rounded-2xl p-3.5 space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-neutral-500 font-medium">Usage This Month</span>
-            <span className="text-neutral-900 font-bold">78%</span>
-          </div>
-          <div className="w-full bg-neutral-200 rounded-full h-1.5 overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full w-[78%]" />
-          </div>
-          <div className="flex items-center justify-between text-[11px] text-neutral-500">
-            <span>234 / 300 Credits used</span>
-          </div>
-          <span className="text-[10px] text-neutral-400 block">Renews in 18 days</span>
+      {/* Website switcher */}
+      <div className="px-3 pb-3">
+        <WebsiteSwitcher />
+      </div>
 
-          <button className="w-full mt-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5">
-            <Crown className="w-3.5 h-3.5" /> Upgrade Plan
-          </button>
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-3" aria-label="Primary">
+        {groups.map((group, i) => (
+          <div key={group.label ?? `g-${i}`} className={i === 0 ? "" : "mt-5"}>
+            {group.label && (
+              <div className="mb-1 px-2.5 text-xs font-medium text-neutral-400">{group.label}</div>
+            )}
+            <div className="space-y-0.5">{group.items.map(renderItem)}</div>
+          </div>
+        ))}
+
+        <div className="mt-5 border-t border-neutral-200 pt-4 space-y-0.5">{workspace.map(renderItem)}</div>
+      </nav>
+
+      {/* Plan footer */}
+      <div className="border-t border-neutral-200 px-4 py-3">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-medium text-neutral-800">{planName}</span>
+          <Link href="/pricing" className="text-neutral-500 hover:text-neutral-900 transition-colors">
+            {isAdmin ? "Plans" : planLimit?.upgrade_required ? "Upgrade" : "Manage"}
+          </Link>
         </div>
-
-        {/* Footer Agent Status */}
-        <div className="flex items-center justify-between px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-xl">
-          <div className="flex items-center gap-2.5">
-            <div className="relative">
-              <Bot className="w-4 h-4 text-indigo-500" />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+        <div className="mt-2 flex items-center gap-2">
+          {!isUnlimited && (
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-neutral-200">
+              <div className="h-full rounded-full bg-neutral-800 transition-[width] duration-300" style={{ width: `${percent}%` }} />
             </div>
-            <span className="text-xs font-medium text-neutral-700">AI Agent</span>
-          </div>
-          <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-            Active 24/7
+          )}
+          <span className="text-xs tabular-nums text-neutral-500">
+            {isUnlimited ? `${siteCount} sites` : `${siteCount} / ${maxSites} sites`}
           </span>
         </div>
       </div>

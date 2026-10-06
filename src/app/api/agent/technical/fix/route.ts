@@ -152,32 +152,64 @@ Constraint: Front-load the primary target keyword. Length MUST be between 50 and
 
       case 'multiple_h1_headings':
       case 'presentation_layout_defect':
-      case 'presentation': {
-        // Enforce single H1 hierarchy, suppress EZ-TOC, and run autoRepairHtml
+      case 'presentation':
+      case 'gutenberg_invalid_block_syntax':
+      case 'malformed_list_syntax':
+      case 'excessive_table_of_contents':
+      case 'bad_optimized_size_unconstrained_width': {
+        // Enforce single H1 hierarchy, suppress EZ-TOC, clean Gutenberg block errors, and run autoRepairHtml
         for (const pageUrl of targetUrls.slice(0, 10)) {
           const slug = getSlugFromUrl(pageUrl);
-          if (wpSite) {
+          if (wpSite && slug) {
+            let wpPostId: number | undefined;
+            let currentPostContent = '';
+
+            try {
+              const targetSite = (wpSite.site_url || website.url || `https://${website.domain}`).replace(/\/+$/, '');
+              const wpRes = await fetch(`${targetSite}/wp-json/wp/v2/posts?slug=${encodeURIComponent(slug)}&_fields=id,title,content`, {
+                signal: AbortSignal.timeout(6000),
+              });
+              if (wpRes.ok) {
+                const posts = await wpRes.json();
+                if (Array.isArray(posts) && posts.length > 0) {
+                  wpPostId = posts[0].id;
+                  currentPostContent = posts[0].content?.rendered || '';
+                }
+              }
+            } catch (fetchErr) {
+              console.warn('[TechnicalFix] Failed to fetch live WP post content for slug:', slug, fetchErr);
+            }
+
+            const payload: Record<string, any> = {
+              post_slug: slug,
+              target_url: pageUrl,
+              meta: {
+                '_ez-toc-disabled': '1',
+                'ez-toc-disabled': '1',
+                '_ez-toc-insert': '0',
+                'ez-toc-insert': '0',
+              },
+              repair_presentation: true,
+            };
+
+            if (wpPostId) {
+              payload.post_id = wpPostId;
+            }
+            if (currentPostContent) {
+              const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(currentPostContent);
+              payload.content = repairedHtml;
+            }
+
             const res = await createWordPressJob({
               websiteId: website.id,
               jobType: 'update_post',
-              payload: {
-                post_slug: slug,
-                target_url: pageUrl,
-                meta: {
-                  '_ez-toc-disabled': '1',
-                  'ez-toc-disabled': '1',
-                  '_ez-toc-insert': '0',
-                  'ez-toc-insert': '0',
-                },
-                // The outbound worker applies autoRepairHtml on execution
-                repair_presentation: true,
-              },
+              payload,
             });
             if (res.job) dispatchedJobsCount++;
             else if (res.error) errors.push(res.error);
           }
         }
-        fixNotes = `Queued layout hygiene repair, single H1 hierarchy enforcement, and permanent EZ-TOC suppression for ${dispatchedJobsCount} post(s).`;
+        fixNotes = `Queued layout hygiene repair, Gutenberg list & block recovery, single H1 hierarchy enforcement, and permanent EZ-TOC suppression for ${dispatchedJobsCount} post(s).`;
         break;
       }
 

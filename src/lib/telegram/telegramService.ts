@@ -148,14 +148,20 @@ export class TelegramService {
       const data = await res.json();
       if (!data.ok) {
         console.warn('[TelegramService] sendMessage error:', data.description, '- retrying without formatting...');
-        // Fallback: If Markdown entity parsing failed, retry as clean plain text
+        // Fallback: If Markdown entity parsing failed, strip raw markdown tokens and retry as clean text
         if (options?.parse_mode) {
+          const cleanText = safeText
+            .replace(/\*([^*]+)\*/g, '$1')
+            .replace(/_([^_]+)_/g, '$1')
+            .replace(/`([^`]+)`/g, '$1')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
           const fallbackRes = await fetch(`${this.apiUrl}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chat_id: chatId,
-              text: safeText,
+              text: cleanText,
               reply_markup: options?.reply_markup,
             }),
           });

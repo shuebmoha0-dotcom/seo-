@@ -85,9 +85,9 @@ export function markdownToWordPressHtml(markdown: string): string {
     const items = match
       .trim()
       .split('\n')
-      .map(line => line.replace(/^(?:-|\*)\s+/, '').trim())
+      .map(line => line.replace(/^(?:-|\*)\s*(?:(?:>|&gt;)\s*)?/, '').trim())
       .filter(Boolean)
-      .map(item => `<li>${item}</li>`)
+      .map(item => `<li>${item.replace(/^(?:>|&gt;)\s*/, '')}</li>`)
       .join('\n');
     return `\n\n<!-- wp:list -->\n<ul class="wp-block-list">\n${items}\n</ul>\n<!-- /wp:list -->\n\n`;
   });
@@ -97,9 +97,9 @@ export function markdownToWordPressHtml(markdown: string): string {
     const items = match
       .trim()
       .split('\n')
-      .map(line => line.replace(/^\d+\.\s+/, '').trim())
+      .map(line => line.replace(/^\d+\.\s*(?:(?:>|&gt;)\s*)?/, '').trim())
       .filter(Boolean)
-      .map(item => `<li>${item}</li>`)
+      .map(item => `<li>${item.replace(/^(?:>|&gt;)\s*/, '')}</li>`)
       .join('\n');
     return `\n\n<!-- wp:list {"ordered":true} -->\n<ol class="wp-block-list">\n${items}\n</ol>\n<!-- /wp:list -->\n\n`;
   });
@@ -109,7 +109,16 @@ export function markdownToWordPressHtml(markdown: string): string {
   const formattedBlocks = blocks.map(block => {
     const trimmed = block.trim();
     if (!trimmed) return '';
-    if (trimmed.startsWith('<!-- wp:') || trimmed.startsWith('<h') || trimmed.startsWith('<ul') || trimmed.startsWith('<ol') || trimmed.startsWith('<blockquote') || trimmed.startsWith('<figure') || trimmed.startsWith('<table')) {
+    if (
+      trimmed.startsWith('<!-- wp:') ||
+      trimmed.startsWith('<h') ||
+      trimmed.startsWith('<ul') ||
+      trimmed.startsWith('<ol') ||
+      trimmed.startsWith('<li') ||
+      trimmed.startsWith('<blockquote') ||
+      trimmed.startsWith('<figure') ||
+      trimmed.startsWith('<table')
+    ) {
       return trimmed;
     }
     return `<!-- wp:paragraph -->\n<p>${trimmed.replace(/\n/g, '<br/>')}</p>\n<!-- /wp:paragraph -->`;

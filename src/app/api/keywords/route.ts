@@ -115,7 +115,7 @@ export async function POST(request: Request) {
       const { data: memData } = await supabase
         .from('project_memory')
         .select('*')
-        .or(`website_id.eq.${website_id},website_id.is.null`)
+        .eq('website_id', website_id)
         .eq('is_outdated', false);
 
       if (memData) {

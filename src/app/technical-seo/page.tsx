@@ -84,14 +84,14 @@ const SEVERITY_CONFIG: Record<Severity, { label: string; color: string; dot: str
   critical: { label: "Critical", color: "text-rose-700 border-rose-300", dot: "bg-rose-500", bg: "bg-rose-50" },
   high: { label: "High", color: "text-amber-700 border-amber-300", dot: "bg-amber-500", bg: "bg-amber-50" },
   medium: { label: "Medium", color: "text-blue-700 border-blue-300", dot: "bg-blue-500", bg: "bg-blue-50" },
-  low: { label: "Low", color: "text-slate-600 border-slate-300", dot: "bg-slate-400", bg: "bg-slate-50" },
+  low: { label: "Low", color: "text-neutral-600 border-neutral-300", dot: "bg-neutral-400", bg: "bg-neutral-50" },
   info: { label: "Info", color: "text-teal-700 border-teal-300", dot: "bg-teal-400", bg: "bg-teal-50" },
 };
 
 const AUTOMATION_CONFIG: Record<AutomationLevel, { label: string; color: string }> = {
   auto: { label: "Auto-fixable", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
   semi_auto: { label: "Semi-automatic", color: "text-blue-700 bg-blue-50 border-blue-200" },
-  manual: { label: "Manual fix", color: "text-slate-600 bg-slate-100 border-slate-200" },
+  manual: { label: "Manual fix", color: "text-neutral-600 bg-neutral-100 border-neutral-200" },
   requires_approval: { label: "Requires Approval", color: "text-rose-700 bg-rose-50 border-rose-200" },
 };
 
@@ -111,14 +111,14 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 const TECH_COLORS: Record<string, string> = {
-  nextjs: "text-slate-800 bg-slate-100 border-slate-300",
+  nextjs: "text-neutral-800 bg-neutral-100 border-neutral-300",
   react: "text-blue-700 bg-blue-50 border-blue-200",
   wordpress: "text-blue-600 bg-blue-50 border-blue-200",
   shopify: "text-emerald-700 bg-emerald-50 border-emerald-200",
   webflow: "text-indigo-700 bg-indigo-50 border-indigo-200",
   astro: "text-orange-700 bg-orange-50 border-orange-200",
   nuxt: "text-green-700 bg-green-50 border-green-200",
-  unknown: "text-slate-500 bg-slate-100 border-slate-200",
+  unknown: "text-neutral-500 bg-neutral-100 border-neutral-200",
 };
 
 function ScoreGauge({ score, label }: { score: number; label: string }) {
@@ -141,7 +141,7 @@ function ScoreGauge({ score, label }: { score: number; label: string }) {
           {score}
         </text>
       </svg>
-      <span className="text-[10px] text-slate-500 font-medium text-center">{label}</span>
+      <span className="text-[10px] text-neutral-500 font-medium text-center">{label}</span>
     </div>
   );
 }
@@ -175,7 +175,7 @@ function IssueCard({
         ? "border-rose-200/90"
         : issue.severity === "high"
         ? "border-amber-200/90"
-        : "border-slate-200/80 hover:border-slate-300"
+        : "border-neutral-200/80 hover:border-neutral-300"
     }`}>
       <div className="p-4 cursor-pointer select-none" onClick={onToggle}>
         <div className="flex items-start gap-3">
@@ -198,12 +198,12 @@ function IssueCard({
                 <RiskIcon className="w-2.5 h-2.5 inline mr-0.5" />
                 {rv.label}
               </span>
-              <span className="text-[10px] text-slate-400 capitalize font-medium">
+              <span className="text-[10px] text-neutral-400 capitalize font-medium">
                 {issue.category.replace(/_/g, " ")}
               </span>
             </div>
-            <p className="text-xs font-semibold text-slate-900">{issue.title}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{issue.description}</p>
+            <p className="text-xs font-semibold text-neutral-900">{issue.title}</p>
+            <p className="text-[11px] text-neutral-500 mt-0.5 line-clamp-1">{issue.description}</p>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -221,7 +221,7 @@ function IssueCard({
                   ? "bg-teal-50 text-teal-700 border-teal-200"
                   : issue.status === "in_progress"
                   ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                  : "bg-slate-50 text-slate-700 border-slate-200"
+                  : "bg-neutral-50 text-neutral-700 border-neutral-200"
               }`}
             >
               <option value="open">Open</option>
@@ -262,14 +262,14 @@ function IssueCard({
               </button>
             )}
 
-            <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
+            <ChevronRight className={`w-4 h-4 text-neutral-400 transition-transform ${expanded ? "rotate-90" : ""}`} />
           </div>
         </div>
       </div>
 
       {expanded && (
-        <div className="border-t border-slate-100 p-4 space-y-3 text-xs bg-slate-50/50">
-          <p className="text-slate-700 leading-relaxed">{issue.description}</p>
+        <div className="border-t border-neutral-100 p-4 space-y-3 text-xs bg-neutral-50/50">
+          <p className="text-neutral-700 leading-relaxed">{issue.description}</p>
 
           {issue.status === "fixed" && issue.fix_notes && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
@@ -281,9 +281,9 @@ function IssueCard({
           )}
 
           {issue.evidence && (
-            <div className="bg-white border border-slate-200 rounded-lg p-3">
-              <p className="text-slate-500 font-semibold mb-1 text-[11px]">Audit Evidence</p>
-              <p className="font-mono text-slate-800 text-[11px]">{issue.evidence}</p>
+            <div className="bg-white border border-neutral-200 rounded-lg p-3">
+              <p className="text-neutral-500 font-semibold mb-1 text-[11px]">Audit Evidence</p>
+              <p className="font-mono text-neutral-800 text-[11px]">{issue.evidence}</p>
             </div>
           )}
 
@@ -307,33 +307,33 @@ function IssueCard({
 
           <div className="flex gap-4 text-[11px] flex-wrap pt-1">
             <div>
-              <span className="text-slate-500 font-medium">Estimated effort: </span>
-              <span className="font-semibold text-slate-800">{issue.estimated_effort}</span>
+              <span className="text-neutral-500 font-medium">Estimated effort: </span>
+              <span className="font-semibold text-neutral-800">{issue.estimated_effort}</span>
             </div>
             <div>
-              <span className="text-slate-500 font-medium">Affected URLs: </span>
-              <span className="font-semibold text-slate-800 font-mono">{issue.affected_url_count}</span>
+              <span className="text-neutral-500 font-medium">Affected URLs: </span>
+              <span className="font-semibold text-neutral-800 font-mono">{issue.affected_url_count}</span>
             </div>
             <div>
-              <span className="text-slate-500 font-medium">Automation level: </span>
-              <span className="font-semibold text-slate-800 capitalize">{issue.automation_level.replace(/_/g, " ")}</span>
+              <span className="text-neutral-500 font-medium">Automation level: </span>
+              <span className="font-semibold text-neutral-800 capitalize">{issue.automation_level.replace(/_/g, " ")}</span>
             </div>
           </div>
 
           {issue.affected_urls.length > 0 && (
             <div className="pt-1">
-              <p className="text-slate-500 font-semibold mb-1.5 text-[11px]">
+              <p className="text-neutral-500 font-semibold mb-1.5 text-[11px]">
                 Affected URLs ({issue.affected_url_count})
               </p>
               <div className="space-y-1">
                 {issue.affected_urls.slice(0, 5).map((u) => (
-                  <div key={u} className="font-mono text-indigo-600 bg-white border border-slate-200 rounded-md px-2.5 py-1 text-[11px] flex items-center justify-between">
+                  <div key={u} className="font-mono text-indigo-600 bg-white border border-neutral-200 rounded-md px-2.5 py-1 text-[11px] flex items-center justify-between">
                     <span className="truncate">{u}</span>
                     <ExternalLink className="w-3 h-3 ml-2 shrink-0 opacity-50" />
                   </div>
                 ))}
                 {issue.affected_url_count > 5 && (
-                  <p className="text-slate-400 italic text-[11px]">+{issue.affected_url_count - 5} more URLs…</p>
+                  <p className="text-neutral-400 italic text-[11px]">+{issue.affected_url_count - 5} more URLs…</p>
                 )}
               </div>
             </div>
@@ -354,13 +354,38 @@ function IssueCard({
 }
 
 export default function TechnicalSEOPage() {
-  const { currentWebsite, openAddModal } = useWebsite();
+  const { currentWebsite, openAddModal, loading: websiteLoading } = useWebsite();
 
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [result, setResult] = useState<CrawlResult | null>(null);
+  const [result, setResult] = useState<CrawlResult | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_crawl_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return null;
+  });
   const [crawling, setCrawling] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [issues, setIssues] = useState<TechnicalIssue[]>([]);
+  const [issues, setIssues] = useState<TechnicalIssue[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_crawl_${storedSiteId}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            return parsed.issues || [];
+          }
+        }
+      } catch {}
+    }
+    return [];
+  });
   const [filterSeverity, setFilterSeverity] = useState<Severity | "all">("all");
   const [filterStatus, setFilterStatus] = useState<IssueStatus | "all">("all");
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -389,8 +414,10 @@ export default function TechnicalSEOPage() {
 
     async function fetchLatestCrawl() {
       if (!currentWebsite) {
-        setResult(null);
-        setIssues([]);
+        if (!websiteLoading) {
+          setResult(null);
+          setIssues([]);
+        }
         return;
       }
       try {
@@ -400,6 +427,9 @@ export default function TechnicalSEOPage() {
           if (data.result) {
             setResult(data.result);
             setIssues(data.result.issues || []);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem(`seo_cached_crawl_${currentWebsite.id}`, JSON.stringify(data.result));
+            }
           }
         }
       } catch (err) {
@@ -407,7 +437,7 @@ export default function TechnicalSEOPage() {
       }
     }
     fetchLatestCrawl();
-  }, [currentWebsite?.id]);
+  }, [currentWebsite?.id, websiteLoading]);
 
   const handleCrawl = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -546,20 +576,20 @@ export default function TechnicalSEOPage() {
   const r = result;
 
   return (
-    <div className="flex min-h-screen bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-neutral-50/50 text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
       <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto space-y-6">
         {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200/80">
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <span className="font-medium text-slate-400">Autonomous SEO</span>
-              <span className="text-slate-300">/</span>
-              <span className="font-semibold text-slate-700">Technical Diagnostics &amp; Crawl Engine</span>
+            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
+              <span className="font-medium text-neutral-400">Autonomous SEO</span>
+              <span className="text-neutral-300">/</span>
+              <span className="font-semibold text-neutral-700">Technical Diagnostics &amp; Crawl Engine</span>
             </div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
                 Technical SEO &amp; Crawl Auditor
               </h1>
               {r && (
@@ -577,7 +607,7 @@ export default function TechnicalSEOPage() {
                 </span>
               )}
             </div>
-            <p className="text-slate-500 text-xs mt-1">
+            <p className="text-neutral-500 text-xs mt-1">
               {currentWebsite
                 ? `Autonomous DOM crawler auditing status codes, canonicals, robots directives, and sitemap health for ${currentWebsite.domain}.`
                 : "Connect your website to launch an autonomous technical crawl."}
@@ -586,10 +616,10 @@ export default function TechnicalSEOPage() {
         </div>
 
         {/* Crawl Control Command Bar */}
-        <form onSubmit={handleCrawl} className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs space-y-3">
+        <form onSubmit={handleCrawl} className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-xs space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
             <div className="sm:col-span-5">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
                 Target URL
               </label>
               <input
@@ -597,18 +627,18 @@ export default function TechnicalSEOPage() {
                 onChange={(e) => setForm((f) => ({ ...f, start_url: e.target.value }))}
                 required
                 placeholder="https://example.com"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
               />
             </div>
 
             <div className="sm:col-span-3">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
                 Site Architecture
               </label>
               <select
                 value={form.site_tech}
                 onChange={(e) => setForm((f) => ({ ...f, site_tech: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500"
               >
                 {[
                   ["nextjs", "Next.js App Router"],
@@ -625,13 +655,13 @@ export default function TechnicalSEOPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">
+              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
                 Max URLs
               </label>
               <select
                 value={form.max_urls}
                 onChange={(e) => setForm((f) => ({ ...f, max_urls: e.target.value }))}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500"
               >
                 {["50", "100", "250", "500"].map((n) => (
                   <option key={n} value={n}>{n} URLs</option>
@@ -662,7 +692,7 @@ export default function TechnicalSEOPage() {
         </form>
 
         {/* Tab Navigation */}
-        <div className="bg-white border border-slate-200/80 rounded-xl p-2 shadow-xs flex items-center gap-1.5 overflow-x-auto">
+        <div className="bg-white border border-neutral-200/80 rounded-xl p-2 shadow-xs flex items-center gap-1.5 overflow-x-auto">
           {[
             { id: "overview", label: "Diagnostic Overview", icon: BarChart2, count: null },
             { id: "issues", label: "Discovered Issues", icon: AlertTriangle, count: openCount },
@@ -677,7 +707,7 @@ export default function TechnicalSEOPage() {
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                   activeTab === tab.id
                     ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -685,7 +715,7 @@ export default function TechnicalSEOPage() {
                 {tab.count !== null && (
                   <span
                     className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-neutral-100 text-neutral-700"
                     }`}
                   >
                     {tab.count}
@@ -697,13 +727,13 @@ export default function TechnicalSEOPage() {
         </div>
 
         {!r && !crawling && (
-          <div className="p-12 text-center bg-white border border-slate-200/80 rounded-2xl space-y-4 max-w-lg mx-auto shadow-xs">
-            <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center mx-auto text-indigo-600">
+          <div className="p-12 text-center bg-white border border-neutral-200/80 rounded-2xl space-y-4 max-w-lg mx-auto shadow-xs">
+            <div className="w-12 h-12 bg-neutral-100 border border-neutral-200 rounded-xl flex items-center justify-center mx-auto text-indigo-600">
               <Wrench className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">No Technical Crawl Data Yet</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              <h3 className="text-base font-semibold text-neutral-900">No Technical Crawl Data Yet</h3>
+              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
                 Enter your website URL above and click &ldquo;Start Audit&rdquo; to analyze crawlability, status codes, canonicals, and indexability issues.
               </p>
             </div>
@@ -716,11 +746,11 @@ export default function TechnicalSEOPage() {
             {activeTab === "overview" && (
               <div className="space-y-4">
                 {/* Health Score Gauges */}
-                <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div>
-                    <h3 className="font-semibold text-slate-900 text-sm">Technical Health Scores</h3>
-                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
-                      <Info className="w-3.5 h-3.5 text-slate-400" />
+                    <h3 className="font-semibold text-neutral-900 text-sm">Technical Health Scores</h3>
+                    <p className="text-xs text-neutral-500 mt-0.5 flex items-center gap-1">
+                      <Info className="w-3.5 h-3.5 text-neutral-400" />
                       Measured against Googlebot webmaster guidelines
                     </p>
                   </div>
@@ -740,8 +770,8 @@ export default function TechnicalSEOPage() {
                     { label: "404 Not Found", value: r.urls_404, color: "text-rose-600" },
                     { label: "5xx Server Errors", value: r.urls_5xx, color: "text-rose-700" },
                   ].map((s, i) => (
-                    <div key={i} className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                      <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                    <div key={i} className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-xs">
+                      <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-semibold block mb-1">
                         {s.label}
                       </span>
                       <span className={`text-2xl font-bold font-mono ${s.color}`}>
@@ -754,12 +784,12 @@ export default function TechnicalSEOPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: "Indexed URLs", value: r.urls_indexed, color: "text-indigo-600" },
-                    { label: "Noindex Directives", value: r.urls_noindex, color: "text-slate-500" },
+                    { label: "Noindex Directives", value: r.urls_noindex, color: "text-neutral-500" },
                     { label: "Orphan Pages", value: r.urls_orphaned, color: "text-orange-600" },
                     { label: "Broken Internal Links", value: r.broken_internal_links, color: "text-rose-600" },
                   ].map((s, i) => (
-                    <div key={i} className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                      <span className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold block mb-1">
+                    <div key={i} className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-xs">
+                      <span className="text-[11px] text-neutral-500 uppercase tracking-wider font-semibold block mb-1">
                         {s.label}
                       </span>
                       <span className={`text-2xl font-bold font-mono ${s.color}`}>
@@ -795,7 +825,7 @@ export default function TechnicalSEOPage() {
                       onClick={() => setFixMessage(null)}
                       className="text-emerald-700 hover:text-emerald-950 font-bold px-2 py-0.5 text-xs rounded hover:bg-emerald-100/60 transition-colors"
                     >
-                      ✕
+                      ×
                     </button>
                   </div>
                 )}
@@ -844,7 +874,7 @@ export default function TechnicalSEOPage() {
                   <select
                     value={filterSeverity}
                     onChange={(e) => setFilterSeverity(e.target.value as any)}
-                    className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                    className="bg-white border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
                   >
                     <option value="all">All Severities</option>
                     {(["critical", "high", "medium", "low", "info"] as Severity[]).map((s) => (
@@ -855,7 +885,7 @@ export default function TechnicalSEOPage() {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value as any)}
-                    className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                    className="bg-white border border-neutral-200 rounded-lg px-3 py-1.5 text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
                   >
                     <option value="all">All Statuses</option>
                     {["open", "in_progress", "fixed", "verified", "wont_fix"].map((s) => (
@@ -863,15 +893,15 @@ export default function TechnicalSEOPage() {
                     ))}
                   </select>
 
-                  <span className="text-xs text-slate-500 ml-auto font-mono">
+                  <span className="text-xs text-neutral-500 ml-auto font-mono">
                     {filteredIssues.length} issue{filteredIssues.length !== 1 ? "s" : ""}
                   </span>
                 </div>
 
                 {filteredIssues.length === 0 ? (
-                  <div className="text-center py-12 bg-white border border-slate-200/80 rounded-xl text-slate-500 shadow-xs">
+                  <div className="text-center py-12 bg-white border border-neutral-200/80 rounded-xl text-neutral-500 shadow-xs">
                     <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500" />
-                    <p className="text-xs font-semibold text-slate-900">No issues match the selected filters.</p>
+                    <p className="text-xs font-semibold text-neutral-900">No issues match the selected filters.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -896,23 +926,23 @@ export default function TechnicalSEOPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -tranneutral-y-1/2" />
                     <input
                       value={urlSearch}
                       onChange={(e) => setUrlSearch(e.target.value)}
                       placeholder="Filter URLs by slug..."
-                      className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 font-mono shadow-2xs"
+                      className="w-full bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500 font-mono shadow-2xs"
                     />
                   </div>
-                  <span className="text-xs text-slate-500 font-mono">
+                  <span className="text-xs text-neutral-500 font-mono">
                     {filteredUrls.length} of {r.total_urls_crawled} URLs
                   </span>
                 </div>
 
-                <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-xs">
+                <div className="bg-white border border-neutral-200/80 rounded-xl overflow-hidden shadow-xs">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200/80 bg-slate-50/75 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                      <tr className="border-b border-neutral-200/80 bg-neutral-50/75 text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
                         <th className="py-3 px-4">URL Path</th>
                         <th className="py-3 px-3 text-center">Status</th>
                         <th className="py-3 px-3 text-center">Indexable</th>
@@ -922,14 +952,14 @@ export default function TechnicalSEOPage() {
                         <th className="py-3 px-4 text-center">Audit Tags</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-neutral-100">
                       {filteredUrls.map((u, i) => {
                         const domainRoot = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "");
                         const displayPath = domainRoot ? u.url.replace(domainRoot, "") || "/" : u.url;
 
                         return (
-                          <tr key={i} className="hover:bg-slate-50/75 transition-colors font-mono">
-                            <td className="py-2.5 px-4 truncate max-w-sm text-slate-900 font-medium" title={u.url}>
+                          <tr key={i} className="hover:bg-neutral-50/75 transition-colors font-mono">
+                            <td className="py-2.5 px-4 truncate max-w-sm text-neutral-900 font-medium" title={u.url}>
                               {displayPath}
                             </td>
                             <td className="py-2.5 px-3 text-center">
@@ -952,13 +982,13 @@ export default function TechnicalSEOPage() {
                               {u.in_sitemap ? (
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mx-auto" />
                               ) : (
-                                <span className="text-slate-300">—</span>
+                                <span className="text-neutral-300">—</span>
                               )}
                             </td>
-                            <td className="py-2.5 px-3 text-center text-slate-700">
+                            <td className="py-2.5 px-3 text-center text-neutral-700">
                               {u.internal_links_in}
                             </td>
-                            <td className="py-2.5 px-3 text-center text-slate-500">
+                            <td className="py-2.5 px-3 text-center text-neutral-500">
                               {u.word_count || "—"}
                             </td>
                             <td className="py-2.5 px-4 text-center">
@@ -974,7 +1004,7 @@ export default function TechnicalSEOPage() {
                                   </span>
                                 )}
                                 {!u.is_indexable && u.status_code === 200 && (
-                                  <span className="text-[9px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                                  <span className="text-[9px] font-bold text-neutral-500 bg-neutral-100 border border-neutral-200 px-1.5 py-0.5 rounded">
                                     Noindex
                                   </span>
                                 )}
@@ -1003,24 +1033,24 @@ export default function TechnicalSEOPage() {
                 </div>
 
                 {/* Auto-fixable List */}
-                <div className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs space-y-3">
-                  <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-2">
+                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-xs space-y-3">
+                  <h3 className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
                     <Zap className="w-4 h-4 text-emerald-600" />
                     <span>Auto-Fixable Remediations</span>
                   </h3>
                   {issues.filter((i) => i.automation_level === "auto").length === 0 ? (
-                    <p className="text-xs text-slate-500">No auto-fixable issues pending.</p>
+                    <p className="text-xs text-neutral-500">No auto-fixable issues pending.</p>
                   ) : (
                     issues.filter((i) => i.automation_level === "auto").map((issue) => (
                       <div
                         key={issue.id}
                         className={`flex items-center justify-between gap-4 p-3 rounded-lg border text-xs ${
-                          issue.status === "fixed" ? "bg-emerald-50/60 border-emerald-200" : "bg-slate-50 border-slate-200"
+                          issue.status === "fixed" ? "bg-emerald-50/60 border-emerald-200" : "bg-neutral-50 border-neutral-200"
                         }`}
                       >
                         <div>
-                          <p className="font-semibold text-slate-900">{issue.title}</p>
-                          <p className="text-slate-500 mt-0.5 text-[11px]">{issue.recommended_fix}</p>
+                          <p className="font-semibold text-neutral-900">{issue.title}</p>
+                          <p className="text-neutral-500 mt-0.5 text-[11px]">{issue.recommended_fix}</p>
                         </div>
                         {issue.status === "fixed" ? (
                           <span className="text-emerald-700 text-xs font-semibold flex items-center gap-1 shrink-0">

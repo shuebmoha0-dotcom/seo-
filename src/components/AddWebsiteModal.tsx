@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
-import { Globe, Plus, Loader2, CheckCircle2, AlertCircle, ShieldAlert, Sparkles, X } from "lucide-react";
+import { Globe, Plus, Loader2, CheckCircle2, AlertCircle, ShieldAlert, Sparkles, X, BookOpen, Webhook } from "lucide-react";
+import { PlatformLogo } from "@/components/PlatformLogo";
 
 export function AddWebsiteModal() {
   const { isAddModalOpen, closeAddModal, refreshWebsites, planLimit, setCurrentWebsite } = useWebsite();
@@ -158,27 +159,28 @@ export function AddWebsiteModal() {
 
           {/* Connection Type Selection */}
           <div>
-            <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Execution &amp; Auto-Posting Layer</label>
+            <label className="block text-xs font-medium text-neutral-600 mb-1.5">How should articles be published?</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { id: "platform_blog", name: "Platform Blog", icon: "✨", subtitle: "Agent Itself" },
-                { id: "wordpress", name: "WordPress", icon: "🟦", subtitle: "REST / Plugin" },
-                { id: "custom_api", name: "Custom API", icon: "⚡", subtitle: "Webhooks" },
-                { id: "github", name: "GitHub Code", icon: "🐙", subtitle: "Pull Requests" },
+                { id: "platform_blog", name: "Platform blog", subtitle: "Hosted by us", icon: <BookOpen className="h-5 w-5 text-neutral-700" strokeWidth={1.5} /> },
+                { id: "wordpress", name: "WordPress", subtitle: "REST or plugin", icon: <PlatformLogo provider="wordpress" className="h-5 w-5" size={20} /> },
+                { id: "custom_api", name: "Custom API", subtitle: "Webhooks", icon: <Webhook className="h-5 w-5 text-neutral-700" strokeWidth={1.5} /> },
+                { id: "github", name: "GitHub", subtitle: "Pull requests", icon: <PlatformLogo provider="github" className="h-5 w-5 text-neutral-900" size={20} /> },
               ].map(opt => (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => setForm(f => ({ ...f, connection_type: opt.id as any }))}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                  aria-pressed={form.connection_type === opt.id}
+                  className={`p-3 rounded-lg border text-left transition-colors ${
                     form.connection_type === opt.id
-                      ? "border-indigo-600 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs"
-                      : "border-neutral-200 hover:bg-neutral-50 text-neutral-700"
+                      ? "border-indigo-600 ring-1 ring-indigo-600 bg-white"
+                      : "border-neutral-200 bg-white hover:bg-neutral-50"
                   }`}
                 >
-                  <span className="text-lg block mb-1">{opt.icon}</span>
-                  <span className="text-[11px] block font-bold">{opt.name}</span>
-                  <span className="text-[9px] text-neutral-400 block">{opt.subtitle}</span>
+                  <span className="mb-2 block">{opt.icon}</span>
+                  <span className="block text-[13px] font-medium text-neutral-900">{opt.name}</span>
+                  <span className="block text-xs text-neutral-500">{opt.subtitle}</span>
                 </button>
               ))}
             </div>

@@ -17,7 +17,9 @@ export interface PresentationIssue {
     | 'excessive_table_of_contents'
     | 'all_caps_keyword_stuffing'
     | 'duplicate_h1_in_body'
-    | 'malformed_nested_paragraphs';
+    | 'malformed_nested_paragraphs'
+    | 'gutenberg_invalid_block_syntax'
+    | 'malformed_list_syntax';
   title: string;
   description: string;
   evidence: string;
@@ -192,6 +194,35 @@ export class ContentPresentationAuditor {
       });
     }
 
+    // ── 6. Gutenberg Block Validation & Malformed List Syntax Audit ────────────────
+    const hasPWrappedList = /<p[^>]*>\s*<(?:ul|ol|li)/i.test(html) || /<\/(?:ul|ol|li)>\s*<\/p>/i.test(html);
+    const hasListWithBr = /<(?:ul|ol)[^>]*>\s*(?:<br\s*\/?>)+/i.test(html) || /(?:<br\s*\/?>)+\s*<\/(?:ul|ol)>/i.test(html);
+    const hasStrayListMarkers = /<li[^>]*>\s*(?:&gt;|>)/i.test(html);
+    const hasOuterContainerWrapper = /class=["'][^"']*entry-content-optimized[^"']*["']/i.test(html);
+
+    if (hasPWrappedList || hasListWithBr || hasStrayListMarkers || hasOuterContainerWrapper) {
+      score -= 25;
+      const issuesFound: string[] = [];
+      if (hasPWrappedList) issuesFound.push('illegal <p> wrappers enclosing list elements');
+      if (hasListWithBr) issuesFound.push('<br> breaks placed directly inside <ul>/<ol>');
+      if (hasStrayListMarkers) issuesFound.push('stray markdown blockquote markers (<li>>text) in bullet lists');
+      if (hasOuterContainerWrapper) issuesFound.push('outer div wrapper disrupting root Gutenberg block tree');
+
+      issues.push({
+        id: 'issue-gutenberg-invalid-block-syntax',
+        category: 'presentation_layout',
+        severity: 'high',
+        issue_type: 'gutenberg_invalid_block_syntax',
+        title: 'Gutenberg Block Validation Error: Corrupted list tags and illegal nested paragraph wrappers',
+        description: `Encountered critical Gutenberg DOM validation errors: ${issuesFound.join(', ')}. In WordPress wp-admin, this crashes Gutenberg block rendering and throws "This block contains unexpected or invalid content - Attempt recovery".`,
+        evidence: `Detected syntax corruption: ${issuesFound.join('; ')}`,
+        seo_impact: 'Breaks HTML DOM validation standards, causes unexpected styling glitches, and can cause search engine parser misinterpretations.',
+        business_impact: 'Editors cannot modify posts in Gutenberg without encountering recovery warnings, and readers see broken list formatting.',
+        recommended_fix: 'Run Gutenberg DOM normalizer to strip nested <p> wrappers, remove illegal <br> tags from lists, strip stray > markers, and serialize pure Gutenberg core block comments.',
+        auto_healable: true,
+      });
+    }
+
     const finalScore = Math.max(0, Math.min(100, score));
 
     return {
@@ -220,17 +251,26 @@ export class ContentPresentationAuditor {
     const fixesApplied: string[] = [];
     let content = rawContent;
 
-    // 1. Clean body H1s (convert body <h1> to <h2> so Blocksy theme header is the sole H1)
-    if (/<h1[^>]*>[\s\S]*?<\/h1>/i.test(content)) {
-      content = content.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_match, inner) => {
-        return `<h2 class="wp-block-heading">${inner}</h2>`;
-      });
-      fixesApplied.push('Converted body <h1> tags to valid <h2> headings');
+    // 1. Remove destructive outer container wrapper if present (entry-content-optimized)
+    if (/class=["'][^"']*entry-content-optimized[^"']*["']/i.test(content) || content.includes('max-width: 820px')) {
+      content = content.replace(/<div class="entry-content-optimized"[^>]*>/gi, '');
+      content = content.replace(/<div[^>]*style="[^"]*max-width:\s*820px[^"]*"[^>]*>/gi, '');
+      content = content.replace(/<p[^>]*>\s*(?:<br\s*\/?>\s*)*<\/div>\s*<\/p>/gi, '');
+      content = content.replace(/<\/div>\s*(?:<\/p>)?\s*$/gi, '');
+      content = content.replace(/<\/div>/gi, '');
+      fixesApplied.push('Stripped outer div wrapper to restore clean Gutenberg root block hierarchy');
     }
 
-    // 2. Strip Table of Contents (ez-toc, lwptoc, and top nav lists)
+    // 2. Clean body H1s (convert body <h1> to <h2> so theme header is the sole H1)
+    if (/<h1[^>]*>[\s\S]*?<\/h1>/i.test(content)) {
+      content = content.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, (_match, inner) => {
+        return `<!-- wp:heading {"level":2} -->\n<h2 class="wp-block-heading">${inner}</h2>\n<!-- /wp:heading -->`;
+      });
+      fixesApplied.push('Converted body <h1> tags to valid Gutenberg <h2> headings');
+    }
+
+    // 3. Strip Table of Contents (ez-toc, lwptoc, and top nav lists)
     if (content.includes('ez-toc') || content.includes('<nav') || content.includes('table-of-contents') || content.includes('[no_toc]')) {
-      // ez-toc container can end with </ul> or </nav> followed by closing divs/paragraphs
       content = content.replace(/<div id="ez-toc-container"[\s\S]*?<\/ul>(?:\s*<\/p>)?(?:\s*<\/div>)*/gi, '');
       content = content.replace(/<div id="ez-toc-container"[\s\S]*?<\/nav>\s*(?:<\/div>)*/gi, '');
       content = content.replace(/<div id="ez-toc-container"[\s\S]*?<\/div>\s*<\/div>/gi, '');
@@ -243,7 +283,7 @@ export class ContentPresentationAuditor {
       fixesApplied.push('Removed bloated Table of Contents and anchor markers');
     }
 
-    // 3. Fix shouting all-caps keyword phrases (convert to title case)
+    // 4. Fix shouting all-caps keyword phrases (convert to title case)
     const shoutingPhrases = content.match(/\b[A-Z]{3,}(?:\s+[A-Z]{3,}){2,}\b/g) || [];
     for (const phrase of shoutingPhrases) {
       if (phrase.length >= 16) {
@@ -256,34 +296,65 @@ export class ContentPresentationAuditor {
       }
     }
 
-    // 4. Clean malformed double <p> tags and strip raw paragraph wrappers
-    if (/<p[^>]*>\s*<p[^>]*>/i.test(content) || /<p[^>]*>\s*<(?:ul|ol|li|div|figure|blockquote)/i.test(content)) {
-      content = content.replace(/<p[^>]*>\s*<ul/gi, '<ul');
-      content = content.replace(/<\/ul>\s*<\/p>/gi, '</ul>');
-      content = content.replace(/<p[^>]*>\s*<ol/gi, '<ol');
-      content = content.replace(/<\/ol>\s*<\/p>/gi, '</ol>');
-      content = content.replace(/<p[^>]*>\s*<li/gi, '<li>');
+    // 5. Clean malformed Gutenberg list and paragraph structures
+    const hasListIssues = 
+      /<p[^>]*>\s*<ul/i.test(content) || 
+      /<p[^>]*>\s*<li/i.test(content) || 
+      /<li[^>]*>\s*(?:&gt;|>)/i.test(content) ||
+      /<(?:ul|ol)[^>]*>\s*<br/i.test(content);
+
+    if (hasListIssues) {
+      // Remove any paragraph wrappers directly surrounding <ul> or <ol>
+      content = content.replace(/<p[^>]*>\s*(<!-- wp:list[^>]*-->)?\s*<ul/gi, '$1\n<ul');
+      content = content.replace(/<\/ul>\s*(<!-- \/wp:list -->)?\s*<\/p>/gi, '</ul>\n$1');
+      content = content.replace(/<p[^>]*>\s*(<!-- wp:list[^>]*-->)?\s*<ol/gi, '$1\n<ol');
+      content = content.replace(/<\/ol>\s*(<!-- \/wp:list -->)?\s*<\/p>/gi, '</ol>\n$1');
+
+      // Strip paragraph tags around <li>
+      content = content.replace(/<p[^>]*>\s*<li/gi, '<li');
       content = content.replace(/<\/li>\s*<\/p>/gi, '</li>');
+      content = content.replace(/<li[^>]*>\s*<p[^>]*>/gi, '<li>');
+      content = content.replace(/<\/p>\s*<\/li>/gi, '</li>');
+
+      // Strip stray blockquote markers inside <li>: <li>> or <li>&gt;
+      content = content.replace(/<li([^>]*)>\s*(?:&gt;|>)\s*/gi, '<li$1>');
+
+      // Clean the inner content of <ul> and <ol> so it strictly contains clean <li> elements
+      content = content.replace(/(<ul[^>]*>)([\s\S]*?)(<\/ul>)/gi, (_match, open, inner, close) => {
+        let cleanInner = inner;
+        cleanInner = cleanInner.replace(/<\/?p[^>]*>/gi, '');
+        cleanInner = cleanInner.replace(/<br\s*\/?>/gi, '');
+        cleanInner = cleanInner.replace(/\s*<\/li>\s*<li/gi, '</li>\n<li');
+        cleanInner = cleanInner.trim();
+        return `${open}\n${cleanInner}\n${close}`;
+      });
+
+      content = content.replace(/(<ol[^>]*>)([\s\S]*?)(<\/ol>)/gi, (_match, open, inner, close) => {
+        let cleanInner = inner;
+        cleanInner = cleanInner.replace(/<\/?p[^>]*>/gi, '');
+        cleanInner = cleanInner.replace(/<br\s*\/?>/gi, '');
+        cleanInner = cleanInner.replace(/\s*<\/li>\s*<li/gi, '</li>\n<li');
+        cleanInner = cleanInner.trim();
+        return `${open}\n${cleanInner}\n${close}`;
+      });
+
+      // Wrap raw lists with Gutenberg comments if not already wrapped
+      content = content.replace(/(?<!<!-- wp:list -->\s*)<ul\s+class="wp-block-list">([\s\S]*?)<\/ul>(?!\s*<!-- \/wp:list -->)/gi, '<!-- wp:list -->\n<ul class="wp-block-list">$1</ul>\n<!-- /wp:list -->');
+      content = content.replace(/(?<!<!-- wp:list {"ordered":true} -->\s*)<ol\s+class="wp-block-list">([\s\S]*?)<\/ol>(?!\s*<!-- \/wp:list -->)/gi, '<!-- wp:list {"ordered":true} -->\n<ol class="wp-block-list">$1</ol>\n<!-- /wp:list -->');
+
+      fixesApplied.push('Cleaned corrupted Gutenberg list elements and stripped stray > markers');
+    }
+
+    // 6. Clean nested <p><p> and empty paragraphs
+    if (/<p[^>]*>\s*<p[^>]*>/i.test(content)) {
       content = content.replace(/<p[^>]*>\s*<p[^>]*>/gi, '<p class="wp-block-paragraph">');
       content = content.replace(/<\/p>\s*<\/p>/gi, '</p>');
       fixesApplied.push('Cleaned invalid nested <p><p> paragraph tags');
     }
-
-    // Strip raw <p> and </p> tags so WordPress Gutenberg cleanly rebuilds pure block paragraphs without double wrapping
-    content = content.replace(/<\/?p[^>]*>/gi, '');
-
-    // 5. Wrap in optimal readability container if not already constrained
-    if (!content.includes('max-width: 820px') && !content.includes('max-width:820px') && !content.includes('entry-content-optimized')) {
-      content = `
-<div class="entry-content-optimized" style="max-width: 820px; margin: 0 auto; padding: 10px 0; font-size: 1.125rem; line-height: 1.8; color: #1e293b;">
-${content.trim()}
-</div>
-`.trim();
-      fixesApplied.push('Wrapped article in optimal 820px centered reading container');
-    }
+    content = content.replace(/<p[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/gi, '');
 
     return {
-      repairedHtml: content,
+      repairedHtml: content.trim(),
       fixesApplied,
     };
   }

@@ -122,6 +122,10 @@ export class DiagnosticAgent {
                 status_code: home.http_status,
                 canonical_url: home.canonical,
                 indexability_signals: { is_indexable: home.is_indexable, directives: home.robots_directives },
+                word_count: home.word_count,
+                has_schema: home.has_schema,
+                schema_types: home.schema_types,
+                missing_alt_count: home.missing_alt_count,
                 last_crawled_at: new Date().toISOString()
               }];
 
@@ -140,6 +144,10 @@ export class DiagnosticAgent {
                     status_code: p.http_status,
                     canonical_url: p.canonical,
                     indexability_signals: { is_indexable: p.is_indexable, directives: p.robots_directives },
+                    word_count: p.word_count,
+                    has_schema: p.has_schema,
+                    schema_types: p.schema_types,
+                    missing_alt_count: p.missing_alt_count,
                     last_crawled_at: new Date().toISOString()
                   });
                 } catch {}
@@ -180,7 +188,7 @@ export class DiagnosticAgent {
         supabase
           .from('technical_issues')
           .select('title, severity, category, description, recommended_fix, affected_urls')
-          .or(`website_id.eq.${websiteId},website_id.is.null`)
+          .eq('website_id', websiteId)
           .eq('status', 'open')
           .limit(10),
       ]);
@@ -236,14 +244,18 @@ export class DiagnosticAgent {
       }
     }
 
-    // G. On-page anomalies detected from crawled pages
+    // G. On-page anomalies detected from crawled pages across all ranking pillars
     const pageAnomalies = pagesData.filter(p => {
       const isErrorStatus = p.status_code && (p.status_code >= 400 || p.status_code === 0);
       const isNoindex = p.indexability_signals?.is_indexable === false;
       const isMissingTitle = !p.title || p.title.trim().length === 0;
-      const isGenericTitle = p.title && (p.title.toLowerCase() === 'home' || p.title.toLowerCase().startsWith('home -'));
+      const isGenericTitle = p.title && (p.title.toLowerCase() === 'home' || p.title.toLowerCase().startsWith('home -') || p.title.length < 25);
       const isMissingH1 = !p.h1 || p.h1.trim().length === 0;
-      return isErrorStatus || isNoindex || isMissingTitle || isGenericTitle || isMissingH1;
+      const isWastedH1 = p.h1 && (['home', 'welcome', 'homepage', 'index'].includes(p.h1.trim().toLowerCase()) || (p.h1.trim().length < 10 && !p.h1.trim().includes(' ')));
+      const isThinContent = p.word_count && p.word_count > 0 && p.word_count < 350;
+      const isMissingSchema = p.has_schema === false && (p.word_count || 0) > 300;
+      const isMissingAlt = p.missing_alt_count && p.missing_alt_count > 0;
+      return isErrorStatus || isNoindex || isMissingTitle || isGenericTitle || isMissingH1 || isWastedH1 || isThinContent || isMissingSchema || isMissingAlt;
     });
 
     // H. Content Quality & Presentation Audit (readability width, bloated TOCs, all-caps spam)

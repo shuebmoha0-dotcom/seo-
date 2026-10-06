@@ -645,13 +645,17 @@ Your agent will process the request in the background and ping you when finished
 
     try {
       const isDailySchedule = /(everyday|every\s+day|every\s+morning|schedule.*report|scan.*everyday|report.*everyday)/i.test(taskPrompt) && /(every|daily|schedule)/i.test(taskPrompt);
-      const isExplicitCrawl = /^(\/scan|\/crawl|\/audit|crawl\s+now|scan\s+now)$/i.test(taskPrompt.trim());
+      const isExplicitCrawl = 
+        /^(\/scan|\/crawl|\/audit|crawl\s+now|scan\s+now)$/i.test(taskPrompt.trim()) ||
+        /^(run\s+)?(audit|scan|crawl|check|diagnose)(\s+(my|the)?\s*(site|website|page|domain|technical\s+issues|problems|seo))?$/i.test(taskPrompt.trim()) ||
+        /(identify|find|detect|check|recognize)\s+(all\s+)?(technical\s+)?(problems?|issues?|errors?|faults?)/i.test(taskPrompt) ||
+        /(technical\s+audit|site\s+audit|seo\s+audit|full\s+audit|health\s+scan)/i.test(taskPrompt);
 
       if (isExplicitCrawl) {
         // Send initial progress notice
         await telegram.sendMessage(
           chatId,
-          `🔍 *Running live SEO scan & crawl on \`${currentSite.domain}\`...* ⏳`,
+          `🔍 *Running comprehensive 8-point SEO audit on \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
 
@@ -689,73 +693,221 @@ Your agent will process the request in the background and ping you when finished
             const targetUrl = currentSite.url || `https://${currentSite.domain}`;
             const crawlData = await crawler.crawlPage(targetUrl, currentSite.domain);
 
-            // Analyze key signals
+            // Comprehensive 8-point technical evaluation across all search ranking pillars
+            const criticalIssues: string[] = [];
+            const warnings: string[] = [];
+            const passingItems: string[] = [];
+            const actionPlan: string[] = [];
+            let score = 100;
+
+            // 1. Server Status & Indexability
+            if (crawlData.http_status !== 200) {
+              criticalIssues.push(`*Server Status:* HTTP ${crawlData.http_status} (Page failed to return 200 OK)`);
+              actionPlan.push(`Fix web server response code (currently returning HTTP ${crawlData.http_status})`);
+              score -= 25;
+            } else if (!crawlData.is_indexable || crawlData.robots_directives?.toLowerCase().includes('noindex')) {
+              criticalIssues.push(`*Indexability Blocker:* Blocked by \`noindex\` robots directive`);
+              actionPlan.push(`Remove \`noindex\` meta tag so search engines can index your content`);
+              score -= 25;
+            } else {
+              passingItems.push(`*Server & Indexability:* 🟢 200 OK & fully indexable by search engines`);
+            }
+
+            // Canonical tag check
+            if (!crawlData.canonical) {
+              warnings.push(`*Canonical Tag:* Missing canonical URL declaration`);
+              actionPlan.push(`Add a self-referencing canonical tag to prevent duplicate URL issues`);
+              score -= 5;
+            } else {
+              passingItems.push(`*Canonical URL:* 🟢 Properly defined (\`${crawlData.canonical}\`)`);
+            }
+
+            // 2. Primary H1 Tag & Heading Architecture
+            const h1Count = crawlData.h1.length;
+            const primaryH1 = crawlData.h1[0] || '';
+            const isGenericH1 = ['home', 'welcome', 'homepage', 'index'].includes(primaryH1.trim().toLowerCase()) || (primaryH1.length < 10 && !primaryH1.includes(' '));
+
+            if (h1Count === 0) {
+              criticalIssues.push(`*Missing Primary H1 Tag:* No <h1> heading detected on the page`);
+              actionPlan.push(`Add an H1 heading featuring your core target search query`);
+              score -= 15;
+            } else if (h1Count > 1) {
+              warnings.push(`*Multiple H1 Headings:* ${h1Count} stacked <h1> tags detected`);
+              actionPlan.push(`Keep 1 primary H1 heading and convert secondary headings to H2 tags`);
+              score -= 8;
+            } else if (isGenericH1) {
+              criticalIssues.push(`*Wasted H1 Heading:* Currently set to generic text \`"${primaryH1}"\``);
+              actionPlan.push(`Replace generic H1 \`"${primaryH1}"\` with high-value search intent phrase`);
+              score -= 15;
+            } else {
+              passingItems.push(`*Primary H1 Tag:* 🟢 \`"${primaryH1}"\``);
+            }
+
+            // 3. Title Tag SERP Readiness
             const titleLength = crawlData.title?.length || 0;
             const isGenericTitle = crawlData.title?.toLowerCase().includes('home') || titleLength < 25;
-            const h1Count = crawlData.h1.length;
-            const isWastedH1 = h1Count === 1 && (crawlData.h1[0].toLowerCase() === 'home' || crawlData.h1[0].length < 10);
+            if (!crawlData.title) {
+              criticalIssues.push(`*Missing Title Tag:* No <title> tag found in document head`);
+              actionPlan.push(`Add a 50-60 character title tag with primary keyword`);
+              score -= 15;
+            } else if (titleLength > 65) {
+              warnings.push(`*Title Truncated:* Exceeds 65 characters (${titleLength} chars). Truncated in Google SERP results.`);
+              actionPlan.push(`Shorten title tag to 50-60 characters while front-loading target keyword`);
+              score -= 5;
+            } else if (isGenericTitle) {
+              warnings.push(`*Under-Optimized Title:* Too short or generic (\`"${crawlData.title}"\`, ${titleLength} chars)`);
+              actionPlan.push(`Expand title to 50-60 characters with high-intent modifiers`);
+              score -= 8;
+            } else {
+              passingItems.push(`*Title Tag:* 🟢 Optimal length (${titleLength} chars): \`"${crawlData.title}"\``);
+            }
+
+            // 4. Meta Description & CTR Hook
             const metaLength = crawlData.meta_description?.length || 0;
+            if (!crawlData.meta_description) {
+              warnings.push(`*Missing Meta Description:* Search engines will pull random body text for snippets`);
+              actionPlan.push(`Write a compelling 140-160 character meta description with a call to action`);
+              score -= 8;
+            } else if (metaLength < 70) {
+              warnings.push(`*Meta Description Too Short:* Only ${metaLength} characters. Fails to maximize snippet click-through rate.`);
+              actionPlan.push(`Expand meta description to 140-160 characters for higher CTR`);
+              score -= 5;
+            } else if (metaLength > 165) {
+              warnings.push(`*Meta Description Truncated:* Exceeds 165 characters (${metaLength} chars). Clipped in search results.`);
+              actionPlan.push(`Trim meta description to under 160 characters`);
+              score -= 4;
+            } else {
+              passingItems.push(`*Meta Description:* 🟢 Optimal CTR length (${metaLength} chars)`);
+            }
+
+            // 5. Image SEO & Accessibility
+            const totalImages = crawlData.images.length;
+            const missingAlt = crawlData.missing_alt_count || 0;
+            if (totalImages > 0 && missingAlt > 0) {
+              warnings.push(`*Image Alt Text Missing:* ${missingAlt} of ${totalImages} image(s) lack descriptive ALT attributes`);
+              actionPlan.push(`Add keyword-descriptive ALT attributes to ${missingAlt} image(s) for Google Image ranking`);
+              score -= 8;
+            } else if (totalImages > 0) {
+              passingItems.push(`*Image Optimization:* 🟢 All ${totalImages} images have descriptive ALT attributes`);
+            } else {
+              passingItems.push(`*Image Optimization:* ℹ️ No images detected on page`);
+            }
+
+            // 6. Structured Data (Schema.org / JSON-LD)
+            const schemaTypes = crawlData.schema_types || [];
+            if (crawlData.has_schema && schemaTypes.length > 0) {
+              passingItems.push(`*Structured Data:* 🟢 Schema.org JSON-LD active (${schemaTypes.join(', ')})`);
+            } else {
+              warnings.push(`*Missing Structured Data:* No Schema.org JSON-LD detected (Disqualified from Google Rich Snippets & knowledge panels)`);
+              actionPlan.push(`Inject Schema.org JSON-LD markup (Article / Organization / FAQ) for rich snippets`);
+              score -= 8;
+            }
+
+            // 7. Content Depth & Helpful Content Risk
+            const wordCount = crawlData.word_count || 0;
+            if (wordCount < 350 && wordCount > 0) {
+              warnings.push(`*Thin Content Risk:* Only ${wordCount} words detected. Vulnerable to Google Helpful Content demotion.`);
+              actionPlan.push(`Expand content to at least 1,200+ words with practical, practitioner-first depth`);
+              score -= 10;
+            } else if (wordCount >= 800) {
+              passingItems.push(`*Content Depth:* 🟢 Strong depth (${wordCount} words)`);
+            } else if (wordCount >= 350) {
+              passingItems.push(`*Content Depth:* 🟢 Adequate volume (${wordCount} words)`);
+            }
+
+            // 8. Internal Link Architecture
+            const internalCount = crawlData.internal_links.length;
+            if (internalCount === 0) {
+              warnings.push(`*Orphan Page Risk:* 0 internal links discovered on this page`);
+              actionPlan.push(`Add internal links connecting this page to topic clusters and hub pages`);
+              score -= 10;
+            } else if (internalCount < 3) {
+              warnings.push(`*Starved Internal Link Equity:* Only ${internalCount} internal links discovered`);
+              actionPlan.push(`Add 3-5+ contextual internal links to transfer PageRank`);
+              score -= 5;
+            } else {
+              passingItems.push(`*Internal Link Architecture:* 🟢 ${internalCount} internal links discovered`);
+            }
+
+            // Clamp score
+            score = Math.max(20, Math.min(100, score));
+            const healthRating = score >= 85 ? '🟢 Excellent' : score >= 65 ? '🟡 Needs Optimization' : '🔴 Critical Attention Required';
+
+            // Cache findings into project_memory
+            try {
+              await supabase.from('project_memory').insert({
+                website_id: currentSite.id,
+                category: 'technical_audit',
+                source: 'telegram_diagnostic_audit',
+                content: JSON.stringify({
+                  health_score: score,
+                  rating: healthRating,
+                  critical_issues: criticalIssues,
+                  warnings,
+                  passing_items: passingItems,
+                  crawl_data: {
+                    http_status: crawlData.http_status,
+                    title: crawlData.title,
+                    h1: crawlData.h1,
+                    word_count: crawlData.word_count,
+                    has_schema: crawlData.has_schema,
+                    schema_types: crawlData.schema_types,
+                    missing_alt_count: crawlData.missing_alt_count,
+                    internal_links_count: crawlData.internal_links.length
+                  },
+                  audited_at: new Date().toISOString()
+                }),
+                is_outdated: false
+              });
+            } catch (memErr) {}
 
             let reportLines = [
-              `📊 *${isDailySchedule ? 'Daily SEO Health & Scan Activated' : 'SEO Health & Scan Report'}: ${currentSite.domain}*`,
+              `📊 *${isDailySchedule ? 'Daily SEO Health & Technical Audit' : 'SEO Diagnostic & Technical Audit'}: \`${currentSite.domain}\`*`,
               '━━━━━━━━━━━━━━━━━━━━━',
+              `🏆 *Overall Technical Health:* *${score}/100* (${healthRating})\n`,
             ];
 
             if (isDailySchedule) {
               reportLines.push(
-                '⏱ *Schedule Status:* ✅ *Active (Daily at 09:00 UTC)*',
-                'Your site will now be scanned and reported every morning automatically!\n'
+                '⏱ *Autonomous Schedule:* ✅ *Active (Daily at 09:00 UTC)*',
+                'Your site will be crawled and monitored daily without manual prompting!\n'
+              );
+            }
+
+            if (criticalIssues.length > 0) {
+              reportLines.push(
+                `🚨 *Critical Barriers Found (${criticalIssues.length}):*`,
+                ...criticalIssues.map(item => `• ${item}`),
+                ''
+              );
+            }
+
+            if (warnings.length > 0) {
+              reportLines.push(
+                `⚠️ *Improvements Needed (${warnings.length}):*`,
+                ...warnings.map(item => `• ${item}`),
+                ''
               );
             }
 
             reportLines.push(
-              '🔍 *Live Site Scan Results:*',
-              `• *Status:* ${crawlData.http_status === 200 ? '🟢 200 OK (Responsive)' : `⚠️ HTTP ${crawlData.http_status}`}`,
-              `• *Canonical URL:* \`${crawlData.canonical || targetUrl}\``,
-              `• *Internal Links:* ${crawlData.internal_links.length} discovered`,
-              `• *Images:* ${crawlData.images.length} analyzed`
+              `✅ *Passing Ranking Factors (${passingItems.length}):*`,
+              ...passingItems.map(item => `• ${item}`),
+              ''
             );
 
-            reportLines.push('\n⚠️ *On-Page Audit Findings:*');
-
-            if (isWastedH1) {
+            if (actionPlan.length > 0) {
               reportLines.push(
-                `\n1️⃣ *H1 Tag Needs Immediate Fix:*`,
-                `   • Current H1: \`"${crawlData.h1[0]}"\``,
-                `   • *Impact:* H1 is your highest-weight on-page tag. Wasting it on "${crawlData.h1[0]}" hurts search indexing.`,
-                `   • *Recommendation:* Change to high-impact target phrase, e.g.: _"AI Tools, Cold Email and Sales Automation for Modern Businesses"_`
+                '━━━━━━━━━━━━━━━━━━━━━',
+                '🛠️ *Prioritized Action Plan:*',
+                ...actionPlan.slice(0, 4).map((step, idx) => `${idx + 1}️⃣ ${step}`),
+                ''
               );
-            } else if (h1Count === 0) {
-              reportLines.push(
-                `\n1️⃣ *Missing H1 Tag:*`,
-                `   • *Impact:* No primary H1 tag detected on the page.`,
-                `   • *Recommendation:* Add an H1 tag with your primary search keyword.`
-              );
-            } else {
-              reportLines.push(`\n1️⃣ *H1 Tag:* 🟢 \`"${crawlData.h1[0]}"\``);
-            }
-
-            if (isGenericTitle) {
-              reportLines.push(
-                `\n2️⃣ *Title Tag Needs Keyword Optimization:*`,
-                `   • Current: \`"${crawlData.title}"\` (${titleLength} chars)`,
-                `   • *Recommendation:* Expand to 50-60 characters including high-intent keywords, e.g.: _"${currentSite.domain} — Practical AI Tools & Sales Automation Guides"_`
-              );
-            } else {
-              reportLines.push(`\n2️⃣ *Title Tag:* 🟢 \`"${crawlData.title}"\` (${titleLength} chars)`);
-            }
-
-            if (metaLength < 70) {
-              reportLines.push(
-                `\n3️⃣ *Meta Description:* ⚠️ Too short (${metaLength} chars). Expand to 150-160 chars for maximum search click-through rate.`
-              );
-            } else {
-              reportLines.push(`\n3️⃣ *Meta Description:* 🟢 Optimal length (${metaLength} chars).`);
             }
 
             reportLines.push(
-              '\n━━━━━━━━━━━━━━━━━━━━━',
-              '💡 *Next Step:* Reply with *"Write an article about best AI tools for cold email"* or *"Find low KD keywords"* to dispatch an execution action!'
+              '━━━━━━━━━━━━━━━━━━━━━',
+              '💡 *Next Step:* Reply with *"Fix H1 tag"* or *"Write an article for [keyword]"* to dispatch an execution action!'
             );
 
             await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
@@ -1050,10 +1202,13 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
             } else if (parsed.action_type === 'write_article') {
               // write_article automatically dispatches the interactive [Approve & Publish] card via sendApprovalPrompt!
             } else {
-              const isProcessing = execResult.summary.includes('background') || execResult.summary.includes('started') || execResult.summary.includes('running');
+              const msg = execResult.summary.startsWith('🚀') || execResult.summary.startsWith('✅') || execResult.summary.startsWith('📊')
+                ? execResult.summary
+                : `✅ *Task Completed!*\n\n${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`;
+
               await telegram.sendMessage(
                 chatId,
-                `${isProcessing ? '⚙️ *Task Processing...*' : '✅ *Task Completed!*'}\n\n*Action:* ${parsed.action_type}\n*Summary:* ${execResult.summary || 'Operation finished successfully.'}${execResult.link_url ? `\n\n[View in Dashboard](${execResult.link_url})` : ''}`,
+                msg,
                 { parse_mode: 'Markdown' }
               );
             }

@@ -128,7 +128,7 @@ export class SiteContentGapDetector {
           signal: AbortSignal.timeout(3000),
           headers: { 'User-Agent': 'SEO-Autopilot-GapDetector/1.0' },
         }),
-        fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=50&_fields=id,title,slug,link`, {
+        fetch(`${siteUrl}/wp-json/wp/v2/posts?per_page=50&_fields=id,title,slug,link,categories`, {
           signal: AbortSignal.timeout(3500),
           headers: { 'User-Agent': 'SEO-Autopilot-GapDetector/1.0' },
         }),
@@ -152,14 +152,22 @@ export class SiteContentGapDetector {
 
       if (postRes.ok) {
         const rawPosts = await postRes.json();
+        const catMap = new Map<number, string>();
+        for (const cat of categories) {
+          if (cat.id) catMap.set(cat.id, cat.name);
+        }
+
         if (Array.isArray(rawPosts)) {
           for (const p of rawPosts) {
             const rawTitle = p.title?.rendered ? p.title.rendered.replace(/&amp;/g, '&').replace(/&#8217;/g, "'").trim() : '';
             if (rawTitle && !coveredMap.has(rawTitle.toLowerCase())) {
+              const postCats: number[] = Array.isArray(p.categories) ? p.categories : [];
+              const categoryName = postCats.length > 0 && catMap.has(postCats[0]) ? catMap.get(postCats[0]) : undefined;
               coveredMap.set(rawTitle.toLowerCase(), {
                 title: rawTitle,
                 slug: p.slug,
                 url: p.link,
+                category: categoryName,
                 source: 'wordpress',
               });
             }
@@ -169,6 +177,67 @@ export class SiteContentGapDetector {
     } catch (crawlErr) {
       console.warn('[SiteContentGapDetector] Live WordPress crawl skipped (using database inventory):', crawlErr);
     }
+
+    // D. Query Supabase wordpress_jobs (all completed, queued, or recently published jobs)
+    try {
+      let jobsQuery = supabase
+        .from('wordpress_jobs')
+        .select('id, payload, website_id, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (websiteId) {
+        jobsQuery = jobsQuery.eq('website_id', websiteId);
+      }
+
+      const { data: jobs } = await jobsQuery;
+      if (jobs) {
+        for (const j of jobs) {
+          const postTitle = (j.payload?.title || '').trim();
+          const postSlug = (j.payload?.slug || '').trim();
+          const postUrl = j.payload?.canonical_url || (siteUrl && postSlug ? `${siteUrl}/${postSlug}` : undefined);
+          const postKw = j.payload?.primary_keyword || j.payload?.focus_keyword;
+          if (postTitle && !coveredMap.has(postTitle.toLowerCase())) {
+            coveredMap.set(postTitle.toLowerCase(), {
+              id: j.id,
+              title: postTitle,
+              slug: postSlug,
+              url: postUrl,
+              primary_keyword: postKw,
+              status: j.status || 'published',
+              source: 'wordpress',
+            });
+          }
+        }
+      }
+    } catch (jErr) {
+      console.warn('[SiteContentGapDetector] wordpress_jobs query notice:', jErr);
+    }
+
+    // E. Query recent autopilot tasks for any last_article_title in stats
+    try {
+      const { data: tasks } = await supabase
+        .from('tasks')
+        .select('schedule_config')
+        .or('name.eq.Zero-Touch Full Autopilot,schedule_config->>full_autopilot.eq.true')
+        .limit(10);
+
+      if (tasks) {
+        for (const t of tasks) {
+          const lastTitle = t.schedule_config?.last_article_title || t.schedule_config?.stats?.last_article_title;
+          const lastUrl = t.schedule_config?.last_article_url || t.schedule_config?.stats?.last_article_url;
+          if (lastTitle && !coveredMap.has(lastTitle.toLowerCase())) {
+            coveredMap.set(lastTitle.toLowerCase(), {
+              title: lastTitle,
+              slug: DuplicateArticleChecker.toSlug(lastTitle),
+              url: lastUrl,
+              status: 'published',
+              source: 'wordpress',
+            });
+          }
+        }
+      }
+    } catch (_) {}
 
     const coveredItems = Array.from(coveredMap.values());
     const coveredTitles = coveredItems.map(i => i.title);
@@ -264,12 +333,12 @@ ${coveredTitlesSample.length > 0 ? coveredTitlesSample.map(t => `- "${t}"`).join
 ${projectMemory ? `CLIENT BRAND MEMORY:\n${projectMemory.slice(0, 400)}\n` : ''}
 ${projectInstructions ? `Instructions: ${projectInstructions.slice(0, 200)}` : ''}
 
-STRICT ANTI-CANNIBALIZATION & RELEVANCE MANDATE:
-1. Stay 100% strictly within the website's primary niche ("${profile?.primaryNiche || inventory.domain}"). Never recommend unrelated industries.
-2. NEVER suggest a topic or keyword that is already covered by any published article above.
-3. If the site already has a guide on a specific subtopic, DO NOT suggest another variation of that same concept.
-4. Identify TRUE CONTENT GAPS in under-served categories (${inventory.thinCategories.join(', ') || 'categories needing depth'}).`,
-        prompt: `Generate ${limit} distinct, high-impact CONTENT GAP opportunities that directly expand topical authority for "${profile?.primaryNiche || inventory.domain}" without cannibalizing existing posts.`
+STRICT TOPIC DIVERSITY & ANTI-REPETITION MANDATE:
+1. COMPLETE CATEGORY DIVERSITY: Every single proposed gap MUST belong to a DIFFERENT category or content pillar. NEVER return multiple gaps focused on the same subtopic or category.
+2. ROTATE AWAY FROM SATURATED TOPICS: Look at the ALREADY PUBLISHED ARTICLES. If recent articles heavily cover one concept, all proposed gaps MUST explore the OTHER under-represented or thin categories (${inventory.thinCategories.join(', ') || 'categories with fewer posts'}).
+3. DIVERSIFY SEARCH INTENT: Provide a balanced mix across categories (e.g. one tool review/comparison, one strategic framework, one channel execution guide, one troubleshooting/optimization guide).
+4. ZERO DUPLICATION: Never suggest a topic, angle, or keyword that overlaps with any published article above.`,
+        prompt: `Generate ${limit} distinct, high-impact CONTENT GAP opportunities spanning DIFFERENT categories and pillars for "${profile?.primaryNiche || inventory.domain}" without cannibalizing existing posts.`
       });
 
       // Filter out any accidental overlaps using DuplicateArticleChecker
@@ -297,5 +366,79 @@ STRICT ANTI-CANNIBALIZATION & RELEVANCE MANDATE:
       console.warn('[SiteContentGapDetector] Content gap discovery error:', err?.message || err);
       return [];
     }
+  }
+
+  /**
+   * Selects the most balanced, diverse topic from a list of candidates.
+   * Prevents writing repeating/similar topics by penalizing concepts that appeared
+   * in recent articles, boosting under-represented categories, and rotating pillars.
+   */
+  static selectBalancedTopic<T extends { keyword: string; working_title?: string; target_category?: string }>(
+    candidates: T[],
+    inventory: SiteInventory
+  ): T | null {
+    if (!candidates || candidates.length === 0) return null;
+
+    // 1. Get the most recent 5 covered items (published or drafts)
+    const recentItems = inventory.coveredItems.slice(0, 5);
+    const recentTitles = recentItems.map(i => i.title.toLowerCase());
+    const recentCategories = recentItems.map(i => (i.category || '').toLowerCase()).filter(Boolean);
+
+    // Extract word frequencies from recent titles
+    const recentWords = new Map<string, number>();
+    const stopWords = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'how', 'to', 'in', 'of', 'on', 'a', 'an', 'is', 'are', 'your', 'best', 'guide', 'practical', 'complete', 'what', 'when', 'why', 'step']);
+    for (const title of recentTitles) {
+      const words = title.split(/[\s\-_:,|]+/).map(w => w.trim().toLowerCase()).filter(w => w.length > 3 && !stopWords.has(w));
+      for (const w of words) {
+        recentWords.set(w, (recentWords.get(w) || 0) + 1);
+      }
+    }
+
+    // 2. Score each candidate
+    const scored = candidates.map(c => {
+      const title = (c.working_title || c.keyword).toLowerCase();
+      const cat = (c.target_category || '').toLowerCase();
+
+      // Check strict duplicate
+      const dup = DuplicateArticleChecker.findDuplicateInInventory(c.keyword, inventory);
+      if (dup.isDuplicate && (dup.url || dup.draftId)) {
+        return { candidate: c, score: -9999 };
+      }
+
+      let score = 100;
+
+      // Penalize words that appeared frequently in recent articles
+      const candWords = title.split(/[\s\-_:,|]+/).map(w => w.trim().toLowerCase()).filter(w => w.length > 3 && !stopWords.has(w));
+      for (const w of candWords) {
+        const count = recentWords.get(w) || 0;
+        if (count > 0) {
+          // If word was in recent titles, heavily penalize repetition
+          score -= count * 40;
+        }
+      }
+
+      // Category diversity scoring
+      if (cat) {
+        const wasRecentlyUsed = recentCategories.includes(cat);
+        if (wasRecentlyUsed) {
+          score -= 30; // Rotate away from recently written category
+        } else {
+          score += 50; // Boost fresh category
+        }
+
+        const isThin = inventory.thinCategories.some(tc => tc.toLowerCase() === cat);
+        if (isThin) {
+          score += 40; // Boost thin category
+        }
+      }
+
+      return { candidate: c, score };
+    });
+
+    // Sort descending by score
+    scored.sort((a, b) => b.score - a.score);
+
+    const best = scored.find(s => s.score > -5000);
+    return best ? best.candidate : candidates[0] || null;
   }
 }

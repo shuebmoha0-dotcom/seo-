@@ -1,17 +1,196 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────
+   Design tokens
+   Principles: neutral ink + ONE brand colour, 8px-ish corners,
+   hairline borders instead of shadows, calm type weights.
+   ────────────────────────────────────────────────────────────── */
 @theme {
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Corners: big sites use 6–10px, not 16–24px pills */
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.75rem;
+
+  /* Weights: 600 is the heaviest we use. 800/900 reads as "template". */
+  --font-weight-semibold: 600;
+  --font-weight-bold: 600;
+  --font-weight-extrabold: 600;
+  --font-weight-black: 600;
+
+  /* Tracking on uppercase eyebrow labels */
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.04em;
+  --tracking-widest: 0.06em;
+
+  /* Shadows: whisper-quiet, border does the work */
+  --shadow-2xs: 0 1px 0 rgb(0 0 0 / 0.03);
+  --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-md: 0 2px 6px -1px rgb(16 24 40 / 0.07), 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-lg: 0 8px 20px -6px rgb(16 24 40 / 0.10), 0 2px 4px rgb(16 24 40 / 0.04);
+  --shadow-xl: 0 12px 28px -8px rgb(16 24 40 / 0.14), 0 2px 6px rgb(16 24 40 / 0.05);
+  --shadow-2xl: 0 20px 40px -12px rgb(16 24 40 / 0.18);
+
+  /* Brand: one calm cobalt. indigo / violet / purple / fuchsia / pink all
+     resolve to it, so the UI stops looking like a rainbow of accent chips. */
+  --color-indigo-50: #f3f5fc;
+  --color-indigo-100: #e6eaf9;
+  --color-indigo-200: #ccd5f2;
+  --color-indigo-300: #a3b3e8;
+  --color-indigo-400: #7289d9;
+  --color-indigo-500: #4b66c9;
+  --color-indigo-600: #2f4db5;
+  --color-indigo-700: #263f96;
+  --color-indigo-800: #1f3278;
+  --color-indigo-900: #1a2960;
+  --color-indigo-950: #101a3f;
+
+  --color-violet-50: #f3f5fc;
+  --color-violet-100: #e6eaf9;
+  --color-violet-200: #ccd5f2;
+  --color-violet-300: #a3b3e8;
+  --color-violet-400: #7289d9;
+  --color-violet-500: #4b66c9;
+  --color-violet-600: #2f4db5;
+  --color-violet-700: #263f96;
+  --color-violet-800: #1f3278;
+  --color-violet-900: #1a2960;
+
+  --color-purple-50: #f3f5fc;
+  --color-purple-100: #e6eaf9;
+  --color-purple-200: #ccd5f2;
+  --color-purple-300: #a3b3e8;
+  --color-purple-400: #7289d9;
+  --color-purple-500: #4b66c9;
+  --color-purple-600: #2f4db5;
+  --color-purple-700: #263f96;
+  --color-purple-800: #1f3278;
+  --color-purple-900: #1a2960;
+
+  --color-fuchsia-50: #f3f5fc;
+  --color-fuchsia-100: #e6eaf9;
+  --color-fuchsia-200: #ccd5f2;
+  --color-fuchsia-500: #4b66c9;
+  --color-fuchsia-600: #2f4db5;
+  --color-fuchsia-700: #263f96;
+
+  --color-pink-50: #f3f5fc;
+  --color-pink-100: #e6eaf9;
+  --color-pink-200: #ccd5f2;
+  --color-pink-400: #7289d9;
+  --color-pink-500: #4b66c9;
+  --color-pink-600: #2f4db5;
+  --color-pink-700: #263f96;
+
+  /* Semantic canvas / surface tokens */
+  --color-canvas: #fafafa;
+  --color-ink: #0f1115;
 }
 
-/* Global light theme base */
+/* ──────────────────────────────────────────────────────────────
+   Base
+   ────────────────────────────────────────────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
 html, body {
   background-color: #ffffff;
   color: #171717;
 }
 
+body {
+  font-feature-settings: "cv11", "ss03";
+  letter-spacing: -0.006em;
+}
+
+/* App canvas: pages render <main> without a background, so a faint grey
+   canvas lets white cards read as surfaces instead of floating on white. */
+main {
+  background-color: var(--color-canvas);
+}
+
+/* Headings: tighter, like Linear / Stripe / Vercel */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* Data tables: aligned numerals */
+td, th {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgb(47 77 181 / 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-indigo-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scrollbars: thin and unobtrusive */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+*::-webkit-scrollbar-thumb:hover { background: #a1a1aa; background-clip: content-box; border: 2px solid transparent; }
+
+/* ──────────────────────────────────────────────────────────────
+   Readability + calm: un-layered so they win over utilities.
+   ────────────────────────────────────────────────────────────── */
+
+/* 10px/11px microcopy is hard to read; real products floor at 12px */
+.text-\[10px\] { font-size: 11px; line-height: 1.35; }
+.text-\[11px\] { font-size: 12px; line-height: 1.4; }
+
+/* The "ping" ring is the classic generated-UI tell. Keep the dot, drop the ring. */
+.animate-ping { animation: none !important; opacity: 0 !important; }
+
+/* Skeleton pulse is fine, but gentler */
+@keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+.animate-pulse { animation: soft-pulse 2s ease-in-out infinite; }
+
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Reusable primitives (opt-in)
+   ────────────────────────────────────────────────────────────── */
+@layer components {
+  .page-wrap { @apply mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10; }
+  .page-title { @apply text-[22px] leading-7 font-semibold text-neutral-900; }
+  .page-desc { @apply mt-1 text-sm text-neutral-500; }
+
+  .surface { @apply rounded-xl border border-neutral-200 bg-white; }
+  .surface-header { @apply flex items-center justify-between border-b border-neutral-200 px-5 py-3.5; }
+  .eyebrow { @apply text-xs font-medium text-neutral-500; }
+
+  .btn { @apply inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50 disabled:opacity-50 disabled:pointer-events-none; }
+  .btn-primary { @apply inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:opacity-50 disabled:pointer-events-none; }
+  .btn-ghost { @apply inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900; }
+
+  .badge { @apply inline-flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-xs font-medium text-neutral-600; }
+}
+
 @layer utilities {
   .glass {
-    @apply bg-white/80 backdrop-blur-md border border-neutral-200 shadow-sm;
+    @apply bg-white/90 backdrop-blur border border-neutral-200 shadow-sm;
   }
 }

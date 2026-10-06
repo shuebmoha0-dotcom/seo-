@@ -81,7 +81,7 @@ export const PLAN_ENTITLEMENTS: Record<string, PlanEntitlements> = {
  * Check if the user has reached their allowed website quota.
  * Currently in Testing Mode: Always returns allowed = true with unlimited slots.
  */
-export async function checkWebsiteLimit(userId: string): Promise<{
+export async function checkWebsiteLimit(userId: string, existingCount?: number): Promise<{
   allowed: boolean;
   current_count: number;
   max_websites: number;
@@ -89,15 +89,21 @@ export async function checkWebsiteLimit(userId: string): Promise<{
   upgrade_required: boolean;
   message?: string;
 }> {
-  const supabase = await createClient();
+  let currentCount: number;
 
-  // Count existing websites for user
-  const { count } = await supabase
-    .from('websites')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId);
+  if (existingCount !== undefined) {
+    currentCount = existingCount;
+  } else {
+    const supabase = await createClient();
 
-  const currentCount = count || 0;
+    // Count existing websites for user
+    const { count } = await supabase
+      .from('websites')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    currentCount = count || 0;
+  }
 
   // In Testing Mode: unlimited websites allowed
   return {

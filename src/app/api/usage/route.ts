@@ -81,28 +81,54 @@ export async function GET(req: NextRequest) {
 
     const monthlyCreditLimit = Number(limitRecord?.monthly_credit_limit) || 50.0;
 
-    // 4. Query usage_events with date filter
-    let query = supabase
-      .from("usage_events")
-      .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at, website_id");
-
-    if (period !== "all_time") {
-      const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-      query = query.gte("created_at", startOfMonth);
+    // 4. Query usage_events with date filter (using RPC with fallback)
+    let startDate: string | null = null;
+    const now = new Date();
+    if (period === "current_month") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    } else if (period === "last_2_weeks") {
+      const d = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      startDate = d.toISOString();
+    } else if (period === "last_3_months") {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 3);
+      startDate = d.toISOString();
+    } else if (period === "all_time") {
+      startDate = null;
     }
 
-    if (requestedWebsiteId && requestedWebsiteId !== "all") {
-      query = query.eq("website_id", requestedWebsiteId);
-    } else if (allWebsiteIds.length > 0) {
-      query = query.or(`user_id.eq.${user.id},website_id.in.(${allWebsiteIds.join(",")})`);
+    let events: any[] | null = null;
+    const { data: rpcEvents, error: rpcErr } = await supabase.rpc("get_tenant_usage_events", {
+      p_website_id: requestedWebsiteId && requestedWebsiteId !== "all" ? requestedWebsiteId : null,
+      p_user_id: user.id,
+      p_start_date: startDate,
+      p_limit: 2000,
+    });
+
+    if (!rpcErr && rpcEvents) {
+      events = rpcEvents;
     } else {
-      query = query.eq("user_id", user.id);
-    }
+      let query = supabase
+        .from("usage_events")
+        .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at, website_id");
 
-    const { data: events, error: eventsErr } = await query.order("created_at", { ascending: false });
+      if (startDate) {
+        query = query.gte("created_at", startDate);
+      }
 
-    if (eventsErr) {
-      console.warn("[Usage API] Error loading usage events:", eventsErr.message);
+      if (requestedWebsiteId && requestedWebsiteId !== "all") {
+        query = query.eq("website_id", requestedWebsiteId);
+      } else if (allWebsiteIds.length > 0) {
+        query = query.or(`user_id.eq.${user.id},website_id.in.(${allWebsiteIds.join(",")})`);
+      } else {
+        query = query.eq("user_id", user.id);
+      }
+
+      const { data: directEvents, error: eventsErr } = await query.order("created_at", { ascending: false });
+      if (eventsErr) {
+        console.warn("[Usage API] Error loading usage events:", eventsErr.message);
+      }
+      events = directEvents || [];
     }
 
     const eventList = events || [];

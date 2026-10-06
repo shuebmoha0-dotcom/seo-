@@ -44,7 +44,7 @@ export class DataForSEOConnector implements SEODataConnector {
     }
   }
 
-  async get_keyword_metrics(keyword: string): Promise<{ volume: number; difficulty: number }> {
+  async get_keyword_metrics(keyword: string): Promise<{ volume: number; difficulty: number; cpc?: number }> {
     const postData = [{
       keywords: [keyword],
       location_name: 'United States',
@@ -66,11 +66,20 @@ export class DataForSEOConnector implements SEODataConnector {
       }
 
       const data = await response.json();
-      const metrics = data.tasks?.[0]?.result?.[0]?.items?.[0]?.keyword_info;
+      const item = data.tasks?.[0]?.result?.[0]?.items?.[0];
+      const metrics = item?.keyword_info;
+      const props = item?.keyword_properties;
       
+      const difficulty = typeof props?.keyword_difficulty === 'number'
+        ? props.keyword_difficulty
+        : typeof metrics?.competition_level === 'number'
+          ? Math.round(metrics.competition_level * 100)
+          : 25;
+
       return {
         volume: metrics?.search_volume || 0,
-        difficulty: metrics?.competition_level || 0 // Assuming competition level is used as difficulty
+        difficulty,
+        cpc: metrics?.cpc || 0
       };
     } catch (error) {
       console.error('Error fetching DataForSEO keyword metrics:', error);
@@ -78,3 +87,4 @@ export class DataForSEOConnector implements SEODataConnector {
     }
   }
 }
+

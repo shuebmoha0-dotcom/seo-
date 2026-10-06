@@ -159,6 +159,7 @@ export class CrawlService {
     progress?: number;
     result?: NormalizedCrawlResult;
     error_message?: string;
+    websiteId?: string | null;
   }> {
     const supabase = await createClient();
 
@@ -287,7 +288,50 @@ export class CrawlService {
     return {
       status: 'completed',
       result: normalized,
+      websiteId,
     };
+  }
+
+  /**
+   * Send a Telegram completion notification after a background crawl finishes.
+   */
+  async sendCrawlCompletionNotification(websiteId: string | null, normalized: NormalizedCrawlResult, domain?: string): Promise<void> {
+    try {
+      if (!websiteId) return;
+      const { createAdminClient } = await import('@/lib/supabase/admin');
+      const adminClient = createAdminClient();
+
+      // Resolve domain if not provided
+      let siteDomain = domain;
+      if (!siteDomain) {
+        const { data: site } = await adminClient.from('websites').select('domain').eq('id', websiteId).maybeSingle();
+        siteDomain = site?.domain || 'your website';
+      }
+
+      const issues = normalized.deterministic_issues || [];
+      const criticalIssues = issues.filter((i: any) => i.severity === 'critical');
+      const highIssues = issues.filter((i: any) => i.severity === 'high');
+      const issueSummaryLines = issues.slice(0, 3).map((iss: any) => `📌 ${iss.title}`);
+      const healthScore = normalized.summary.technical_health_score || 80;
+      const pagesAnalyzed = normalized.pages.length;
+
+      const completedMsg = [
+        `✅ *Technical Audit Completed: \`${siteDomain}\`*`,
+        '━━━━━━━━━━━━━━━━━━━━━',
+        `🏆 *Technical Health Score:* *${healthScore}/100*`,
+        `📄 *Pages Crawled:* ${pagesAnalyzed}`,
+        `🔍 *Issues Found:* ${issues.length} (${criticalIssues.length} critical, ${highIssues.length} high)`,
+        ...(issueSummaryLines.length > 0 ? ['\n*Top Priority Findings:*', ...issueSummaryLines] : ['✅ No issues detected']),
+        '\n━━━━━━━━━━━━━━━━━━━━━',
+        '💡 *Next Step:* Reply with *"Fix technical issues"* or visit /technical-seo'
+      ].join('\n');
+
+      const { TelegramService } = await import('@/lib/telegram/telegramService');
+      const telegram = new TelegramService();
+      await telegram.notifyWebsiteSubscribers(websiteId, completedMsg);
+    } catch (err) {
+      console.warn('[CrawlService] Could not send completion Telegram notification:', err);
+    }
   }
 
   /**

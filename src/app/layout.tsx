@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SEO Autopilot — Autonomous AI SEO Growth Platform",
@@ -17,8 +21,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-white text-neutral-900 antialiased min-h-screen selection:bg-indigo-500/20`}>
+    <html lang="en" className={inter.variable}>
+      <body className="font-sans bg-white text-neutral-900 antialiased min-h-screen">
         <Providers>
           {children}
         </Providers>

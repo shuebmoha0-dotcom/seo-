@@ -95,8 +95,10 @@ export function normalizeDataForSEOResponse(
       schema_types: item.schema_types || [],
       has_duplicate_title: false, // Calculated in pass 2
       has_duplicate_meta: false,
-      has_thin_content: wordCount > 0 && wordCount < 250 && isIndexable,
+      has_thin_content: wordCount > 0 && wordCount < 350 && isIndexable,
       has_multiple_h1: hasMultipleH1,
+      has_wasted_h1: h1 ? ['home', 'welcome', 'homepage', 'index'].includes(h1.trim().toLowerCase()) || (h1.trim().length < 10 && !h1.trim().includes(' ')) : false,
+      missing_image_alt_count: item.meta?.images_alt_empty || item.meta?.images_without_alt || (checks.no_image_alt ? 1 : 0),
     });
   }
 
@@ -521,6 +523,78 @@ export function normalizeDataForSEOResponse(
       seo_impact: 'Disqualified from Google Rich Results, star ratings, carousel snippets, and entity graph recognition.',
       business_impact: 'Lower visibility in SERPs compared to competitors with rich results.',
       recommended_fix: 'Inject valid JSON-LD Article and BreadcrumbList schema into the document head.',
+      estimated_effort: 'minutes',
+      risk_level: 'low',
+      automation_level: 'auto',
+      status: 'open',
+    });
+  }
+
+  // Issue R: Wasted / Low-Intent H1 Headings
+  const wastedH1Pages = pages.filter(p => p.has_wasted_h1 && p.is_indexable && p.status_code === 200);
+  if (wastedH1Pages.length > 0) {
+    deterministicIssues.push({
+      id: 'issue-wasted-h1',
+      category: 'presentation',
+      severity: 'high',
+      issue_type: 'wasted_low_intent_h1',
+      title: `${wastedH1Pages.length} page(s) with wasted/low-intent primary H1 headings`,
+      description: 'Primary H1 tag is wasted on generic words like "Home" or non-descriptive placeholders instead of high-value search queries.',
+      evidence: `Sample wasted H1: "${wastedH1Pages[0].h1}" on ${wastedH1Pages[0].url}`,
+      affected_urls: wastedH1Pages.map(p => p.url),
+      affected_url_count: wastedH1Pages.length,
+      sample_url: wastedH1Pages[0].url,
+      seo_impact: 'H1 is the strongest on-page semantic ranking factor. Wasting it causes loss of topical authority and rank suppression.',
+      business_impact: 'Visitors fail to understand the core value proposition within the critical 3-second window.',
+      recommended_fix: 'Rewrite H1 heading to feature the primary high-intent search query and brand proposition.',
+      estimated_effort: 'minutes',
+      risk_level: 'low',
+      automation_level: 'auto',
+      status: 'open',
+    });
+  }
+
+  // Issue S: Short / Under-Optimized Meta Descriptions (< 70 chars)
+  const shortMeta = pages.filter(p => p.meta_description && p.meta_description.trim().length > 0 && p.meta_description.trim().length < 70 && p.is_indexable && p.status_code === 200);
+  if (shortMeta.length > 0) {
+    deterministicIssues.push({
+      id: 'issue-short-meta',
+      category: 'indexability',
+      severity: 'low',
+      issue_type: 'meta_description_too_short',
+      title: `${shortMeta.length} page(s) with short/under-optimized meta descriptions (< 70 chars)`,
+      description: 'Meta descriptions are under 70 characters and fail to provide compelling search snippet context or call to action.',
+      evidence: `Sample short meta (${shortMeta[0].meta_description!.length} chars): "${shortMeta[0].meta_description}"`,
+      affected_urls: shortMeta.map(p => p.url),
+      affected_url_count: shortMeta.length,
+      sample_url: shortMeta[0].url,
+      seo_impact: 'Short meta descriptions yield lower Google SERP CTR compared to rich 150-160 character descriptions.',
+      business_impact: 'Lower click-through rates and missed user visits.',
+      recommended_fix: 'Expand meta descriptions to 140–160 characters with clear value and CTA.',
+      estimated_effort: 'minutes',
+      risk_level: 'low',
+      automation_level: 'auto',
+      status: 'open',
+    });
+  }
+
+  // Issue T: Missing Image Alt Attributes
+  const missingAltPages = pages.filter(p => (p.missing_image_alt_count && p.missing_image_alt_count > 0));
+  if (missingAltPages.length > 0) {
+    deterministicIssues.push({
+      id: 'issue-missing-image-alt',
+      category: 'performance',
+      severity: 'medium',
+      issue_type: 'missing_image_alt_attributes',
+      title: `${missingAltPages.length} page(s) containing images without descriptive ALT attributes`,
+      description: 'Images lack alt attributes, preventing search engines from understanding visual media and hurting accessibility compliance.',
+      evidence: `Sample page: ${missingAltPages[0].url}`,
+      affected_urls: missingAltPages.map(p => p.url),
+      affected_url_count: missingAltPages.length,
+      sample_url: missingAltPages[0].url,
+      seo_impact: 'Images cannot rank in Google Image search and pages lose accessibility ranking signals.',
+      business_impact: 'Lost traffic from image queries and potential accessibility non-compliance.',
+      recommended_fix: 'Add descriptive, keyword-relevant alt attributes to all content images.',
       estimated_effort: 'minutes',
       risk_level: 'low',
       automation_level: 'auto',

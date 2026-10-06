@@ -351,36 +351,36 @@ export default function ProjectMemoryPage() {
         </div>
 
         {/* ── PERSISTENT ACTIVE STATUS BANNER ── */}
-        <div className="mb-6 p-4 bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+        <div className="mb-6 p-4 bg-emerald-50/90 border border-emerald-200 text-emerald-900 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold">Memory &amp; Instructions Active</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               </div>
               <p className="text-[11px] text-emerald-700 mt-0.5">
-                Both large spaces are automatically combined and applied across all article drafting, keyword analysis, and SEO optimization.
+                Both knowledge banks are automatically synchronized and referenced across article drafting, keyword research, and SEO optimization.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 text-xs shrink-0 font-medium text-emerald-800 bg-white/80 px-3.5 py-1.5 rounded-xl border border-emerald-200">
-            <span>💾 Status: <strong className="text-emerald-900">Synchronized</strong></span>
+          <div className="flex items-center gap-3 text-xs shrink-0 font-medium text-emerald-800 bg-white/80 px-3.5 py-1.5 rounded-lg border border-emerald-200">
+            <span>Status: <strong className="text-emerald-900">Synchronized</strong></span>
             {lastSavedTime && <span>• Last saved: {lastSavedTime}</span>}
           </div>
         </div>
 
         {/* Error Notification */}
         {saveError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center justify-between text-xs animate-shake">
+          <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
               <span>{saveError}</span>
             </div>
-            <button onClick={() => setSaveError(null)} className="text-red-500 hover:text-red-800">
+            <button onClick={() => setSaveError(null)} className="text-rose-500 hover:text-rose-800">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -390,31 +390,31 @@ export default function ProjectMemoryPage() {
         <div className="flex items-center gap-2 border-b border-neutral-200 pb-3 mb-6">
           <button
             onClick={() => setActiveTab("instructions")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === "instructions"
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-neutral-100/80 text-neutral-600 hover:bg-neutral-100"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-neutral-100/80 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
             }`}
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-3.5 h-3.5" />
             <span>1. Custom Instructions (Set by You)</span>
             {instructions.trim() && (
-              <span className={`w-2 h-2 rounded-full ${activeTab === 'instructions' ? 'bg-white' : 'bg-indigo-600'}`}></span>
+              <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'instructions' ? 'bg-white' : 'bg-indigo-600'}`}></span>
             )}
           </button>
 
           <button
             onClick={() => setActiveTab("memory")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activeTab === "memory"
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "bg-neutral-100/80 text-neutral-600 hover:bg-neutral-100"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "bg-neutral-100/80 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
             }`}
           >
-            <Brain className="w-4 h-4" />
+            <Brain className="w-3.5 h-3.5" />
             <span>2. Autonomous Project Memory &amp; Knowledge Space</span>
             {memory.trim() && (
-              <span className={`w-2 h-2 rounded-full ${activeTab === 'memory' ? 'bg-white' : 'bg-indigo-600'}`}></span>
+              <span className={`w-1.5 h-1.5 rounded-full ${activeTab === 'memory' ? 'bg-white' : 'bg-indigo-600'}`}></span>
             )}
           </button>
         </div>
@@ -422,7 +422,7 @@ export default function ProjectMemoryPage() {
         {/* ── TAB 1: CUSTOM INSTRUCTIONS (LARGE SPACE) ── */}
         {activeTab === "instructions" && (
           <div className="space-y-6">
-            <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4">
                 <div>
                   <h2 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
@@ -514,7 +514,7 @@ Example:
 2. Tone must be direct, highly practical, authoritative, and actionable with zero fluff.
 3. Every article must include concrete, real-world examples and step-by-step frameworks.
 4. Emphasize practical conversion and customer acquisition rather than vanity metrics."
-                  className="w-full bg-neutral-50/70 border border-neutral-200 rounded-2xl p-4 text-xs md:text-sm text-neutral-900 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
+                  className="w-full bg-neutral-50/70 border border-neutral-200 rounded-lg p-4 text-xs md:text-sm text-neutral-900 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
                   rows={16}
                 />
               </div>
@@ -530,14 +530,14 @@ Example:
         {/* ── TAB 2: AUTONOMOUS PROJECT MEMORY & KNOWLEDGE SPACE (LARGE SPACE) ── */}
         {activeTab === "memory" && (
           <div className="space-y-6">
-            <div className="bg-white border border-neutral-200 rounded-3xl p-6 shadow-sm space-y-4">
+            <div className="bg-white border border-neutral-200 rounded-xl p-6 shadow-xs space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4">
                 <div>
                   <h2 className="text-sm font-bold text-neutral-900 flex items-center gap-2">
                     <Brain className="w-4 h-4 text-indigo-600" />
                     <span>Autonomous Project Memory &amp; Learned Knowledge</span>
                     <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                      ⚡ Learned by Agent Over Time
+                      Learned by Agent Over Time
                     </span>
                   </h2>
                   <p className="text-xs text-neutral-500 mt-1">
@@ -618,7 +618,7 @@ Example:
                   placeholder="Large open memory space for learned insights, product facts, audience research, and historical SEO performance...
 
 The AI agent will continuously read and reference this memory space when drafting articles, generating outlines, and formulating keywords."
-                  className="w-full bg-neutral-50/70 border border-neutral-200 rounded-2xl p-4 text-xs md:text-sm text-neutral-900 font-mono leading-relaxed focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
+                  className="w-full bg-neutral-50/70 border border-neutral-200 rounded-lg p-4 text-xs md:text-sm text-neutral-900 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all shadow-inner"
                   rows={16}
                 />
               </div>

@@ -53,26 +53,15 @@ export function evaluateTaskComplexity(options: RouterOptions): TaskComplexity {
   const agent = options.agent.toLowerCase();
   const taskType = (options.taskType || '').toLowerCase();
 
-  // ONLY actual long-form prose drafting requires complex tier
+  // ONLY actual long-form prose and article drafting require Claude Sonnet 5
   if (
     agent.includes('content') &&
-    (taskType === 'long_form_article' || taskType === 'draft_writing' || taskType === 'article_body')
+    (taskType === 'long_form_article' || taskType === 'draft_writing' || taskType === 'article_body' || taskType === 'surgical_edit')
   ) {
     return 'complex';
   }
 
-  if (agent.includes('strategy') && (taskType.includes('roadmap') || taskType.includes('audit'))) {
-    return 'complex';
-  }
-
-  if (agent.includes('competitor') && taskType.includes('deep_gap_analysis')) {
-    return 'complex';
-  }
-
-  if (agent.includes('technical') && taskType.includes('complex_architecture')) {
-    return 'complex';
-  }
-
+  // All routine strategy audits, competitor searches, keyword clustering, and diagnostic tasks use simple tier (GPT-5.6 Luna)
   return 'simple';
 }
 
@@ -175,7 +164,29 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
       }
     }
 
-    await supabase.from('usage_events').insert({
+    // If still missing website or user, associate with primary site so events are tracked
+    if (!websiteId || !userId) {
+      const { data: defaultSite } = await supabase
+        .from('websites')
+        .select('id, user_id, project_id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (defaultSite) {
+        if (!websiteId) websiteId = defaultSite.id;
+        if (!userId && isValidUuid(defaultSite.user_id)) userId = defaultSite.user_id;
+        if (!projectId && isValidUuid(defaultSite.project_id)) projectId = defaultSite.project_id;
+      }
+    }
+
+    // Fallback: If still missing user, associate with platform admin so all token events are attributed to shuebmoha0
+    const PLATFORM_ADMIN_USER_ID = '0a035c76-db28-4071-9294-db59ca23d1a5';
+    if (!userId) {
+      userId = PLATFORM_ADMIN_USER_ID;
+    }
+
+    const { error: insertErr } = await supabase.from('usage_events').insert({
       user_id: userId,
       project_id: projectId,
       website_id: websiteId,
@@ -192,6 +203,10 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
       estimated_cost: parseFloat(cost.toFixed(6)),
       currency: 'USD',
     });
+
+    if (insertErr) {
+      console.warn('[Model Router] Usage tracking insert warning:', insertErr.message);
+    }
   } catch (err) {
     console.warn('[Model Router] Usage tracking record failed:', err);
   }
@@ -223,9 +238,9 @@ export const TextRouter = {
       ? { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const }
       : { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const };
 
-    const fallback = complexity === 'complex'
-      ? { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const }
-      : { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const };
+    const fallback: { provider: 'openai' | 'anthropic'; modelName: string; healthKey: 'luna' | 'sonnet' } = complexity === 'complex'
+      ? { provider: 'openai', modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' }
+      : { provider: 'openai', modelName: 'gpt-4o-mini', healthKey: 'luna' };
 
     let attempt = 0;
     let lastError: any = null;
@@ -345,9 +360,9 @@ export const TextRouter = {
       ? { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const }
       : { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const };
 
-    const fallback = complexity === 'complex'
-      ? { provider: 'openai' as const, modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' as const }
-      : { provider: 'anthropic' as const, modelName: chosenComplexModel, healthKey: 'sonnet' as const };
+    const fallback: { provider: 'openai' | 'anthropic'; modelName: string; healthKey: 'luna' | 'sonnet' } = complexity === 'complex'
+      ? { provider: 'openai', modelName: AI_CONFIG.LUNA_MODEL, healthKey: 'luna' }
+      : { provider: 'openai', modelName: 'gpt-4o-mini', healthKey: 'luna' };
 
     let attempt = 0;
     let lastError: any = null;
@@ -365,6 +380,7 @@ export const TextRouter = {
         };
 
         const result = await aiGenerateText({
+          maxTokens: 8192,
           ...(options as any),
           model,
           providerOptions,
@@ -424,6 +440,7 @@ export const TextRouter = {
       };
 
       const fallbackResult = await aiGenerateText({
+        maxTokens: 8192,
         ...(options as any),
         model: fallbackModel,
         providerOptions: fallbackProviderOptions,

@@ -67,7 +67,7 @@ export function PlatformLogo({ provider, className = 'w-7 h-7', size = 28 }: Pla
 
   // 6. Custom Website API / Webhook (REST API Vector)
   return (
-    <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-xs">
+    <div className="w-7 h-7 rounded-lg bg-neutral-800 flex items-center justify-center text-white shadow-xs">
       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="16 18 22 12 16 6" />
         <polyline points="8 6 2 12 8 18" />

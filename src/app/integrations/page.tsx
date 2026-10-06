@@ -33,7 +33,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-gsc",
     provider: "google_search_console",
     display_name: "Google Search Console",
-    icon: "🔍",
+    icon: "",
     description: "Search performance metrics: queries, pages, CTR, impressions, and average position.",
     status: "disconnected",
     status_message: "Not connected",
@@ -44,7 +44,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-ga4",
     provider: "google_analytics",
     display_name: "Google Analytics 4",
-    icon: "📊",
+    icon: "",
     description: "Organic sessions, landing page performance, conversions, and user engagement.",
     status: "disconnected",
     status_message: "Not connected",
@@ -55,7 +55,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-github",
     provider: "github",
     display_name: "GitHub (Code Execution)",
-    icon: "🐙",
+    icon: "",
     description: "Codebase execution layer for Next.js, React, Astro, or static sites. Creates branches & Pull Requests.",
     status: "disconnected",
     status_message: "Not connected",
@@ -66,7 +66,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-wp",
     provider: "wordpress",
     display_name: "WordPress",
-    icon: "🟦",
+    icon: "",
     description: "Primary execution layer for WordPress sites. Uses Application Passwords (no admin pass stored).",
     status: "disconnected",
     status_message: "Not connected",
@@ -77,7 +77,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-custom",
     provider: "custom_api",
     display_name: "Custom Website API",
-    icon: "⚡",
+    icon: "",
     description: "Webhook & REST API execution layer for custom web frameworks and headless CMS platforms.",
     status: "disconnected",
     status_message: "Not configured",
@@ -88,7 +88,7 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
     id: "int-telegram",
     provider: "telegram",
     display_name: "Telegram Mobile Controller",
-    icon: "📱",
+    icon: "",
     description: "Control your SEO Agent from your phone. Send tasks via chat, receive draft alerts, and approve with 1 tap.",
     status: "disconnected",
     status_message: "Not linked to mobile",
@@ -109,19 +109,11 @@ interface ExecutionAction {
   details: string;
 }
 
-const DEMO_ACTIONS: ExecutionAction[] = [
-  { id: "act-1", type: "update_title", page: "/blog/ai-seo-agent", proposed_by: "On-Page SEO Agent", risk: "low", time: "2h ago", status: "pending", details: "Optimize title for CTR: 'AI SEO Agent for SaaS (2026 Guide)'" },
-  { id: "act-2", type: "update_meta_description", page: "/pricing", proposed_by: "On-Page SEO Agent", risk: "low", time: "2h ago", status: "pending", details: "Add compelling CTA to meta description" },
-  { id: "act-3", type: "add_internal_link", page: "/blog/ai-seo-agent", proposed_by: "Internal Linking Agent", risk: "low", time: "1h ago", status: "pending", details: "Add contextual link to /features with anchor 'autonomous SEO software'" },
-  { id: "act-4", type: "create_article", page: "/blog/saas-keyword-research", proposed_by: "Content Agent", risk: "medium", time: "30m ago", status: "pending", details: "New 1,800-word article on SaaS keyword clustering" },
-  { id: "act-5", type: "update_canonical", page: "/features", proposed_by: "Technical SEO Agent", risk: "high", time: "15m ago", status: "pending", details: "Set self-referencing canonical URL" },
-];
-
 export default function IntegrationsPage() {
   const { currentWebsite } = useWebsite();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [integrations, setIntegrations] = useState<IntegrationItem[]>(DEFAULT_INTEGRATIONS);
-  const [actions, setActions] = useState<ExecutionAction[]>(DEMO_ACTIONS);
+  const [actions, setActions] = useState<ExecutionAction[]>([]);
 
   // WordPress Modal State
   const [showWpModal, setShowWpModal] = useState(false);
@@ -358,6 +350,36 @@ export default function IntegrationsPage() {
       }
     }
   }, []);
+
+  // 1b. Fetch real execution opportunities for active website
+  useEffect(() => {
+    async function loadActions() {
+      if (!currentWebsite?.id) {
+        setActions([]);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/opportunities?website_id=${currentWebsite.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          const mapped: ExecutionAction[] = (data.opportunities || []).map((opp: any) => ({
+            id: opp.id,
+            type: opp.problem_type || "optimization",
+            page: opp.evidence || opp.target_url || "/",
+            proposed_by: opp.intent_type || "Autonomous SEO Agent",
+            risk: opp.priority === "High" ? "high" : opp.priority === "Medium" ? "medium" : "low",
+            time: opp.created_at ? new Date(opp.created_at).toLocaleDateString() : "Recent",
+            status: opp.status === "approved" ? "approved" : opp.status === "rejected" ? "rejected" : "pending",
+            details: opp.recommended_action || opp.problem,
+          }));
+          setActions(mapped);
+        }
+      } catch (err) {
+        console.error("Failed to load execution actions:", err);
+      }
+    }
+    loadActions();
+  }, [currentWebsite?.id]);
 
   // 2. Open GSC Property Selector
   const openGscPropertySelector = async (intId: string) => {
@@ -916,57 +938,64 @@ export default function IntegrationsPage() {
                   </span>
                 </div>
 
-                <div className="divide-y divide-neutral-100 text-xs">
-                  {actions.map(act => (
-                    <div key={act.id} className="p-4 flex items-center justify-between hover:bg-neutral-50 transition-colors">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-neutral-900">{act.type}</span>
-                          <span className="font-mono text-neutral-500 text-[11px]">{act.page}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            act.risk === "low" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : act.risk === "medium" ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-red-50 text-red-700 border border-red-200"
-                          }`}>
-                            {act.risk.toUpperCase()} RISK
-                          </span>
-                        </div>
-                        <p className="text-neutral-600 text-[11px]">{act.details}</p>
-                        <p className="text-[10px] text-neutral-400">Proposed by {act.proposed_by} · {act.time}</p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {act.status === "pending" && (
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "rejected" } : a))}
-                              className="text-neutral-400 hover:text-red-600 text-[11px] font-medium px-2 py-1 transition-colors">
-                              Reject
-                            </button>
-                            <button onClick={() => setActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "approved", pr_url: "https://github.com/acme-corp/website/pull/42" } : a))}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors">
-                              Approve & Execute
-                            </button>
-                          </div>
-                        )}
-                        {act.status === "approved" && (
-                          <div className="flex items-center gap-1 text-emerald-600 font-bold text-[11px]">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Approved
-                            {act.pr_url && (
-                              <a href={act.pr_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline flex items-center gap-0.5 ml-1">
-                                PR #42 <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            )}
-                          </div>
-                        )}
-                        {act.status === "rejected" && (
-                          <span className="text-neutral-400 font-bold text-[11px] flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5" /> Rejected
-                          </span>
-                        )}
-                      </div>
+                {actions.length === 0 ? (
+                  <div className="p-10 text-center bg-white space-y-2">
+                    <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mx-auto text-neutral-400">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     </div>
-                  ))}
-                </div>
+                    <p className="text-xs font-semibold text-neutral-800">No Pending Actions</p>
+                    <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                      All autonomous suggestions and technical fixes have been reviewed. When new opportunities are detected, they will appear here for approval.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-neutral-100 text-xs">
+                    {actions.map(act => (
+                      <div key={act.id} className="p-4 flex items-center justify-between hover:bg-neutral-50 transition-colors">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-medium text-neutral-900">{act.type}</span>
+                            <span className="font-mono text-neutral-500 text-xs">{act.page}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${
+                              act.risk === "low" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : act.risk === "medium" ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : "bg-red-50 text-red-700 border-red-200"
+                            }`}>
+                              {act.risk.toUpperCase()} RISK
+                            </span>
+                          </div>
+                          <p className="text-neutral-600 text-xs">{act.details}</p>
+                          <p className="text-xs text-neutral-400">Proposed by {act.proposed_by} · {act.time}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {act.status === "pending" && (
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "rejected" } : a))}
+                                className="text-neutral-500 hover:text-red-600 text-xs font-medium px-2 py-1 transition-colors">
+                                Reject
+                              </button>
+                              <button onClick={() => setActions(prev => prev.map(a => a.id === act.id ? { ...a, status: "approved" } : a))}
+                                className="bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+                                Approve
+                              </button>
+                            </div>
+                          )}
+                          {act.status === "approved" && (
+                            <div className="flex items-center gap-1 text-emerald-600 font-medium text-xs">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Approved
+                            </div>
+                          )}
+                          {act.status === "rejected" && (
+                            <span className="text-neutral-400 font-medium text-xs flex items-center gap-1">
+                              <XCircle className="w-3.5 h-3.5" /> Rejected
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -982,7 +1011,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
                 <PlatformLogo provider="google_search_console" className="w-5 h-5" size={20} /> Setup Google Search Console
               </h3>
-              <button type="button" onClick={() => setShowGscModal(false)} className="text-neutral-400 hover:text-neutral-600">✕</button>
+              <button type="button" onClick={() => setShowGscModal(false)} className="text-neutral-400 hover:text-neutral-600">×</button>
             </div>
 
             {/* Method selection tabs */}
@@ -1097,7 +1126,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
                 <PlatformLogo provider="google_analytics" className="w-5 h-5" size={20} /> Select Google Analytics 4 Property
               </h3>
-              <button type="button" onClick={() => setShowGa4Modal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowGa4Modal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
             <p className="text-xs text-neutral-500">Select the GA4 property to link organic traffic and user engagement:</p>
 
@@ -1145,7 +1174,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
                 <PlatformLogo provider="github" className="w-5 h-5 text-neutral-900" size={20} /> Connect GitHub Repository
               </h3>
-              <button type="button" onClick={() => setShowGithubModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowGithubModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
             <p className="text-xs text-neutral-500">Connect your repository for automated technical SEO Pull Requests.</p>
 
@@ -1216,7 +1245,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
                 <PlatformLogo provider="wordpress" className="w-5 h-5" size={20} /> Connect WordPress Site
               </h3>
-              <button type="button" onClick={() => setShowWpModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowWpModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
 
             <p className="text-xs text-neutral-500 leading-relaxed">
@@ -1320,7 +1349,7 @@ export default function IntegrationsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
                       <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
-                        <span>⚡</span> SEO Autopilot Outbound Connector Plugin (v1.2.0)
+                        <span></span> SEO Autopilot Outbound Connector Plugin (v1.2.0)
                       </div>
                       <p className="text-[11px] text-indigo-800 leading-tight">
                         <strong>Outbound Reverse Architecture</strong>: WordPress initiates requests to our SaaS queue. Eliminates all 403 WAF/firewall blocks.
@@ -1418,7 +1447,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2.5">
                 <PlatformLogo provider="custom_api" className="w-5 h-5" size={20} /> Connect Custom Website API
               </h3>
-              <button type="button" onClick={() => setShowCustomApiModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowCustomApiModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
 
             <p className="text-xs text-neutral-500">
@@ -1501,7 +1530,7 @@ export default function IntegrationsPage() {
               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2 text-amber-700">
                 <ShieldAlert className="w-5 h-5 text-amber-600" /> Administrator Configuration Required
               </h3>
-              <button type="button" onClick={() => setOauthError(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setOauthError(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
 
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-2">
@@ -1534,7 +1563,7 @@ export default function IntegrationsPage() {
                   <p className="text-[11px] text-neutral-500">Control your SEO Agent & approve drafts from your phone</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setShowTelegramModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
+              <button type="button" onClick={() => setShowTelegramModal(false)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">×</button>
             </div>
 
             {telegramLoading ? (

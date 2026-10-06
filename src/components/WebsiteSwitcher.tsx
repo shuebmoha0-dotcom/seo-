@@ -9,6 +9,33 @@ export function WebsiteSwitcher() {
   const { websites, currentWebsite, setCurrentWebsite, openAddModal, loading, planLimit } = useWebsite();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [cachedSite, setCachedSite] = useState<WebsiteData | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("seo_cached_current_website");
+        if (raw) return JSON.parse(raw);
+        const rawList = localStorage.getItem("seo_cached_websites");
+        if (rawList) {
+          const list: WebsiteData[] = JSON.parse(rawList);
+          if (Array.isArray(list) && list.length > 0) return list[0];
+        }
+      } catch {}
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (currentWebsite) {
+      setCachedSite(currentWebsite);
+    } else {
+      try {
+        const raw = localStorage.getItem("seo_cached_current_website");
+        if (raw) setCachedSite(JSON.parse(raw));
+      } catch {}
+    }
+  }, [currentWebsite]);
+
+  const activeSite = currentWebsite || cachedSite;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -27,19 +54,32 @@ export function WebsiteSwitcher() {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        disabled={loading}
-        className="w-full flex items-center justify-between p-2.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-xl transition-all text-left group"
+        disabled={loading && !activeSite}
+        className="w-full flex items-center justify-between gap-2 h-10 px-2.5 bg-white hover:bg-neutral-50 border border-neutral-200 rounded-lg shadow-xs transition-colors text-left group"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <WebsiteFavicon domain={currentWebsite?.domain} className="w-7 h-7 shrink-0" size={64} />
-          <div className="truncate">
-            <span className="text-[10px] uppercase font-bold text-neutral-400 block tracking-wider leading-none mb-1">
-              Active Website
-            </span>
-            <span className="text-xs font-bold text-neutral-900 truncate block leading-tight">
-              {currentWebsite ? currentWebsite.domain : loading ? "Loading..." : "No Website Connected"}
-            </span>
-          </div>
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          {activeSite ? (
+            <>
+              <WebsiteFavicon domain={activeSite.domain} className="w-5 h-5 shrink-0 rounded" size={64} />
+              <span className="text-[13px] font-medium text-neutral-900 truncate">
+                {activeSite.domain}
+              </span>
+            </>
+          ) : loading ? (
+            <div className="flex items-center gap-2.5 w-full animate-pulse">
+              <div className="w-5 h-5 rounded bg-neutral-200 shrink-0" />
+              <div className="h-3.5 bg-neutral-200 rounded w-28" />
+            </div>
+          ) : (
+            <>
+              <div className="w-5 h-5 rounded bg-neutral-100 flex items-center justify-center text-neutral-400 shrink-0 text-xs">
+                🌐
+              </div>
+              <span className="text-[13px] font-medium text-neutral-500 truncate">
+                Connect a website
+              </span>
+            </>
+          )}
         </div>
         <ChevronDown className={`w-3.5 h-3.5 text-neutral-400 transition-transform shrink-0 ml-1 ${isOpen ? "rotate-180" : ""}`} />
       </button>

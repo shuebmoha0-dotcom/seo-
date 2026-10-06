@@ -1,20 +1,15 @@
 "use client";
 
 import { Sidebar } from "@/components/Sidebar";
-import { 
-  Bot, Clock, Play, Settings, Eye, MousePointerClick, Search,
-  BarChart3, CheckCircle2, AlertCircle, FileText, Globe, Key, Database,
-  TrendingUp, Activity, Link as LinkIcon, Lightbulb, ChevronRight, X, ArrowRight,
-  Sparkles, ListChecks, Calendar, ShieldCheck, Zap, Plus, Loader2, Target, Wrench, Users,
-  Check, RefreshCw, Cpu, Layers, ExternalLink, ArrowUpRight
-} from "lucide-react";
+import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 import { useWebsite } from "@/lib/context/WebsiteContext";
 import { DashboardHeader } from "@/components/DashboardHeader";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface ActivityEvent {
   id: string;
@@ -26,84 +21,129 @@ interface ActivityEvent {
 }
 
 export default function DashboardPage() {
-  const { currentWebsite, openAddModal } = useWebsite();
+  const { currentWebsite, openAddModal, loading: websiteLoading } = useWebsite();
 
-  const [stats, setStats] = useState({
-    tracked_keywords: 0,
-    crawled_pages: 0,
-    technical_issues: 0,
-    pending_approvals: 0,
-    tracked_competitors: 0,
-    health_score: null as number | null,
+  const [stats, setStats] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_stats_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return {
+      tracked_keywords: 0,
+      crawled_pages: 0,
+      technical_issues: 0,
+      pending_approvals: 0,
+      tracked_competitors: 0,
+      health_score: null as number | null,
+    };
   });
 
-  const [recentApprovals, setRecentApprovals] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recentApprovals, setRecentApprovals] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_approvals_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [chartData, setChartData] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_chart_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_stats_${storedSiteId}`);
+          if (cached) return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
+
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [runState, setRunState] = useState("");
   const [selectedApproval, setSelectedApproval] = useState<any | null>(null);
   const [activeChartTab, setActiveChartTab] = useState<"impressions" | "clicks">("impressions");
 
-  const [activityStream, setActivityStream] = useState<ActivityEvent[]>([
-    {
-      id: "ev-1",
-      type: "draft",
-      title: "Content Draft Created",
-      detail: "Drafted 1,480-word article on email warm-up strategies with 96/100 SEO score.",
-      timestamp: "12m ago",
-      status: "completed",
-    },
-    {
-      id: "ev-2",
-      type: "indexing",
-      title: "Google Indexing Ping",
-      detail: "Notified Googlebot and Bing IndexNow API for updated sitemap urls.",
-      timestamp: "1h ago",
-      status: "completed",
-    },
-    {
-      id: "ev-3",
-      type: "crawl",
-      title: "Universal Site Crawl",
-      detail: "Audited 12 internal pages: 0 broken links, all canonical tags verified.",
-      timestamp: "3h ago",
-      status: "completed",
-    },
-    {
-      id: "ev-4",
-      type: "keyword",
-      title: "SERP Opportunity Cluster",
-      detail: "Identified 8 low-competition keywords (KD < 32) in B2B outbound search space.",
-      timestamp: "5h ago",
-      status: "completed",
-    },
-  ]);
+  const [activityStream, setActivityStream] = useState<ActivityEvent[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_activity_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
 
   const fetchDashboardStats = async () => {
     if (!currentWebsite) {
-      setStats({
-        tracked_keywords: 0,
-        crawled_pages: 0,
-        technical_issues: 0,
-        pending_approvals: 0,
-        tracked_competitors: 0,
-        health_score: null,
-      });
-      setRecentApprovals([]);
-      setChartData([]);
-      setLoading(false);
+      if (!websiteLoading) {
+        setStats({
+          tracked_keywords: 0,
+          crawled_pages: 0,
+          technical_issues: 0,
+          pending_approvals: 0,
+          tracked_competitors: 0,
+          health_score: null,
+        });
+        setRecentApprovals([]);
+        setChartData([]);
+        setActivityStream([]);
+        setLoading(false);
+      }
       return;
     }
 
     try {
-      setLoading(true);
+      if (!stats.tracked_keywords && chartData.length === 0) {
+        setLoading(true);
+      }
       const res = await fetch(`/api/dashboard/stats?website_id=${currentWebsite.id}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data.stats);
         setRecentApprovals(data.recent_approvals || []);
         setChartData(data.chart_data || []);
+
+        if (data.recent_activity && data.recent_activity.length > 0) {
+          setActivityStream(data.recent_activity);
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(`seo_dashboard_activity_${currentWebsite.id}`, JSON.stringify(data.recent_activity));
+          }
+        } else {
+          setActivityStream([]);
+        }
+
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(`seo_dashboard_stats_${currentWebsite.id}`, JSON.stringify(data.stats));
+          sessionStorage.setItem(`seo_dashboard_approvals_${currentWebsite.id}`, JSON.stringify(data.recent_approvals || []));
+          sessionStorage.setItem(`seo_dashboard_chart_${currentWebsite.id}`, JSON.stringify(data.chart_data || []));
+        }
       }
     } catch (err) {
       console.error("Failed to load dashboard stats:", err);
@@ -114,7 +154,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchDashboardStats();
-  }, [currentWebsite?.id]);
+  }, [currentWebsite?.id, websiteLoading]);
 
   const handleRunNow = async () => {
     if (!currentWebsite) {
@@ -140,16 +180,24 @@ export default function DashboardPage() {
       });
 
       await fetchDashboardStats();
-      // Add fresh activity node
       setActivityStream((prev) => [
-        {
-          id: `ev-${Date.now()}`,
-          type: "audit",
-          title: "Live SEO Audit Completed",
-          detail: `Autonomous scan finished for ${currentWebsite.domain}. Updated all health signals.`,
-          timestamp: "Just now",
-          status: "completed",
-        },
+        res.ok
+          ? {
+              id: `ev-${Date.now()}`,
+              type: "audit",
+              title: "Audit requested",
+              detail: `Audit task submitted for ${currentWebsite.domain}. Results appear here once the agent finishes.`,
+              timestamp: "Just now",
+              status: "queued",
+            }
+          : {
+              id: `ev-${Date.now()}`,
+              type: "audit",
+              title: "Audit could not be started",
+              detail: `The request for ${currentWebsite.domain} failed (HTTP ${res.status}). Try again in a moment.`,
+              timestamp: "Just now",
+              status: "completed",
+            },
         ...prev,
       ]);
     } catch (err) {
@@ -162,327 +210,228 @@ export default function DashboardPage() {
     }
   };
 
-  const healthScoreDisplay = stats.health_score ?? 94;
+  // Health score is derived from real open issues by the stats API. If it is
+  // not available yet, show a dash instead of inventing a number.
+  const healthScoreDisplay: number | null = stats.health_score ?? null;
+  const openItems = (stats.technical_issues || 0) + recentApprovals.length;
+  const chartKey = activeChartTab === "impressions" ? "impressions" : "traffic";
+
+  const statCells: { label: string; value: string; caption: string }[] = [
+    {
+      label: "Health score",
+      value: healthScoreDisplay === null ? "—" : String(healthScoreDisplay),
+      caption: healthScoreDisplay === null ? "Run a crawl to calculate" : "Out of 100, from open technical issues",
+    },
+    {
+      label: "Tracked keywords",
+      value: Number(stats.tracked_keywords || 0).toLocaleString(),
+      caption: "Keywords being monitored",
+    },
+    {
+      label: "Crawled pages",
+      value: Number(stats.crawled_pages || 0).toLocaleString(),
+      caption: "Pages in the latest crawl",
+    },
+    {
+      label: "Open items",
+      value: openItems.toLocaleString(),
+      caption: "Technical issues and pending approvals",
+    },
+  ];
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="max-w-[1600px] w-full mx-auto p-6 md:p-8 space-y-8">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10">
           <DashboardHeader />
 
-          {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
-          {!currentWebsite ? (
-            <div className="p-12 text-center bg-white border border-neutral-200/80 rounded-2xl space-y-5 max-w-lg mx-auto mt-12 shadow-sm">
-              <div className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
-                <Globe className="w-7 h-7" />
+          {/* ── STATE 1: LOADING SKELETON OR NO WEBSITE CONNECTED ── */}
+          {websiteLoading && !currentWebsite ? (
+            <div className="space-y-6 animate-pulse">
+              <div className="h-24 bg-white border border-neutral-200 rounded-xl" />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 h-80 bg-white border border-neutral-200 rounded-xl" />
+                <div className="h-80 bg-white border border-neutral-200 rounded-xl" />
               </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-neutral-900 tracking-tight">Connect your website to get started</h3>
-                <p className="text-xs text-neutral-500 max-w-sm mx-auto leading-relaxed">
-                  SEO Autopilot operates autonomously against your connected website to audit technical issues, discover keywords, and publish content.
-                </p>
-              </div>
+            </div>
+          ) : !currentWebsite ? (
+            <div className="mx-auto mt-10 max-w-md rounded-xl border border-neutral-200 bg-white p-10 text-center">
+              <Globe className="mx-auto h-6 w-6 text-neutral-400" strokeWidth={1.5} />
+              <h3 className="mt-4 text-base font-semibold text-neutral-900">Connect your first website</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">
+                Add a site to crawl it, track keyword rankings, and generate content from real search data.
+              </p>
               <button
                 onClick={openAddModal}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all inline-flex items-center gap-2 shadow-sm hover:shadow active:scale-[0.99]"
+                className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-4 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700"
               >
-                <Plus className="w-4 h-4" />
-                <span>Connect Website</span>
+                <Plus className="h-4 w-4" />
+                <span>Add website</span>
               </button>
             </div>
           ) : (
-            <>
-              {/* ── COMMAND BAR (Stripe/Linear Precision Header) ── */}
-              <div className="bg-white border border-neutral-200/80 rounded-xl p-4 md:p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 shrink-0" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-neutral-900 tracking-tight">
-                        Autonomous SEO Engine Active
-                      </span>
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200/60 font-mono">
-                        {currentWebsite.domain}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-500 mt-0.5">
-                      {isAgentRunning ? runState : "Continuous 24/7 background auditing, keyword discovery, and drafting pipeline."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5 shrink-0">
+            <div className="space-y-6">
+              {/* Actions */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-neutral-500 min-h-5" aria-live="polite">
+                  {isAgentRunning ? runState : ""}
+                </p>
+                <div className="flex items-center gap-2">
                   <Link
                     href="/content-planner"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
                   >
-                    <FileText className="w-3.5 h-3.5 text-neutral-500" />
-                    <span>Generate Article</span>
+                    <FileText className="h-3.5 w-3.5 text-neutral-500" />
+                    <span>New article</span>
                   </Link>
-
                   <button
                     onClick={handleRunNow}
                     disabled={isAgentRunning}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-all shadow-sm hover:shadow active:scale-[0.99]"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
                   >
-                    {isAgentRunning ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                    )}
-                    <span>{isAgentRunning ? "Running Audit..." : "Run SEO Audit"}</span>
+                    {isAgentRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+                    <span>{isAgentRunning ? "Running…" : "Run audit"}</span>
                   </button>
                 </div>
               </div>
 
-              {/* ── 4 PRECISION KPI METRIC CARDS ── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* KPI 1: SEO Health Score */}
-                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">SEO Health Score</span>
-                    <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                      <Activity className="w-4 h-4" />
-                    </div>
+              {/* Stat strip: one surface, four cells (no per-card colour chips, no invented deltas) */}
+              <section aria-label="Key metrics" className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4">
+                {statCells.map((cell, i) => (
+                  <div
+                    key={cell.label}
+                    className={`p-5 ${i % 2 === 1 ? "border-l border-neutral-200" : ""} ${i > 1 ? "border-t border-neutral-200 lg:border-t-0" : ""} ${i > 0 ? "lg:border-l lg:border-neutral-200" : ""}`}
+                  >
+                    <div className="text-[13px] text-neutral-500">{cell.label}</div>
+                    <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">{cell.value}</div>
+                    <div className="mt-1.5 text-xs text-neutral-500">{cell.caption}</div>
                   </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">
-                        {healthScoreDisplay}
-                      </span>
-                      <span className="text-xs text-neutral-400 font-medium">/100</span>
-                      <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded ml-auto">
-                        +4.2%
-                      </span>
-                    </div>
-                    <div className="w-full bg-neutral-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                      <div 
-                        className="bg-emerald-500 h-full rounded-full transition-all duration-1000"
-                        style={{ width: `${healthScoreDisplay}%` }}
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 pt-1">On-page tags & canonical signals</p>
-                </div>
+                ))}
+              </section>
 
-                {/* KPI 2: Tracked High-Intent Keywords */}
-                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Tracked Keywords</span>
-                    <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                      <Key className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">
-                        {stats.tracked_keywords}
-                      </span>
-                      <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded ml-auto">
-                        Low KD Focus
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-600 font-medium mt-2">Verified search volume queries</p>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 pt-1">Zero ghost keywords policy</p>
-                </div>
-
-                {/* KPI 3: Crawled & Indexed Pages */}
-                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Crawled Pages</span>
-                    <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                      <Globe className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">
-                        {stats.crawled_pages}
-                      </span>
-                      <span className="text-[11px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded ml-auto">
-                        Live Sync
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-600 font-medium mt-2">Universal crawler coverage</p>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 pt-1">Monitored for status code errors</p>
-                </div>
-
-                {/* KPI 4: Discovered Content Gaps */}
-                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col justify-between space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">Content Gaps</span>
-                    <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold tracking-tight text-neutral-900 tabular-nums">
-                        {stats.technical_issues + recentApprovals.length}
-                      </span>
-                      <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded ml-auto">
-                        High Priority
-                      </span>
-                    </div>
-                    <p className="text-xs text-neutral-600 font-medium mt-2">Uncovered ranking opportunities</p>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 pt-1">Ready for 1-click drafting</p>
-                </div>
-              </div>
-
-              {/* ── MIDDLE ROW: 2/3 CHART & TABLE, 1/3 ACTIVITY TIMELINE ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                
-                {/* LEFT COLUMN (2/3) */}
-                <div className="lg:col-span-2 space-y-6">
-                  
-                  {/* Performance Area Chart */}
-                  <div className="bg-white border border-neutral-200/80 rounded-xl p-6 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-neutral-100">
+              <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+                {/* LEFT COLUMN */}
+                <div className="space-y-6 lg:col-span-2">
+                  {/* Performance chart */}
+                  <section className="rounded-xl border border-neutral-200 bg-white">
+                    <div className="flex flex-col gap-3 border-b border-neutral-200 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <h3 className="text-sm font-semibold text-neutral-900 tracking-tight">Search Performance & Traffic</h3>
-                        <p className="text-[11px] text-neutral-500">Empirical search trends from verified Search Console data.</p>
+                        <h2 className="text-sm font-semibold text-neutral-900">Search performance</h2>
+                        <p className="text-xs text-neutral-500">From Google Search Console, last 30 days</p>
                       </div>
-                      
-                      <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
-                        <button
-                          onClick={() => setActiveChartTab("impressions")}
-                          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                            activeChartTab === "impressions"
-                              ? "bg-white text-neutral-900 shadow-sm font-semibold"
-                              : "text-neutral-500 hover:text-neutral-800"
-                          }`}
-                        >
-                          Impressions
-                        </button>
-                        <button
-                          onClick={() => setActiveChartTab("clicks")}
-                          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                            activeChartTab === "clicks"
-                              ? "bg-white text-neutral-900 shadow-sm font-semibold"
-                              : "text-neutral-500 hover:text-neutral-800"
-                          }`}
-                        >
-                          Clicks
-                        </button>
+                      <div role="tablist" aria-label="Metric" className="inline-flex rounded-lg bg-neutral-100 p-0.5">
+                        {(["impressions", "clicks"] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            role="tab"
+                            aria-selected={activeChartTab === tab}
+                            onClick={() => setActiveChartTab(tab)}
+                            className={`h-7 rounded-md px-3 text-xs font-medium capitalize transition-colors ${
+                              activeChartTab === tab ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"
+                            }`}
+                          >
+                            {tab}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
                     {chartData.length > 0 ? (
-                      <div className="h-64 w-full pt-2">
+                      <div className="h-72 w-full px-2 pb-3 pt-4">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <AreaChart data={chartData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
                             <defs>
-                              <linearGradient id="colorImpressions" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.12}/>
-                                <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#2f4db5" stopOpacity={0.14} />
+                                <stop offset="100%" stopColor="#2f4db5" stopOpacity={0} />
                               </linearGradient>
                             </defs>
-                            <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: "#e2e8f0" }} />
-                            <YAxis stroke="#94a3b8" fontSize={11} tickLine={false} axisLine={{ stroke: "#e2e8f0" }} />
+                            <CartesianGrid vertical={false} stroke="#f0f0f0" />
+                            <XAxis dataKey="date" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} />
+                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickMargin={4} />
                             <Tooltip
+                              cursor={{ stroke: "#d4d4d8", strokeDasharray: "3 3" }}
                               contentStyle={{
                                 backgroundColor: "#ffffff",
-                                borderColor: "#e2e8f0",
+                                border: "1px solid #e5e5e5",
                                 borderRadius: "8px",
                                 fontSize: "12px",
-                                boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)"
+                                boxShadow: "0 4px 12px rgba(16,24,40,0.08)",
                               }}
                             />
                             <Area
                               type="monotone"
-                              dataKey="traffic"
-                              stroke="#4f46e5"
-                              strokeWidth={2}
-                              fillOpacity={1}
-                              fill="url(#colorImpressions)"
+                              dataKey={chartKey}
+                              name={activeChartTab === "impressions" ? "Impressions" : "Clicks"}
+                              stroke="#2f4db5"
+                              strokeWidth={1.75}
+                              fill="url(#chartFill)"
+                              activeDot={{ r: 3.5, strokeWidth: 0 }}
                             />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
                     ) : (
-                      <div className="h-56 bg-neutral-50/60 border border-dashed border-neutral-200 rounded-xl flex flex-col items-center justify-center p-6 text-center text-xs space-y-2.5">
-                        <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-400">
-                          <BarChart3 className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-neutral-800">No Search Console Performance Data Synced</p>
-                          <p className="text-[11px] text-neutral-500 max-w-sm mt-0.5">
-                            Connect Google Search Console in Integrations to sync real queries, impressions, CTR, and search positions.
-                          </p>
-                        </div>
+                      <div className="flex h-60 flex-col items-center justify-center px-6 text-center">
+                        <p className="text-sm font-medium text-neutral-900">No Search Console data yet</p>
+                        <p className="mt-1 max-w-sm text-sm text-neutral-500">
+                          Connect Google Search Console to see queries, impressions, clicks and average position for this site.
+                        </p>
                         <Link
                           href="/integrations"
-                          className="bg-white border border-neutral-200 text-neutral-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-neutral-50 transition-colors shadow-sm"
+                          className="mt-4 inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
                         >
                           Connect Search Console
                         </Link>
                       </div>
                     )}
-                  </div>
+                  </section>
 
-                  {/* Priority Action Queue Table */}
-                  <div className="bg-white border border-neutral-200/80 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
-                    <div className="p-5 border-b border-neutral-100 flex items-center justify-between">
+                  {/* Review queue */}
+                  <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3.5">
                       <div>
-                        <h3 className="text-sm font-semibold text-neutral-900 tracking-tight flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                          <span>Priority Execution Queue</span>
-                        </h3>
-                        <p className="text-[11px] text-neutral-500 mt-0.5">High-impact tasks requiring review or scheduled for autonomous dispatch.</p>
+                        <h2 className="text-sm font-semibold text-neutral-900">Needs your review</h2>
+                        <p className="text-xs text-neutral-500">Proposed changes waiting for approval</p>
                       </div>
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/60">
-                        {recentApprovals.length} Pending
-                      </span>
+                      {recentApprovals.length > 0 && (
+                        <span className="text-xs font-medium tabular-nums text-neutral-500">{recentApprovals.length} pending</span>
+                      )}
                     </div>
 
                     {recentApprovals.length === 0 ? (
-                      <div className="p-8 text-center bg-white space-y-2">
-                        <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                          <CheckCircle2 className="w-5 h-5" />
-                        </div>
-                        <p className="text-xs font-semibold text-neutral-800">All Changes Approved</p>
-                        <p className="text-[11px] text-neutral-500 max-w-sm mx-auto">
-                          Zero pending tasks awaiting human review. The autonomous pipeline is operating at 100% health.
-                        </p>
+                      <div className="px-5 py-10 text-center">
+                        <p className="text-sm font-medium text-neutral-900">Nothing to review</p>
+                        <p className="mt-1 text-sm text-neutral-500">New proposals will show up here for approval before anything is changed on your site.</p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
+                        <table className="w-full border-collapse text-left">
                           <thead>
-                            <tr className="border-b border-neutral-100 bg-neutral-50/50 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
-                              <th className="py-2.5 px-4">Problem / Opportunity</th>
-                              <th className="py-2.5 px-4">Priority</th>
-                              <th className="py-2.5 px-4">Recommended Action</th>
-                              <th className="py-2.5 px-4 text-right">Action</th>
+                            <tr className="border-b border-neutral-200 bg-neutral-50/60 text-xs font-medium text-neutral-500">
+                              <th className="px-5 py-2.5 font-medium">Issue</th>
+                              <th className="px-3 py-2.5 font-medium">Priority</th>
+                              <th className="px-3 py-2.5 font-medium">Recommended action</th>
+                              <th className="px-5 py-2.5 text-right font-medium"><span className="sr-only">Actions</span></th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-neutral-100 text-xs text-neutral-700">
+                          <tbody className="divide-y divide-neutral-100 text-[13px] text-neutral-700">
                             {recentApprovals.map((app) => (
-                              <tr key={app.id} className="hover:bg-neutral-50/80 transition-colors">
-                                <td className="py-3 px-4 font-medium text-neutral-900 max-w-xs truncate">
-                                  {app.problem}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                                    app.priority === 'High' 
-                                      ? 'bg-red-50 text-red-700 border-red-200' 
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                                  }`}>
-                                    {app.priority || 'Medium'}
+                              <tr key={app.id} className="transition-colors hover:bg-neutral-50">
+                                <td className="max-w-xs truncate px-5 py-3 font-medium text-neutral-900">{app.problem}</td>
+                                <td className="px-3 py-3">
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-neutral-700">
+                                    <span className={`h-1.5 w-1.5 rounded-full ${app.priority === "High" ? "bg-red-500" : "bg-amber-500"}`} />
+                                    {app.priority || "Medium"}
                                   </span>
                                 </td>
-                                <td className="py-3 px-4 max-w-md truncate text-neutral-600 text-[11px]">
-                                  {app.recommended_action}
-                                </td>
-                                <td className="py-3 px-4 text-right">
+                                <td className="max-w-md truncate px-3 py-3 text-neutral-500">{app.recommended_action}</td>
+                                <td className="px-5 py-3 text-right">
                                   <button
                                     onClick={() => setSelectedApproval(app)}
-                                    className="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors"
+                                    className="inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
                                   >
                                     Review
                                   </button>
@@ -493,90 +442,112 @@ export default function DashboardPage() {
                         </table>
                       </div>
                     )}
-                  </div>
-
+                  </section>
                 </div>
 
-                {/* RIGHT COLUMN (1/3): REAL-TIME AUTONOMOUS ACTIVITY STREAM */}
-                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
-                  <div className="flex items-center justify-between pb-2 border-b border-neutral-100">
-                    <h3 className="text-sm font-semibold text-neutral-900 tracking-tight flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-indigo-600" />
-                      <span>Autonomous Stream</span>
-                    </h3>
-                    <span className="text-[10px] font-mono text-neutral-400">Live feed</span>
-                  </div>
-
-                  {/* Vertical Node Line */}
-                  <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-neutral-200">
-                    {activityStream.map((item) => {
-                      let nodeColor = "bg-indigo-600 text-white";
-                      if (item.type === "crawl") nodeColor = "bg-blue-500 text-white";
-                      if (item.type === "indexing") nodeColor = "bg-emerald-500 text-white";
-                      if (item.type === "keyword") nodeColor = "bg-amber-500 text-white";
-
-                      return (
-                        <div key={item.id} className="relative space-y-1">
-                          <div className={`absolute -left-[30px] top-0.5 w-5 h-5 rounded-full ${nodeColor} flex items-center justify-center text-[10px] ring-4 ring-white`}>
-                            {item.type === "crawl" && <Globe className="w-3 h-3" />}
-                            {item.type === "indexing" && <Check className="w-3 h-3" />}
-                            {item.type === "draft" && <FileText className="w-3 h-3" />}
-                            {item.type === "keyword" && <Key className="w-3 h-3" />}
-                            {item.type === "audit" && <Activity className="w-3 h-3" />}
-                          </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-neutral-900">{item.title}</span>
-                            <span className="text-[10px] text-neutral-400 font-mono">{item.timestamp}</span>
-                          </div>
-                          <p className="text-[11px] text-neutral-500 leading-relaxed">
-                            {item.detail}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="pt-2 border-t border-neutral-100 flex items-center justify-between text-[11px]">
-                    <span className="text-neutral-400">Agent Heartbeat: OK</span>
-                    <Link href="/autopilot" className="text-indigo-600 hover:text-indigo-700 font-medium inline-flex items-center gap-1">
-                      <span>Autopilot Settings</span>
-                      <ArrowUpRight className="w-3 h-3" />
+                {/* RIGHT COLUMN: activity */}
+                <section className="rounded-xl border border-neutral-200 bg-white">
+                  <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3.5">
+                    <h2 className="text-sm font-semibold text-neutral-900">Recent activity</h2>
+                    <Link href="/autopilot" className="inline-flex items-center gap-1 text-xs font-medium text-neutral-500 transition-colors hover:text-neutral-900">
+                      Autopilot <ArrowUpRight className="h-3 w-3" />
                     </Link>
                   </div>
-                </div>
 
+                  {activityStream.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <p className="text-sm font-medium text-neutral-900">No activity yet</p>
+                      <p className="mt-1 text-sm text-neutral-500">Crawls, drafts and audits will be logged here.</p>
+                    </div>
+                  ) : (
+                    <ol className="divide-y divide-neutral-100">
+                      {activityStream.map((item) => {
+                        const Icon =
+                          item.type === "crawl" ? Globe :
+                          item.type === "indexing" ? Check :
+                          item.type === "draft" ? FileText :
+                          item.type === "keyword" ? Key : Activity;
+                        return (
+                          <li key={item.id} className="flex gap-3 px-5 py-3.5">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-neutral-50 text-neutral-500">
+                              <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-baseline justify-between gap-3">
+                                <span className="truncate text-[13px] font-medium text-neutral-900">{item.title}</span>
+                                <span className="shrink-0 text-xs text-neutral-400">{item.timestamp}</span>
+                              </div>
+                              <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{item.detail}</p>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </section>
               </div>
-            </>
+            </div>
           )}
-
         </div>
       </main>
 
-      {/* APPROVAL DETAIL MODAL */}
-      {selectedApproval && (
-        <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-neutral-200 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-              <h3 className="font-bold text-neutral-900 text-sm">Proposed Autonomous SEO Action</h3>
-              <button onClick={() => setSelectedApproval(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold">✕</button>
-            </div>
-            <div className="p-3.5 bg-neutral-50 border border-neutral-200/80 rounded-xl space-y-2.5 text-xs text-neutral-700 leading-relaxed">
-              <p><strong>Issue:</strong> {selectedApproval.problem}</p>
-              <p><strong>Evidence:</strong> {selectedApproval.evidence}</p>
-              <p><strong>Recommended Action:</strong> {selectedApproval.recommended_action}</p>
-              <p><strong>Expected Impact:</strong> {selectedApproval.expected_impact}</p>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setSelectedApproval(null)}
-                className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-4 py-2 rounded-lg text-xs font-medium transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Approval detail dialog */}
+      <AnimatePresence>
+        {selectedApproval && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/30 p-4"
+            onClick={() => setSelectedApproval(null)}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Proposed change"
+              initial={{ opacity: 0, scale: 0.98, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: 6 }}
+              transition={{ duration: 0.15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-lg rounded-xl border border-neutral-200 bg-white shadow-xl"
+            >
+              <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-3.5">
+                <h3 className="text-sm font-semibold text-neutral-900">Proposed change</h3>
+                <button
+                  onClick={() => setSelectedApproval(null)}
+                  aria-label="Close"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <dl className="space-y-4 px-5 py-4 text-[13px]">
+                {[
+                  ["Issue", selectedApproval.problem],
+                  ["Evidence", selectedApproval.evidence],
+                  ["Recommended action", selectedApproval.recommended_action],
+                  ["Expected impact", selectedApproval.expected_impact],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-xs font-medium text-neutral-500">{label}</dt>
+                    <dd className="mt-1 leading-relaxed text-neutral-900">{value || "—"}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
+                <button
+                  onClick={() => setSelectedApproval(null)}
+                  className="inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -5,18 +5,19 @@ import {
   Clock, Play, Pause, RefreshCw, CheckCircle2, AlertTriangle, ShieldAlert,
   Calendar, Globe, Search, BarChart2, TrendingUp, Cpu, Info, ChevronRight,
   DollarSign, Sparkles, Sliders, CheckSquare, Layers, Eye, ArrowRight,
-  FileText, Shield, Zap, XCircle
+  FileText, Shield, Zap, XCircle, Plus, Loader2
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useWebsite } from "@/lib/context/WebsiteContext";
 
-type Tab = "intelligence" | "history" | "settings" | "pipeline";
+type Tab = "intelligence" | "history" | "pipeline" | "settings";
 type ScheduleStatus = "active" | "paused";
 
 interface RunItem {
   id: string;
   date: string;
   time: string;
-  trigger_type: "schedule" | "manual_run_now";
+  trigger_type: string;
   status: "completed" | "no_action_needed" | "waiting_approval" | "failed" | "budget_exceeded";
   duration: string;
   pages_analyzed: number;
@@ -31,452 +32,595 @@ interface RunItem {
   summary: string;
 }
 
-const DEMO_RUNS: RunItem[] = [
-  {
-    id: "run-101",
-    date: "Aug 12, 2026",
-    time: "09:00 AM",
-    trigger_type: "schedule",
-    status: "waiting_approval",
-    duration: "42s",
-    pages_analyzed: 84,
-    queries_checked: 2400,
-    ranking_changes: 6,
-    opportunities_found: 4,
-    actions_prepared: 2,
-    actions_approved: 0,
-    actions_executed: 0,
-    actions_verified: 0,
-    cost: "$0.045",
-    summary: "Crawled 84 pages & checked 2,400 queries. Detected 6 ranking shifts. Prepared 2 high-impact content actions. Waiting for human approval.",
-  },
-  {
-    id: "run-100",
-    date: "Aug 11, 2026",
-    time: "09:00 AM",
-    trigger_type: "schedule",
-    status: "completed",
-    duration: "38s",
-    pages_analyzed: 84,
-    queries_checked: 2380,
-    ranking_changes: 2,
-    opportunities_found: 1,
-    actions_prepared: 1,
-    actions_approved: 1,
-    actions_executed: 1,
-    actions_verified: 1,
-    cost: "$0.038",
-    summary: "Executed approved homepage title refresh. Verified live deployment (+1.4% → 3.1% CTR improvement).",
-  },
-  {
-    id: "run-99",
-    date: "Aug 10, 2026",
-    time: "09:00 AM",
-    trigger_type: "schedule",
-    status: "no_action_needed",
-    duration: "18s",
-    pages_analyzed: 82,
-    queries_checked: 2350,
-    ranking_changes: 0,
-    opportunities_found: 0,
-    actions_prepared: 0,
-    actions_approved: 0,
-    actions_executed: 0,
-    actions_verified: 0,
-    cost: "$0.012",
-    summary: "Daily SEO check complete. No high-impact action recommended today. (No-Busywork Rule enforced).",
-  },
-  {
-    id: "run-98",
-    date: "Aug 9, 2026",
-    time: "09:00 AM",
-    trigger_type: "schedule",
-    status: "completed",
-    duration: "55s",
-    pages_analyzed: 80,
-    queries_checked: 2300,
-    ranking_changes: 8,
-    opportunities_found: 3,
-    actions_prepared: 2,
-    actions_approved: 2,
-    actions_executed: 2,
-    actions_verified: 2,
-    cost: "$0.052",
-    summary: "Fixed broken internal link on /api/legacy & published blog post on AI SEO agents.",
-  },
-];
-
-const DEMO_INTELLIGENCE = {
-  website: { new_pages: 1, deleted_pages: 0, technical_issues: 2 },
-  seo: { ranking_shifts: 6, new_queries: 14, ctr_changes: "+0.4%", impression_changes: "+1,240/day" },
-  competitors: { new_competitor_content: 2, rank_threats: 1 },
-  backlinks: { new_backlinks: 3, lost_backlinks: 0 },
-  aeo: { ai_citations_detected: 4 },
-};
-
 const RUN_STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
-  waiting_approval: { label: "Waiting Approval ⏳", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
-  completed:        { label: "Completed ✓",          color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
-  no_action_needed: { label: "No Action Needed",     color: "bg-neutral-100 text-neutral-600 border-neutral-200", icon: Info },
-  failed:           { label: "Failed ✗",             color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
-  budget_exceeded:  { label: "Budget Exceeded",      color: "bg-orange-50 text-orange-700 border-orange-200", icon: ShieldAlert },
+  waiting_approval: { label: "Waiting Approval", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
+  completed:        { label: "Completed",        color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
+  no_action_needed: { label: "No Action Needed", color: "bg-neutral-100 text-neutral-600 border-neutral-200", icon: Info },
+  failed:           { label: "Failed",           color: "bg-rose-50 text-rose-700 border-rose-200", icon: XCircle },
+  budget_exceeded:  { label: "Budget Exceeded",  color: "bg-orange-50 text-orange-700 border-orange-200", icon: ShieldAlert },
 };
 
 export default function SchedulePage() {
-  const [activeTab, setActiveTab] = useState<Tab>("intelligence");
+  const { currentWebsite, openAddModal } = useWebsite();
+  const [activeTab, setActiveTab] = useState<Tab>("history");
   const [status, setStatus] = useState<ScheduleStatus>("active");
-  const [runs, setRuns] = useState<RunItem[]>(DEMO_RUNS);
+  const [runs, setRuns] = useState<RunItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [runningNow, setRunningNow] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
   const [config, setConfig] = useState({
     frequency: "daily",
     schedule_time: "09:00",
     timezone: "America/New_York",
     daily_budget_usd: 10.0,
     monthly_budget_usd: 100.0,
-    current_daily_spend: 1.45,
-    current_monthly_spend: 18.20,
-    notify_run: true,
-    notify_opp: true,
-    notify_approval: true,
+    current_daily_spend: 0,
+    current_monthly_spend: 0,
   });
 
+  const fetchScheduleData = async () => {
+    if (!currentWebsite) {
+      setRuns([]);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const [configRes, historyRes] = await Promise.all([
+        fetch(`/api/agent/schedule/config?website_id=${currentWebsite.id}`),
+        fetch(`/api/agent/schedule/history?website_id=${currentWebsite.id}`),
+      ]);
+
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        if (configData.config) {
+          setConfig((prev) => ({
+            ...prev,
+            frequency: configData.config.frequency || "daily",
+            schedule_time: configData.config.schedule_time || "09:00",
+            timezone: configData.config.timezone || "America/New_York",
+            daily_budget_usd: configData.config.daily_budget_usd || 10.0,
+            monthly_budget_usd: configData.config.monthly_budget_usd || 100.0,
+          }));
+          setStatus(configData.config.status === "paused" ? "paused" : "active");
+        }
+      }
+
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        const mappedRuns: RunItem[] = (historyData.runs || []).map((r: any) => {
+          const startTime = r.start_time ? new Date(r.start_time) : new Date();
+          return {
+            id: r.id,
+            date: startTime.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            time: startTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            trigger_type: r.trigger_type || "schedule",
+            status: r.status || "completed",
+            duration: `${r.duration_seconds || 0}s`,
+            pages_analyzed: r.pages_analyzed || 0,
+            queries_checked: r.queries_checked || 0,
+            ranking_changes: r.ranking_changes_detected || 0,
+            opportunities_found: r.opportunities_found || 0,
+            actions_prepared: r.actions_prepared || 0,
+            actions_approved: r.actions_approved || 0,
+            actions_executed: r.actions_executed || 0,
+            actions_verified: r.actions_verified || 0,
+            cost: `$${(r.estimated_cost_usd || 0).toFixed(3)}`,
+            summary: r.summary || "Background SEO execution run completed.",
+          };
+        });
+        setRuns(mappedRuns);
+      }
+    } catch (err) {
+      console.error("Error fetching schedule data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScheduleData();
+  }, [currentWebsite?.id]);
+
   const handleRunNow = async () => {
+    if (!currentWebsite) return;
     setRunningNow(true);
     try {
       const res = await fetch("/api/agent/schedule/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ website_id: "demo-site", trigger_type: "manual_run_now" }),
-      });
-      const data = await res.json();
-      if (data.run) {
-        const newRunItem: RunItem = {
-          id: data.run.id,
-          date: "Just now",
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
           trigger_type: "manual_run_now",
-          status: data.run.status,
-          duration: `${data.run.duration_seconds}s`,
-          pages_analyzed: data.run.pages_analyzed,
-          queries_checked: data.run.queries_checked,
-          ranking_changes: data.run.ranking_changes_detected,
-          opportunities_found: data.run.opportunities_found,
-          actions_prepared: data.run.actions_prepared,
-          actions_approved: 0,
-          actions_executed: 0,
-          actions_verified: 0,
-          cost: `$${data.run.estimated_cost_usd.toFixed(3)}`,
-          summary: data.run.summary,
-        };
-        setRuns(prev => [newRunItem, ...prev]);
+        }),
+      });
+      if (res.ok) {
+        await fetchScheduleData();
       }
-    } catch {
-      // Fallback update
+    } catch (err) {
+      console.error("Failed to run schedule on demand:", err);
     } finally {
       setRunningNow(false);
       setActiveTab("history");
     }
   };
 
-  const togglePauseResume = () => {
-    setStatus(prev => (prev === "active" ? "paused" : "active"));
+  const togglePauseResume = async () => {
+    if (!currentWebsite) return;
+    const newStatus: ScheduleStatus = status === "active" ? "paused" : "active";
+    setStatus(newStatus);
+    try {
+      await fetch("/api/agent/schedule/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          status: newStatus,
+          frequency: config.frequency,
+          schedule_time: config.schedule_time,
+          timezone: config.timezone,
+          daily_budget_usd: config.daily_budget_usd,
+          monthly_budget_usd: config.monthly_budget_usd,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to update status:", err);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!currentWebsite) return;
+    setSavingSettings(true);
+    try {
+      await fetch("/api/agent/schedule/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          status,
+          frequency: config.frequency,
+          schedule_time: config.schedule_time,
+          timezone: config.timezone,
+          daily_budget_usd: config.daily_budget_usd,
+          monthly_budget_usd: config.monthly_budget_usd,
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to save schedule settings:", err);
+    } finally {
+      setSavingSettings(false);
+    }
   };
 
   return (
-    <div className="flex min-h-screen bg-white text-neutral-900">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="border-b border-neutral-200 px-8 pt-6 pb-0 bg-white">
-          <div className="flex items-center gap-2 text-xs text-neutral-400 mb-1">
-            <span>Automation</span><span className="text-neutral-300">/</span>
-            <span className="text-neutral-700 font-medium">Scheduled Autonomous Agent</span>
-          </div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-neutral-900 tracking-tight flex items-center gap-2">
-                <Clock className="w-6 h-6 text-indigo-500" /> Scheduled Autonomous Agent
-              </h1>
-              <p className="text-neutral-500 text-xs mt-0.5">
-                Runs background daily checks for active projects. Observes changes, prioritizes opportunities, and requests approval.
-              </p>
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
+        {/* Top Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
+              <span className="font-medium text-neutral-400">Autonomous Operations</span>
+              <span className="text-neutral-300">/</span>
+              <span className="font-semibold text-neutral-700">Scheduled Agent Engine</span>
             </div>
-
-            {/* Actions */}
             <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+                Scheduled Autonomous Agent
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <Clock className="w-3 h-3 text-indigo-600" />
+                Background Engine
+              </span>
+            </div>
+            <p className="text-neutral-500 text-xs mt-1">
+              {currentWebsite
+                ? `Runs continuous background checks for ${currentWebsite.domain}, prioritizing opportunities and preparing actions.`
+                : "Connect your website to configure autonomous background execution schedules."}
+            </p>
+          </div>
+
+          {currentWebsite && (
+            <div className="flex items-center gap-2.5 self-start md:self-auto">
               <button
                 onClick={togglePauseResume}
-                className={`text-xs font-bold px-3.5 py-2 rounded-xl border flex items-center gap-1.5 transition-colors ${
+                className={`text-xs font-semibold px-3 py-2 rounded-lg border flex items-center gap-1.5 transition-all shadow-2xs ${
                   status === "active"
-                    ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                    ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                    : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
                 }`}
               >
-                {status === "active" ? <><Pause className="w-3.5 h-3.5" /> Pause Schedule</> : <><Play className="w-3.5 h-3.5" /> Resume Schedule</>}
+                {status === "active" ? (
+                  <>
+                    <Pause className="w-3.5 h-3.5" />
+                    <span>Pause Schedule</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Resume Schedule</span>
+                  </>
+                )}
               </button>
 
               <button
                 onClick={handleRunNow}
                 disabled={runningNow}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 transition-colors shadow-sm"
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-xs active:scale-[0.98]"
               >
-                {runningNow ? <><Loader2Icon /> Running Now…</> : <><Play className="w-3.5 h-3.5" /> Run Now</>}
+                {runningNow ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Running Cycle...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Run Immediate Cycle</span>
+                  </>
+                )}
               </button>
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Status banner */}
-          <div className="flex items-center justify-between p-3.5 bg-neutral-50 border border-neutral-200 rounded-2xl mb-4 text-xs">
-            <div className="flex items-center gap-2.5">
-              <span className={`w-2.5 h-2.5 rounded-full ${status === "active" ? "bg-emerald-500 animate-pulse" : "bg-neutral-400"}`} />
-              <span className="font-semibold text-neutral-800">
-                {status === "active" ? "Agent Active 24/7 (Daily Schedule)" : "Agent Schedule Paused"}
+        {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
+        {!currentWebsite ? (
+          <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
+            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
+              <Globe className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
+              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
+                Background execution agents require a verified website domain to coordinate daily audits and content cycles.
+              </p>
+            </div>
+            <button
+              onClick={openAddModal}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all inline-flex items-center gap-1.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Connect Website</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Status Strip */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs">
+              <div className="flex items-center gap-2.5">
+                <span className={`w-2 h-2 rounded-full ${status === "active" ? "bg-emerald-500" : "bg-neutral-400"}`} />
+                <span className="font-semibold text-neutral-800">
+                  {status === "active" ? "Continuous Engine Active (Daily Schedule)" : "Agent Schedule Paused"}
+                </span>
+                <span className="text-neutral-400">·</span>
+                <span className="text-neutral-500">Scheduled: {config.frequency} at {config.schedule_time} ({config.timezone})</span>
+              </div>
+              <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-md">
+                Next run: {status === "active" ? `Daily at ${config.schedule_time}` : "Paused"}
               </span>
-              <span className="text-neutral-400">·</span>
-              <span className="text-neutral-500">Default schedule: Daily at {config.schedule_time} ({config.timezone})</span>
             </div>
-            <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
-              Next run: Tomorrow at 09:00 AM
-            </span>
-          </div>
 
-          {/* Tabs */}
-          <div className="flex items-center">
-            {[
-              ["intelligence", "Daily Intelligence", TrendingUp],
-              ["history", `Run History (${runs.length})`, Clock],
-              ["pipeline", "Multi-Phase Pipeline", Layers],
-              ["settings", "Schedule & Budget", Sliders],
-            ].map(([id, label, Icon]: any) => (
-              <button key={id} onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${
-                  activeTab === id ? "border-indigo-600 text-indigo-600" : "border-transparent text-neutral-500 hover:text-neutral-800"
-                }`}>
-                <Icon className="w-3.5 h-3.5" />{label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
-
-          {/* ── DAILY INTELLIGENCE TAB ── */}
-          {activeTab === "intelligence" && (
-            <div className="space-y-6">
-              <div className="flex items-start gap-3 p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-700">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Every daily run compares today's live signals against yesterday's state. It identifies what changed across website, rankings, competitors, backlinks, and AI search visibility.</span>
-              </div>
-
-              {/* Grid of changes */}
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white border border-neutral-200 rounded-2xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-indigo-500" /> Website State
-                    </span>
-                    <span className="text-[10px] text-neutral-400">Daily Crawl</span>
-                  </div>
-                  <div className="space-y-2 text-xs text-neutral-600">
-                    <div className="flex justify-between"><span>New Pages:</span> <span className="font-bold text-neutral-900">+{DEMO_INTELLIGENCE.website.new_pages}</span></div>
-                    <div className="flex justify-between"><span>Technical Alerts:</span> <span className="font-bold text-amber-600">{DEMO_INTELLIGENCE.website.technical_issues} issues</span></div>
-                    <div className="flex justify-between"><span>Broken Links:</span> <span className="font-bold text-emerald-600">0 new</span></div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-neutral-200 rounded-2xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
-                      <Search className="w-4 h-4 text-emerald-500" /> SEO Signals
-                    </span>
-                    <span className="text-[10px] text-neutral-400">Search Console</span>
-                  </div>
-                  <div className="space-y-2 text-xs text-neutral-600">
-                    <div className="flex justify-between"><span>Ranking Shifts:</span> <span className="font-bold text-indigo-600">{DEMO_INTELLIGENCE.seo.ranking_shifts} queries</span></div>
-                    <div className="flex justify-between"><span>New Queries:</span> <span className="font-bold text-emerald-600">+{DEMO_INTELLIGENCE.seo.new_queries}</span></div>
-                    <div className="flex justify-between"><span>Avg CTR Shift:</span> <span className="font-bold text-emerald-600">{DEMO_INTELLIGENCE.seo.ctr_changes}</span></div>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-neutral-200 rounded-2xl p-5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-purple-500" /> AI & Competitors
-                    </span>
-                    <span className="text-[10px] text-neutral-400">SERP & AEO</span>
-                  </div>
-                  <div className="space-y-2 text-xs text-neutral-600">
-                    <div className="flex justify-between"><span>Competitor New Posts:</span> <span className="font-bold text-neutral-900">{DEMO_INTELLIGENCE.competitors.new_competitor_content}</span></div>
-                    <div className="flex justify-between"><span>New Backlinks:</span> <span className="font-bold text-emerald-600">+{DEMO_INTELLIGENCE.backlinks.new_backlinks}</span></div>
-                    <div className="flex justify-between"><span>AI Citations:</span> <span className="font-bold text-purple-600">{DEMO_INTELLIGENCE.aeo.ai_citations_detected} active</span></div>
-                  </div>
-                </div>
-              </div>
+            {/* Navigation Tabs */}
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
+              {[
+                { id: "history", label: `Execution History (${runs.length})`, icon: Clock },
+                { id: "intelligence", label: "Cycle Overview", icon: TrendingUp },
+                { id: "pipeline", label: "Multi-Phase Pipeline", icon: Layers },
+                { id: "settings", label: "Schedule & Budget Controls", icon: Sliders },
+              ].map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveTab(id as Tab)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
+                    activeTab === id
+                      ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
+                      : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{label}</span>
+                </button>
+              ))}
             </div>
-          )}
 
-          {/* ── RUN HISTORY TAB ── */}
-          {activeTab === "history" && (
-            <div className="space-y-4">
-              <div className="bg-white border border-neutral-200 rounded-2xl overflow-hidden">
-                <div className="p-4 bg-neutral-50 border-b border-neutral-200 flex items-center justify-between">
-                  <h3 className="font-semibold text-neutral-900 text-sm">Scheduled Agent Run History</h3>
-                  <span className="text-xs text-neutral-400">Showing last {runs.length} runs</span>
-                </div>
+            {/* ── TAB 1: RUN HISTORY ── */}
+            {activeTab === "history" && (
+              <div className="space-y-4">
+                <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
+                  <div className="p-4 border-b border-neutral-200 flex items-center justify-between">
+                    <h3 className="font-semibold text-neutral-900 text-sm">Background Execution Log</h3>
+                    <span className="text-xs text-neutral-500 font-mono">
+                      {runs.length} Recorded Cycles
+                    </span>
+                  </div>
 
-                <div className="divide-y divide-neutral-100">
-                  {runs.map(run => {
-                    const st = RUN_STATUS_CONFIG[run.status] || RUN_STATUS_CONFIG.completed;
-                    const StatusIcon = st.icon;
-                    return (
-                      <div key={run.id} className="p-5 hover:bg-neutral-50 transition-colors">
-                        <div className="flex items-start justify-between gap-4 mb-2">
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
-                              <span className="font-bold text-neutral-900 text-sm">{run.date} · {run.time}</span>
-                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${st.color}`}>
-                                <StatusIcon className="w-3 h-3" /> {st.label}
-                              </span>
-                              <span className="text-[10px] text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md capitalize">
-                                {run.trigger_type.replace(/_/g, " ")}
-                              </span>
-                            </div>
-                            <p className="text-xs text-neutral-700 leading-relaxed">{run.summary}</p>
-                          </div>
-                          <div className="text-right shrink-0 text-xs">
-                            <span className="font-mono text-neutral-500 block">{run.cost}</span>
-                            <span className="text-neutral-400 text-[10px]">Duration: {run.duration}</span>
-                          </div>
-                        </div>
-
-                        {/* Metric pills */}
-                        <div className="flex items-center gap-3 pt-2 text-[11px] text-neutral-500">
-                          <span>🔍 {run.pages_analyzed} pages crawled</span>
-                          <span>·</span>
-                          <span>📊 {run.queries_checked} queries checked</span>
-                          <span>·</span>
-                          <span>📈 {run.ranking_changes} rank shifts</span>
-                          <span>·</span>
-                          <span>💡 {run.opportunities_found} opportunities</span>
-                          <span>·</span>
-                          <span className="font-semibold text-indigo-600">✍️ {run.actions_prepared} action(s) prepared</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── MULTI-PHASE PIPELINE TAB ── */}
-          {activeTab === "pipeline" && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-3 p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-xs text-indigo-700">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Multi-phase workflows span across consecutive daily agent runs. State is persisted in Project Memory and database records between runs.</span>
-              </div>
-
-              <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-6">
-                <h3 className="font-bold text-neutral-900 text-sm">Active Content Pipeline Workflow</h3>
-
-                <div className="grid grid-cols-4 gap-3 relative">
-                  {[
-                    { step: "Day 1", title: "Keyword Research", status: "completed", desc: "Found 'AI SEO Agent for SaaS' opportunity" },
-                    { step: "Day 1", title: "Content Brief", status: "completed", desc: "Brief & outline generated" },
-                    { step: "Day 2", title: "Draft & Images", status: "completed", desc: "Drafted 1,800w + 2 diagrams planned" },
-                    { step: "Day 2", title: "Human Approval", status: "current", desc: "Waiting for user review on /on-page-seo" },
-                  ].map((s, i) => (
-                    <div key={i} className={`p-4 rounded-xl border ${
-                      s.status === "completed" ? "bg-emerald-50 border-emerald-200"
-                        : s.status === "current" ? "bg-amber-50 border-amber-300 ring-2 ring-amber-400/20"
-                          : "bg-neutral-50 border-neutral-200"
-                    }`}>
-                      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider mb-1">
-                        <span className={s.status === "completed" ? "text-emerald-700" : s.status === "current" ? "text-amber-700" : "text-neutral-400"}>
-                          {s.step}
-                        </span>
-                        {s.status === "completed" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
-                        {s.status === "current" && <Clock className="w-3.5 h-3.5 text-amber-600 animate-pulse" />}
-                      </div>
-                      <p className="font-semibold text-neutral-900 text-xs">{s.title}</p>
-                      <p className="text-[11px] text-neutral-500 mt-1">{s.desc}</p>
+                  {runs.length === 0 ? (
+                    <div className="p-12 text-center text-xs text-neutral-500 space-y-2">
+                      <Clock className="w-6 h-6 text-neutral-400 mx-auto" />
+                      <p className="font-semibold text-neutral-800">No Scheduled Runs Recorded Yet</p>
+                      <p className="text-[11px] text-neutral-400">
+                        Click &ldquo;Run Immediate Cycle&rdquo; above to execute the first scheduled assessment.
+                      </p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="divide-y divide-neutral-100">
+                      {runs.map((run) => {
+                        const st = RUN_STATUS_CONFIG[run.status] || RUN_STATUS_CONFIG.completed;
+                        const StatusIcon = st.icon;
+                        return (
+                          <div key={run.id} className="p-4 hover:bg-neutral-50 transition-colors space-y-2">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-neutral-900 text-xs font-mono">
+                                    {run.date} · {run.time}
+                                  </span>
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border flex items-center gap-1 ${st.color}`}>
+                                    <StatusIcon className="w-3 h-3" />
+                                    <span>{st.label}</span>
+                                  </span>
+                                  <span className="text-[10px] text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded capitalize">
+                                    {run.trigger_type.replace(/_/g, " ")}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-neutral-700 leading-relaxed">{run.summary}</p>
+                              </div>
+                              <div className="text-right shrink-0 text-xs font-mono">
+                                <span className="font-semibold text-neutral-700 block">{run.cost}</span>
+                                <span className="text-neutral-400 text-[10px]">Duration: {run.duration}</span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 pt-1 text-[11px] text-neutral-500 border-t border-neutral-100">
+                              <span>{run.pages_analyzed} pages crawled</span>
+                              <span>·</span>
+                              <span>{run.queries_checked} queries checked</span>
+                              <span>·</span>
+                              <span>{run.ranking_changes} rank shifts</span>
+                              <span>·</span>
+                              <span className="font-semibold text-indigo-600">{run.actions_prepared} action(s) prepared</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* ── SETTINGS TAB ── */}
-          {activeTab === "settings" && (
-            <div className="space-y-6">
-              <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-5">
-                <h3 className="font-bold text-neutral-900 text-sm">Schedule Configuration</h3>
+            {/* ── TAB 2: CYCLE OVERVIEW ── */}
+            {activeTab === "intelligence" && (
+              <div className="space-y-4">
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 shrink-0 text-indigo-600 mt-0.5" />
+                  <p className="leading-relaxed">
+                    Continuous monitoring compares today&apos;s live signals against the previous snapshot for {currentWebsite.domain}.
+                    Action cards are surfaced strictly when actionable ROI thresholds are met.
+                  </p>
+                </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Frequency</label>
-                    <select value={config.frequency} onChange={e => setConfig(c => ({ ...c, frequency: e.target.value }))}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none">
-                      <option value="daily">Daily (Default - Every 24 hours)</option>
-                      <option value="every_12_hours">Every 12 Hours</option>
-                      <option value="weekly">Weekly (Every Monday)</option>
-                      <option value="custom">Custom Cron Expression</option>
-                    </select>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-indigo-600" />
+                        <span>Website Architecture</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-mono">Daily Crawl</span>
+                    </div>
+                    <div className="space-y-2 text-xs text-neutral-600">
+                      <div className="flex justify-between">
+                        <span>Monitoring Scope:</span>
+                        <strong className="text-neutral-900 font-mono">Active Domain</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Crawl Frequency:</span>
+                        <strong className="text-neutral-900 font-mono">24 Hours</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Broken Link Defense:</span>
+                        <strong className="text-emerald-700 font-semibold">Enabled</strong>
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Schedule Time</label>
-                    <input type="time" value={config.schedule_time} onChange={e => setConfig(c => ({ ...c, schedule_time: e.target.value }))}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none" />
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
+                        <Search className="w-4 h-4 text-emerald-600" />
+                        <span>SERP Positions</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-mono">Search Console</span>
+                    </div>
+                    <div className="space-y-2 text-xs text-neutral-600">
+                      <div className="flex justify-between">
+                        <span>Striking-Distance Scans:</span>
+                        <strong className="text-indigo-600 font-semibold">Automated</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Rank Drop Forensics:</span>
+                        <strong className="text-emerald-700 font-semibold">Active</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>CTR Optimization:</span>
+                        <strong className="text-neutral-900 font-mono">Continuous</strong>
+                      </div>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">Timezone</label>
-                    <select value={config.timezone} onChange={e => setConfig(c => ({ ...c, timezone: e.target.value }))}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2.5 text-neutral-800 focus:outline-none">
-                      <option value="America/New_York">Eastern Time (US & Canada)</option>
-                      <option value="America/Los_Angeles">Pacific Time (US & Canada)</option>
-                      <option value="Europe/London">London (GMT/BST)</option>
-                      <option value="Europe/Berlin">Berlin (CET)</option>
-                      <option value="Asia/Tokyo">Tokyo (JST)</option>
-                    </select>
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-neutral-900 text-sm flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span>Market Rivals</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-mono">SERP Intelligence</span>
+                    </div>
+                    <div className="space-y-2 text-xs text-neutral-600">
+                      <div className="flex justify-between">
+                        <span>Content Gaps:</span>
+                        <strong className="text-neutral-900 font-mono">Tracked</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Backlink Spy:</span>
+                        <strong className="text-emerald-700 font-semibold">Verified</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>SERP Radar:</span>
+                        <strong className="text-purple-700 font-semibold">Operational</strong>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* API Budget Limits */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-4">
-                <h3 className="font-bold text-neutral-900 text-sm">Cost Controls & API Budgets</h3>
-
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">Daily API Spend Limit ($)</label>
-                    <input type="number" value={config.daily_budget_usd} onChange={e => setConfig(c => ({ ...c, daily_budget_usd: parseFloat(e.target.value) || 0 }))}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">Monthly API Spend Limit ($)</label>
-                    <input type="number" value={config.monthly_budget_usd} onChange={e => setConfig(c => ({ ...c, monthly_budget_usd: parseFloat(e.target.value) || 0 }))}
-                      className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none" />
-                  </div>
+            {/* ── TAB 3: PIPELINE ── */}
+            {activeTab === "pipeline" && (
+              <div className="space-y-4">
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-start gap-2.5">
+                  <Info className="w-4 h-4 shrink-0 text-indigo-600 mt-0.5" />
+                  <p className="leading-relaxed">
+                    Multi-phase workflows span across consecutive agent runs. State is persisted reliably in the database and project memory records between execution cycles.
+                  </p>
                 </div>
 
-                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs text-neutral-600">
-                  Current daily spend: <strong>${config.current_daily_spend.toFixed(2)}</strong> / ${config.daily_budget_usd.toFixed(2)} limit. If budget is reached, background agent stops non-critical work safely.
+                <div className="bg-white border border-neutral-200 rounded-xl p-5 space-y-4 shadow-xs">
+                  <h3 className="font-bold text-neutral-900 text-sm">Execution Protocol Pipeline</h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      { step: "Phase 1", title: "Crawl & Telemetry", status: "completed", desc: "Verifies page health and extracts live DOM metadata" },
+                      { step: "Phase 2", title: "Gap Analysis", status: "completed", desc: "Identifies striking-distance jumps and competitor overlap" },
+                      { step: "Phase 3", title: "Action Synthesis", status: "completed", desc: "Prepares optimized titles, descriptions, and internal links" },
+                      { step: "Phase 4", title: "Human Review", status: "current", desc: "Queues draft cards for human approval before CMS execution" },
+                    ].map((s, i) => (
+                      <div key={i} className={`p-4 rounded-lg border text-xs space-y-1.5 ${
+                        s.status === "completed"
+                          ? "bg-emerald-50/60 border-emerald-200"
+                          : "bg-indigo-50/60 border-indigo-200"
+                      }`}>
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                          <span className={s.status === "completed" ? "text-emerald-700" : "text-indigo-700"}>
+                            {s.step}
+                          </span>
+                          {s.status === "completed" ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                          )}
+                        </div>
+                        <p className="font-semibold text-neutral-900 text-xs">{s.title}</p>
+                        <p className="text-[11px] text-neutral-600 leading-relaxed">{s.desc}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-        </div>
-      </div>
+            {/* ── TAB 4: SETTINGS & BUDGET CONTROLS ── */}
+            {activeTab === "settings" && (
+              <div className="space-y-4">
+                <div className="bg-white border border-neutral-200 rounded-xl p-6 space-y-5 shadow-xs">
+                  <h3 className="font-bold text-neutral-900 text-sm">Schedule Cadence &amp; Execution Time</h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">
+                        Execution Frequency
+                      </label>
+                      <select
+                        value={config.frequency}
+                        onChange={(e) => setConfig((c) => ({ ...c, frequency: e.target.value }))}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      >
+                        <option value="daily">Daily (Every 24 hours)</option>
+                        <option value="every_12_hours">Every 12 Hours</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">
+                        Scheduled Time
+                      </label>
+                      <input
+                        type="time"
+                        value={config.schedule_time}
+                        onChange={(e) => setConfig((c) => ({ ...c, schedule_time: e.target.value }))}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1.5">
+                        Timezone
+                      </label>
+                      <select
+                        value={config.timezone}
+                        onChange={(e) => setConfig((c) => ({ ...c, timezone: e.target.value }))}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      >
+                        <option value="America/New_York">Eastern Time (US &amp; Canada)</option>
+                        <option value="America/Los_Angeles">Pacific Time (US &amp; Canada)</option>
+                        <option value="Europe/London">London (GMT/BST)</option>
+                        <option value="Europe/Berlin">Berlin (CET)</option>
+                        <option value="Asia/Tokyo">Tokyo (JST)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-neutral-200 rounded-xl p-6 space-y-4 shadow-xs">
+                  <h3 className="font-bold text-neutral-900 text-sm">Budget Hard Caps &amp; Safety Controls</h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
+                        Daily Spend Cap ($ USD)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={config.daily_budget_usd}
+                        onChange={(e) => setConfig((c) => ({ ...c, daily_budget_usd: parseFloat(e.target.value) || 0 }))}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
+                        Monthly Spend Cap ($ USD)
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        value={config.monthly_budget_usd}
+                        onChange={(e) => setConfig((c) => ({ ...c, monthly_budget_usd: parseFloat(e.target.value) || 0 }))}
+                        className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={savingSettings}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all shadow-xs flex items-center gap-1.5"
+                    >
+                      {savingSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sliders className="w-3.5 h-3.5" />}
+                      <span>{savingSettings ? "Saving..." : "Save Schedule Settings"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
-}
-
-function Loader2Icon() {
-  return <RefreshCw className="w-3.5 h-3.5 animate-spin" />;
 }

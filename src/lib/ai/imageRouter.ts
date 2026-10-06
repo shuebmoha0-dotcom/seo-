@@ -613,6 +613,27 @@ async function recordImageUsage(data: {
       }
     }
 
+    // If still missing website or user, associate with primary site so events are tracked
+    if (!websiteId || !userId) {
+      const { data: defaultSite } = await supabase
+        .from('websites')
+        .select('id, user_id, project_id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (defaultSite) {
+        if (!websiteId) websiteId = defaultSite.id;
+        if (!userId && isValidUuid(defaultSite.user_id)) userId = defaultSite.user_id;
+        if (!projectId && isValidUuid(defaultSite.project_id)) projectId = defaultSite.project_id;
+      }
+    }
+
+    const PLATFORM_ADMIN_USER_ID = '0a035c76-db28-4071-9294-db59ca23d1a5';
+    if (!userId) {
+      userId = PLATFORM_ADMIN_USER_ID;
+    }
+
     const { error } = await supabase.from('usage_events').insert({
       user_id: userId,
       project_id: projectId,

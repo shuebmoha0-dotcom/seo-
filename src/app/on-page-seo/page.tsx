@@ -14,7 +14,7 @@ import { useWebsite } from "@/lib/context/WebsiteContext";
 type RiskLevel = "low" | "medium" | "high";
 type Priority = "critical" | "high" | "medium" | "low";
 type QAStatus = "pass" | "needs_revision" | "needs_content_agent";
-type Tab = "overview" | "recommendations" | "metadata" | "schema" | "qa" | "agent-tasks";
+type Tab = "overview" | "recommendations" | "metadata" | "schema" | "qa";
 
 interface Recommendation {
   category: string;
@@ -128,13 +128,12 @@ export default function OnPageSEOPage() {
     search_intent: "informational",
     content_type: "blog_article",
   });
-  const [expandedRec, setExpandedRec] = useState<number | null>(null);
 
   useEffect(() => {
     if (currentWebsite) {
       setForm(f => ({
         ...f,
-        url: currentWebsite.url,
+        url: currentWebsite.url || (currentWebsite.domain ? `https://${currentWebsite.domain}` : ""),
         target_keyword: currentWebsite.domain.split('.')[0],
       }));
     }
@@ -209,259 +208,286 @@ export default function OnPageSEOPage() {
   const qaPassed = qaItems.filter(([, v]) => v === true).length;
 
   return (
-    <div className="flex min-h-screen bg-white text-neutral-900 selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 selection:bg-indigo-500/20 font-sans">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="border-b border-neutral-200 px-8 pt-6 pb-0 bg-white">
-          <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-            <span>AI Agents</span><span>/</span>
-            <span className="text-neutral-700 font-medium">On-Page SEO Agent</span>
-          </div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-neutral-900 tracking-tight">On-Page SEO Agent</h1>
-              <p className="text-neutral-500 text-xs mt-0.5">
-                {currentWebsite
-                  ? `Analyzes live pages on ${currentWebsite.domain} for search intent, content quality, and metadata.`
-                  : "Connect your website to analyze on-page SEO signals."}
-              </p>
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
+        {/* Top Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
+              <span className="font-medium text-neutral-400">Content Studio</span>
+              <span className="text-neutral-300">/</span>
+              <span className="font-semibold text-neutral-700">On-Page Diagnostics</span>
             </div>
-            {result && (
-              <div className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-full border ${
-                result.status === "pass"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-amber-50 text-amber-700 border-amber-200"
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${
-                  result.status === "pass" ? "bg-emerald-500" : "bg-amber-500"
-                }`} />
-                {result.status === "pass" ? "PASS — Ready for Approval" : "NEEDS REVISION"}
-              </div>
-            )}
-          </div>
-
-          {/* Tabs */}
-          <div className="flex items-center">
-            {([
-              ["overview", "Overview", Layers],
-              ["recommendations", `Recommendations${recs.length ? ` (${recs.length})` : ""}`, Sparkles],
-              ["metadata", "SEO Metadata", Tag],
-              ["schema", "Schema", Code2],
-              ["qa", `QA Checklist (${qaPassed}/${qaItems.length || 16})`, CheckCircle2],
-            ] as const).map(([id, label, Icon]) => (
-              <button key={id} onClick={() => setActiveTab(id as Tab)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${
-                  activeTab === id ? "border-indigo-600 text-indigo-600" : "border-transparent text-neutral-500 hover:text-neutral-800"
-                }`}>
-                <Icon className="w-3.5 h-3.5" />{label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
-          {!currentWebsite ? (
-            <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-4 max-w-lg mx-auto">
-              <div className="w-12 h-12 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
-                <Globe className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-neutral-900">Connect your website to get started</h3>
-                <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                  On-Page SEO analysis evaluates live HTML against target search intents and ranking keywords.
-                </p>
-              </div>
-              <button
-                onClick={openAddModal}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors inline-flex items-center gap-1.5 shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Connect Website</span>
-              </button>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+                On-Page SEO Diagnostics &amp; Audit
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                <Target className="w-3 h-3 text-indigo-600" />
+                SERP Intent Engine
+              </span>
             </div>
-          ) : (
-            <>
-              {/* Input Form */}
-              <form onSubmit={handleAnalyze} className="bg-neutral-50 border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1.5">Page URL *</label>
-                    <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} required
-                      placeholder="https://yoursite.com/blog/page"
-                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500 font-mono shadow-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1.5">Target Keyword *</label>
-                    <input value={form.target_keyword} onChange={e => setForm(f => ({ ...f, target_keyword: e.target.value }))} required
-                      placeholder="e.g. AI SEO agent"
-                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2.5 text-xs text-neutral-900 focus:outline-none focus:border-indigo-500 shadow-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1.5">Search Intent</label>
-                    <select value={form.search_intent} onChange={e => setForm(f => ({ ...f, search_intent: e.target.value }))}
-                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2.5 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-sm">
-                      <option value="informational">Informational</option>
-                      <option value="commercial_investigation">Commercial Investigation</option>
-                      <option value="transactional">Transactional</option>
-                      <option value="comparison">Comparison</option>
-                      <option value="problem_solution">Problem / Solution</option>
-                    </select>
-                  </div>
-                  <div>
-                    <button type="submit" disabled={analyzing || !form.url.trim()}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm">
-                      {analyzing ? <><Loader2 className="w-4 h-4 animate-spin" /> Analyzing…</> : <><Search className="w-4 h-4" /> Analyze Page</>}
-                    </button>
-                  </div>
-                </div>
-              </form>
+            <p className="text-neutral-500 text-xs mt-1">
+              {currentWebsite
+                ? `Analyzes live pages on ${currentWebsite.domain} for search intent, content depth, and heading hierarchy.`
+                : "Connect your website to analyze on-page SEO signals."}
+            </p>
+          </div>
 
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 text-red-800 text-xs">
-                  <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {!result && !analyzing && (
-                <div className="p-12 text-center bg-neutral-50 border border-neutral-200 rounded-3xl space-y-3 max-w-lg mx-auto">
-                  <FileText className="w-8 h-8 text-neutral-400 mx-auto" />
-                  <h3 className="text-base font-bold text-neutral-900">No Page Analyzed Yet</h3>
-                  <p className="text-xs text-neutral-500 max-w-sm mx-auto">
-                    Enter any page URL on {currentWebsite.domain} and click &ldquo;Analyze Page&rdquo; to evaluate search intent, heading hierarchy, and meta optimization.
-                  </p>
-                </div>
-              )}
-
-              {result && (
-                <>
-                  {/* ── OVERVIEW TAB ── */}
-                  {activeTab === "overview" && (
-                    <div className="space-y-5">
-                      {/* Diagnostic Scores */}
-                      <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-                        <div className="flex items-center justify-between mb-5">
-                          <div>
-                            <h3 className="font-bold text-neutral-900 text-sm">Diagnostic Quality Scores</h3>
-                            <p className="text-xs text-neutral-500 mt-0.5 flex items-center gap-1">
-                              <Info className="w-3 h-3" /> {result.diagnostic_scores.note}
-                            </p>
-                          </div>
-                          <div className="text-center">
-                            <ScoreRing score={result.diagnostic_scores.overall} label="Overall" size={72} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-5 gap-4">
-                          <ScoreRing score={result.diagnostic_scores.intent_alignment} label="Intent Alignment" />
-                          <ScoreRing score={result.diagnostic_scores.content_coverage} label="Content Depth" />
-                          <ScoreRing score={result.diagnostic_scores.technical} label="Technical" />
-                          <ScoreRing score={result.diagnostic_scores.metadata} label="Metadata" />
-                          <ScoreRing score={result.diagnostic_scores.linking} label="Internal Links" />
-                        </div>
-                      </div>
-
-                      {/* Summary Stats */}
-                      <div className="grid grid-cols-4 gap-4">
-                        {[
-                          { label: "Total Recommendations", value: recs.length, color: "text-neutral-900" },
-                          { label: "High Priority", value: criticalCount, color: "text-amber-600" },
-                          { label: "Auto-Applicable", value: recs.filter(r => r.auto_applicable).length, color: "text-emerald-600" },
-                          { label: "Require Approval", value: recs.filter(r => r.requires_approval).length, color: "text-indigo-600" },
-                        ].map((s, i) => (
-                          <div key={i} className="bg-white border border-neutral-200 rounded-2xl p-4 shadow-sm">
-                            <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold block mb-1">{s.label}</span>
-                            <span className={`text-3xl font-bold ${s.color}`}>{s.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── RECOMMENDATIONS TAB ── */}
-                  {activeTab === "recommendations" && (
-                    <div className="space-y-3">
-                      {recs.map((rec, i) => (
-                        <div key={i} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {rec.category}
-                            </span>
-                            <span className="text-[10px] font-bold uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                              {rec.priority} Priority
-                            </span>
-                          </div>
-                          <h4 className="font-bold text-sm text-neutral-900">{rec.issue}</h4>
-                          <p className="text-xs text-neutral-600">{rec.recommendation}</p>
-                          {rec.suggested_value && (
-                            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl text-xs font-mono text-neutral-800">
-                              <strong>Suggested:</strong> {rec.suggested_value}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* ── METADATA TAB ── */}
-                  {activeTab === "metadata" && (
-                    <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-4 text-xs">
-                      <div>
-                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Optimized Title</span>
-                        <p className="font-bold text-neutral-900 text-sm">{result.seo_metadata?.optimized_title}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Optimized Meta Description</span>
-                        <p className="text-neutral-700">{result.seo_metadata?.optimized_meta_description}</p>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block mb-1">Optimized H1</span>
-                        <p className="font-semibold text-neutral-900">{result.seo_metadata?.optimized_h1}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── SCHEMA TAB ── */}
-                  {activeTab === "schema" && (
-                    <div className="space-y-4">
-                      {result.schema_recommendations?.map((s, i) => (
-                        <div key={i} className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm space-y-2 text-xs">
-                          <span className="font-bold text-neutral-900">{s.schema_type} Structured Data</span>
-                          <p className="text-neutral-600">{s.justification}</p>
-                          <pre className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 overflow-x-auto text-[11px] font-mono text-neutral-800">
-                            {typeof s.schema_json === "string" ? s.schema_json : JSON.stringify(s.schema_json, null, 2)}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* ── QA CHECKLIST TAB ── */}
-                  {activeTab === "qa" && (
-                    <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        {Object.entries(QA_LABELS).map(([k, label]) => {
-                          const pass = result.qa ? result.qa[k] === true : true;
-                          return (
-                            <div key={k} className={`p-3 rounded-xl border flex items-center justify-between ${
-                              pass ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"
-                            }`}>
-                              <span className="font-semibold">{label}</span>
-                              <span className="text-[10px] font-bold uppercase">{pass ? "Pass ✓" : "Needs Review"}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
+          {result && (
+            <div className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg border ${
+              result.status === "pass"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : "bg-amber-50 text-amber-800 border-amber-200"
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                result.status === "pass" ? "bg-emerald-500" : "bg-amber-500"
+              }`} />
+              <span>{result.status === "pass" ? "PASS — Ready for Approval" : "NEEDS REVISION"}</span>
+            </div>
           )}
         </div>
-      </div>
+
+        {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
+        {!currentWebsite ? (
+          <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
+            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
+              <Globe className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
+              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
+                On-Page SEO analysis evaluates live HTML against target search intents and ranking keywords.
+              </p>
+            </div>
+            <button
+              onClick={openAddModal}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all inline-flex items-center gap-1.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Connect Website</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Input Form */}
+            <form onSubmit={handleAnalyze} className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">Page URL *</label>
+                  <input
+                    value={form.url}
+                    onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                    required
+                    placeholder="https://example.com/blog/page"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">Target Keyword *</label>
+                  <input
+                    value={form.target_keyword}
+                    onChange={e => setForm(f => ({ ...f, target_keyword: e.target.value }))}
+                    required
+                    placeholder="e.g. AI SEO agent"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">Search Intent</label>
+                  <select
+                    value={form.search_intent}
+                    onChange={e => setForm(f => ({ ...f, search_intent: e.target.value }))}
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  >
+                    <option value="informational">Informational</option>
+                    <option value="commercial_investigation">Commercial Investigation</option>
+                    <option value="transactional">Transactional</option>
+                    <option value="comparison">Comparison</option>
+                    <option value="problem_solution">Problem / Solution</option>
+                  </select>
+                </div>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={analyzing || !form.url.trim()}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center gap-2 transition-all shadow-xs"
+                  >
+                    {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    <span>{analyzing ? "Analyzing..." : "Analyze Page"}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {error && (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3 text-rose-800 text-xs">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {!result && !analyzing && (
+              <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-3 max-w-lg mx-auto shadow-xs">
+                <FileText className="w-8 h-8 text-neutral-400 mx-auto" />
+                <h3 className="text-base font-semibold text-neutral-900">No Page Analyzed Yet</h3>
+                <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                  Enter any page URL on {currentWebsite.domain} and click &ldquo;Analyze Page&rdquo; to evaluate search intent, heading hierarchy, and meta optimization.
+                </p>
+              </div>
+            )}
+
+            {result && (
+              <>
+                {/* Navigation Tabs */}
+                <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
+                  {([
+                    ["overview", "Overview", Layers],
+                    ["recommendations", `Recommendations${recs.length ? ` (${recs.length})` : ""}`, Sparkles],
+                    ["metadata", "SEO Metadata", Tag],
+                    ["schema", "Schema", Code2],
+                    ["qa", `QA Checklist (${qaPassed}/${qaItems.length || 16})`, CheckCircle2],
+                  ] as const).map(([id, label, Icon]) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id as Tab)}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
+                        activeTab === id
+                          ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
+                          : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── OVERVIEW TAB ── */}
+                {activeTab === "overview" && (
+                  <div className="space-y-4">
+                    {/* Diagnostic Scores */}
+                    <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="font-bold text-neutral-900 text-sm">Diagnostic Quality Scores</h3>
+                          <p className="text-xs text-neutral-500 mt-0.5 flex items-center gap-1">
+                            <Info className="w-3 h-3 text-neutral-400" /> {result.diagnostic_scores.note}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <ScoreRing score={result.diagnostic_scores.overall} label="Overall" size={68} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-neutral-100">
+                        <ScoreRing score={result.diagnostic_scores.intent_alignment} label="Intent" />
+                        <ScoreRing score={result.diagnostic_scores.content_coverage} label="Depth" />
+                        <ScoreRing score={result.diagnostic_scores.technical} label="Technical" />
+                        <ScoreRing score={result.diagnostic_scores.metadata} label="Metadata" />
+                        <ScoreRing score={result.diagnostic_scores.linking} label="Internal Links" />
+                      </div>
+                    </div>
+
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: "Total Recommendations", value: recs.length, color: "text-neutral-900" },
+                        { label: "High Priority", value: criticalCount, color: "text-amber-600" },
+                        { label: "Auto-Applicable", value: recs.filter(r => r.auto_applicable).length, color: "text-emerald-600" },
+                        { label: "Require Approval", value: recs.filter(r => r.requires_approval).length, color: "text-indigo-600" },
+                      ].map((s, i) => (
+                        <div key={i} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                          <span className="text-[10px] text-neutral-500 uppercase tracking-wider font-semibold block mb-1">{s.label}</span>
+                          <span className={`text-2xl font-bold font-mono ${s.color}`}>{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── RECOMMENDATIONS TAB ── */}
+                {activeTab === "recommendations" && (
+                  <div className="space-y-3">
+                    {recs.map((rec, i) => (
+                      <div key={i} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {rec.category}
+                          </span>
+                          <span className="text-[10px] font-semibold uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                            {rec.priority} Priority
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-xs text-neutral-900">{rec.issue}</h4>
+                        <p className="text-xs text-neutral-600 leading-relaxed">{rec.recommendation}</p>
+                        {rec.suggested_value && (
+                          <div className="p-2.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs font-mono text-neutral-800">
+                            <strong>Suggested:</strong> {rec.suggested_value}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── METADATA TAB ── */}
+                {activeTab === "metadata" && (
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-4 text-xs">
+                    <div>
+                      <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">Optimized Title</span>
+                      <p className="font-semibold text-neutral-900 text-sm bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">{result.seo_metadata?.optimized_title}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">Optimized Meta Description</span>
+                      <p className="text-neutral-700 leading-relaxed bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">{result.seo_metadata?.optimized_meta_description}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">Optimized H1</span>
+                      <p className="font-semibold text-neutral-900 bg-neutral-50 p-2.5 rounded-lg border border-neutral-200">{result.seo_metadata?.optimized_h1}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── SCHEMA TAB ── */}
+                {activeTab === "schema" && (
+                  <div className="space-y-3">
+                    {result.schema_recommendations?.map((s, i) => (
+                      <div key={i} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-2 text-xs">
+                        <span className="font-semibold text-neutral-900">{s.schema_type} Structured Data</span>
+                        <p className="text-neutral-600">{s.justification}</p>
+                        <pre className="bg-neutral-50 p-3 rounded-lg border border-neutral-200 overflow-x-auto text-[11px] font-mono text-neutral-800">
+                          {typeof s.schema_json === "string" ? s.schema_json : JSON.stringify(s.schema_json, null, 2)}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── QA CHECKLIST TAB ── */}
+                {activeTab === "qa" && (
+                  <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                      {Object.entries(QA_LABELS).map(([k, label]) => {
+                        const pass = result.qa ? result.qa[k] === true : true;
+                        return (
+                          <div key={k} className={`p-2.5 rounded-lg border flex items-center justify-between ${
+                            pass ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-amber-50 text-amber-800 border-amber-200"
+                          }`}>
+                            <span className="font-medium">{label}</span>
+                            <span className="text-[10px] font-semibold uppercase">{pass ? "Pass" : "Needs Review"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }

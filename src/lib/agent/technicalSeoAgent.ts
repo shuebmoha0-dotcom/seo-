@@ -61,7 +61,9 @@ export interface CrawledUrl {
   has_duplicate_meta?: boolean;
   has_thin_content?: boolean;
   has_multiple_h1?: boolean;
+  has_wasted_h1?: boolean;
   has_presentation_issue?: boolean;
+  missing_image_alt_count?: number;
 }
 
 export interface CrawlResult {
@@ -130,13 +132,17 @@ async function analyzeWithAI(params: {
 You analyze pre-collected website crawl data, DOM hierarchy, and on-page visual presentation signals.
 Do NOT pretend to crawl the site yourself — analyze the supplied evidence.
 
-CRITICAL RANKING HINDRANCE PRINCIPLES:
-Proactively audit and classify every issue into one of four Direct Ranking Barrier tiers:
-1. FATAL CRAWL & INDEXING BLOCKERS (Severity: Critical): 5xx server errors, unintended noindex tags on published content, broken canonical loops, or robots.txt disallow barriers that physically prevent Googlebot from indexing pages.
-2. HELPFUL CONTENT & QUALITY DEMOTION RISKS (Severity: High): Thin content (< 350 words), multiple stacked H1 headings, cluttered desktop readability, unconstrained line lengths, or invasive dynamic widgets (e.g. bloated Table of Contents).
-3. KEYWORD CANNIBALIZATION & INTENT DILUTION (Severity: High): Duplicate title tags or identical H1 headings across multiple URLs splitting ranking authority.
-4. SERP CTR & RICH SNIPPET DEFICITS (Severity: Medium): Truncated titles (> 65 characters), under-optimized short titles (< 25 characters), missing meta descriptions, or lack of Schema.org Article/FAQ structured data.
-5. PAGERANK & EQUITY STARVATION (Severity: Medium/High): Orphan pages with zero internal links, or published articles starving for link equity with fewer than 3 inbound links.
+MANDATORY HOLISTIC SCANNING DISCIPLINE:
+You must proactively and autonomously evaluate ALL 8 ranking pillars across the site in every scan. Never wait for the user to request individual problem checks. Recognize every deficiency across:
+1. FATAL CRAWL & INDEXING BLOCKERS (Severity: Critical): 5xx server errors, unintended noindex/nofollow directives on published content, broken canonical loops, or robots.txt barriers that block search engines.
+2. HEADING HIERARCHY & TOPIC INTENT (Severity: High/Medium): Missing H1 tags, multiple stacked H1 headings, or wasted generic H1 tags (e.g. "Home", "Welcome", single-word generic text) that fail to establish primary topical relevance.
+3. SERP CTR & METADATA READINESS (Severity: High/Medium): Missing meta descriptions, under-optimized meta (< 70 chars), truncated titles (> 65 chars), short titles (< 25 chars), or duplicate title/meta tags causing cannibalization.
+4. CONTENT DEPTH & HELPFUL CONTENT RISKS (Severity: High): Thin content pages (< 350 words) vulnerable to Google Helpful Content demotion, superficial articles, or poor dwell-time signals.
+5. PAGERANK DISTRIBUTION & LINK ARCHITECTURE (Severity: High/Medium): Orphan pages with 0 internal links, starved articles with fewer than 3 inbound links, or broken internal links (4xx errors).
+6. STRUCTURED DATA & ENTITY GRAPH (Severity: Medium): Missing Schema.org JSON-LD structured data (Article, BlogPosting, FAQPage, BreadcrumbList, Organization) disqualifying pages from rich snippets and knowledge graph entity recognition.
+7. IMAGE OPTIMIZATION & ACCESSIBILITY (Severity: Medium/Low): Images lacking descriptive ALT attributes preventing indexing in Google Image search and violating accessibility standards.
+8. CANONICAL CONSISTENCY & URL CLEANLINESS (Severity: High/Medium): Missing canonical tags, non-self-referencing canonicals redirecting indexing authority elsewhere, or duplicate parameter URLs.
+9. GUTENBERG BLOCK & PRESENTATION LAYOUT INTEGRITY (Severity: High): Corrupted list elements (<p><li>, <p><ul>), stray markdown markers (<li>>text), illegal <br> breaks inside lists, bloated Table of Contents, or outer div containers that crash WordPress Gutenberg block validation ("This block contains unexpected or invalid content - Attempt recovery").
 
 REMEDIATION DISCIPLINE:
 - Tailor recommended fixes specifically to the site technology: ${params.site_tech}.
@@ -153,7 +159,7 @@ ${params.crawl_summary}
 DETERMINISTIC FINDINGS (${params.deterministic_issues.length}):
 ${params.deterministic_issues.map(i => `[${i.severity.toUpperCase()}] ${i.title}: ${i.description}`).join('\n')}
 
-Identify root-cause technical ranking hindrances and provide high-leverage recommendations ready for autonomous remediation via WordPress outbound queue or Git PR.`,
+Perform a comprehensive, all-pillar technical review. Identify any latent or root-cause technical ranking hindrances across all 8 pillars and provide high-leverage recommendations ready for autonomous remediation via WordPress outbound queue or Git PR.`,
     });
 
     return object.additional_insights.map((insight: any, idx: number) => ({

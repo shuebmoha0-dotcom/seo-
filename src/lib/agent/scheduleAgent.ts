@@ -117,9 +117,7 @@ export class ScheduleAgent {
           .replace(/for\s+[a-z0-9.-]+\.[a-z]{2,}/i, '')
           .trim();
 
-        if (!primaryKeyword || primaryKeyword.length < 3) {
-          primaryKeyword = 'SEO Best Practices';
-        }
+        let workingTitle = primaryKeyword ? `${primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1)}: Practical Guide` : '';
 
         let projectMemory = '';
         let projectInstructions = instruction;
@@ -130,7 +128,7 @@ export class ScheduleAgent {
           const { data: memoryRows } = await supabase
             .from('project_memory')
             .select('*')
-            .or(`website_id.eq.${input.website_id},website_id.is.null`)
+            .eq('website_id', input.website_id)
             .eq('is_outdated', false)
             .order('is_important', { ascending: false });
 
@@ -172,10 +170,69 @@ export class ScheduleAgent {
           console.warn('[ScheduleAgent] Failed to load memory', e);
         }
 
+        // Check if instruction/keyword is generic or already covered
+        const isGenericTopic = !primaryKeyword || 
+          primaryKeyword.length < 3 || 
+          /^(one\s+)?(seo\s+)?article$/i.test(primaryKeyword.trim()) ||
+          /^(write|publish|create|draft|generate)/i.test(primaryKeyword.trim());
+
+        const { DuplicateArticleChecker } = await import('./duplicateChecker');
+        const { SiteContentGapDetector } = await import('./siteContentGapDetector');
+
+        let dupCheck = !isGenericTopic ? await DuplicateArticleChecker.check({
+          website_id: input.website_id,
+          primary_keyword: primaryKeyword,
+          working_title: workingTitle,
+          site_url: input.website_url,
+        }) : { isDuplicate: true };
+
+        if (isGenericTopic || dupCheck.isDuplicate) {
+          try {
+            let domain = 'example.com';
+            if (input.website_url) {
+              try { domain = new URL(input.website_url).hostname; } catch (_) { domain = input.website_url; }
+            }
+            const inventory = await SiteContentGapDetector.getSiteInventory({
+              websiteId: input.website_id,
+              domain,
+              siteUrl: input.website_url,
+            });
+            const gaps = await SiteContentGapDetector.findContentGaps({
+              inventory,
+              websiteId: input.website_id,
+              projectMemory,
+              projectInstructions,
+              limit: 5,
+            });
+
+            for (const g of gaps) {
+              const gapCheck = await DuplicateArticleChecker.check({
+                website_id: input.website_id,
+                primary_keyword: g.keyword,
+                working_title: g.working_title,
+                site_url: input.website_url,
+              });
+              if (!gapCheck.isDuplicate) {
+                primaryKeyword = g.keyword;
+                workingTitle = g.working_title;
+                break;
+              }
+            }
+          } catch (gapErr) {
+            console.warn('[ScheduleAgent] Content gap fallback notice:', gapErr);
+          }
+        }
+
+        if (!primaryKeyword || primaryKeyword.length < 3) {
+          primaryKeyword = 'Practical SEO Optimization Framework';
+          workingTitle = 'Practical SEO Optimization Framework: Step-by-Step Implementation';
+        }
+
         const agent = new ContentAgent();
         const contentOutput = await agent.runFullPipeline({
           website_id: input.website_id,
           primary_keyword: primaryKeyword,
+          working_title: workingTitle,
           secondary_keywords: [],
           search_intent: 'informational',
           content_type: 'blog',
@@ -183,9 +240,9 @@ export class ScheduleAgent {
           project_instructions: projectInstructions,
           project_memory: projectMemory,
           rules: {
-            word_count_min: 800,
-            word_count_max: 1500,
-            language: 'en',
+            word_count_min: 1200,
+            word_count_max: 1600,
+            language: 'U.S. English',
             tone: 'authoritative, direct, and actionable',
             audience: audience,
             author_style: 'expert practitioner',

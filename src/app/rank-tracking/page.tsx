@@ -70,12 +70,56 @@ interface RankDropItem {
 }
 
 export default function RankTrackingPage() {
-  const { currentWebsite, openAddModal } = useWebsite();
+  const { currentWebsite, openAddModal, loading: websiteLoading } = useWebsite();
   const [activeTab, setActiveTab] = useState<"growth" | "recovery" | "all">("growth");
-  const [keywords, setKeywords] = useState<any[]>([]);
-  const [growthOpps, setGrowthOpps] = useState<StrikingDistanceItem[]>([]);
-  const [rankDrops, setRankDrops] = useState<RankDropItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [keywords, setKeywords] = useState<any[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_keywords_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [growthOpps, setGrowthOpps] = useState<StrikingDistanceItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_growth_opps_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [rankDrops, setRankDrops] = useState<RankDropItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_rank_drops_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_keywords_${storedSiteId}`);
+          if (cached) return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
   const [scanning, setScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [executingKeyword, setExecutingKeyword] = useState<string | null>(null);
@@ -84,15 +128,19 @@ export default function RankTrackingPage() {
   useEffect(() => {
     async function fetchAllData() {
       if (!currentWebsite) {
-        setKeywords([]);
-        setGrowthOpps([]);
-        setRankDrops([]);
-        setLoading(false);
+        if (!websiteLoading) {
+          setKeywords([]);
+          setGrowthOpps([]);
+          setRankDrops([]);
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        setLoading(true);
+        if (keywords.length === 0 && growthOpps.length === 0) {
+          setLoading(true);
+        }
         const [kwRes, recRes] = await Promise.all([
           fetch(`/api/keywords?website_id=${currentWebsite.id}`),
           fetch(`/api/rank-tracking/recovery?website_id=${currentWebsite.id}`),
@@ -100,14 +148,24 @@ export default function RankTrackingPage() {
 
         if (kwRes.ok) {
           const kwData = await kwRes.json();
-          setKeywords(kwData.raw_keywords || []);
+          const rawKws = kwData.raw_keywords || [];
+          setKeywords(rawKws);
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem(`seo_cached_keywords_${currentWebsite.id}`, JSON.stringify(rawKws));
+          }
         }
 
         if (recRes.ok) {
           const recData = await recRes.json();
           if (recData.report) {
-            setGrowthOpps(recData.report.striking_distance_opportunities || []);
-            setRankDrops(recData.report.detected_rank_drops || []);
+            const opps = recData.report.striking_distance_opportunities || [];
+            const drops = recData.report.detected_rank_drops || [];
+            setGrowthOpps(opps);
+            setRankDrops(drops);
+            if (typeof window !== "undefined") {
+              sessionStorage.setItem(`seo_cached_growth_opps_${currentWebsite.id}`, JSON.stringify(opps));
+              sessionStorage.setItem(`seo_cached_rank_drops_${currentWebsite.id}`, JSON.stringify(drops));
+            }
           }
         }
       } catch (err) {
@@ -117,7 +175,7 @@ export default function RankTrackingPage() {
       }
     }
     fetchAllData();
-  }, [currentWebsite?.id]);
+  }, [currentWebsite?.id, websiteLoading]);
 
   const handleRunAudit = async () => {
     if (!currentWebsite || scanning) return;
@@ -185,28 +243,28 @@ export default function RankTrackingPage() {
   const totalPotentialClicks = growthOpps.reduce((acc, curr) => acc + (curr.estimated_monthly_clicks_gain || 0), 0);
 
   return (
-    <div className="flex min-h-screen bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto space-y-6">
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
         {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
           <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <span className="font-medium text-slate-400">Autonomous Growth</span>
-              <span className="text-slate-300">/</span>
-              <span className="font-semibold text-slate-700">Rank Tracking &amp; Recovery</span>
+            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
+              <span className="font-medium text-neutral-400">Autonomous Growth</span>
+              <span className="text-neutral-300">/</span>
+              <span className="font-semibold text-neutral-700">Rank Tracking &amp; Recovery</span>
             </div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
                 Rankings &amp; Click Accelerator
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
                 <Activity className="w-3 h-3 text-indigo-600" />
                 Live SERP Radar
               </span>
             </div>
-            <p className="text-slate-500 text-xs mt-1">
+            <p className="text-neutral-500 text-xs mt-1">
               {currentWebsite
                 ? `Autonomous SERP radar identifying striking-distance jumps and recovering dropped rankings for ${currentWebsite.domain}.`
                 : "Connect your website to track rankings and recover dropped positions."}
@@ -217,7 +275,7 @@ export default function RankTrackingPage() {
             <button
               onClick={handleRunAudit}
               disabled={scanning}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition-all inline-flex items-center gap-2 shadow-xs disabled:opacity-50 self-start md:self-auto active:scale-[0.98]"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all inline-flex items-center gap-2 shadow-xs disabled:opacity-50 self-start md:self-auto active:scale-[0.98]"
             >
               {scanning ? (
                 <>
@@ -234,15 +292,24 @@ export default function RankTrackingPage() {
           )}
         </div>
 
-        {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
-        {!currentWebsite ? (
-          <div className="p-12 text-center bg-white border border-slate-200/80 rounded-2xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
-            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center mx-auto text-indigo-600">
+        {/* ── STATE 1: LOADING SKELETON OR NO WEBSITE CONNECTED ── */}
+        {websiteLoading && !currentWebsite ? (
+          <div className="space-y-6 animate-pulse">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-24 bg-neutral-50 border border-neutral-200 rounded-xl" />
+              ))}
+            </div>
+            <div className="h-96 bg-neutral-50 border border-neutral-200 rounded-xl" />
+          </div>
+        ) : !currentWebsite ? (
+          <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
+            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
               <Globe className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Connect a Website to Begin</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
+              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
                 Rank tracking monitors positions, identifies low-hanging fruit to rank faster, and recovers rankings when positions drop.
               </p>
             </div>
@@ -258,41 +325,41 @@ export default function RankTrackingPage() {
           <div className="space-y-6">
             {/* Metric KPI Strip */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 block mb-1">
                   Striking-Distance Queries
                 </span>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                  <span className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
                     {growthOpps.length}
                   </span>
-                  <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/60">
+                  <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
                     Pos 4–20
                   </span>
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 block mb-1">
                   Monthly Click Growth
                 </span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-bold font-mono text-emerald-600 tabular-nums">
                     +{totalPotentialClicks.toLocaleString()}
                   </span>
-                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                     Top 3 Unlock
                   </span>
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 block mb-1">
                   Rank Drop Alerts
                 </span>
                 <div className="flex items-baseline justify-between">
                   <span className={`text-2xl font-bold font-mono tabular-nums ${
-                    rankDrops.length > 0 ? "text-amber-600" : "text-slate-900"
+                    rankDrops.length > 0 ? "text-amber-600" : "text-neutral-900"
                   }`}>
                     {rankDrops.length}
                   </span>
@@ -306,15 +373,15 @@ export default function RankTrackingPage() {
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 block mb-1">
                   Tracked Queries
                 </span>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                  <span className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
                     {keywords.length}
                   </span>
-                  <span className="text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                  <span className="text-[11px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-md">
                     Monitored
                   </span>
                 </div>
@@ -322,20 +389,20 @@ export default function RankTrackingPage() {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="bg-white border border-slate-200/80 rounded-xl p-2 shadow-xs flex items-center gap-1.5 overflow-x-auto">
+            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
               <button
                 onClick={() => setActiveTab("growth")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                   activeTab === "growth"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
                 }`}
               >
-                <Zap className="w-3.5 h-3.5" />
+                <Zap className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Fast-Rank Accelerators (Pos 4–20)</span>
                 {growthOpps.length > 0 && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                    activeTab === "growth" ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+                    activeTab === "growth" ? "bg-indigo-50 text-indigo-700 border border-indigo-200" : "bg-neutral-200 text-neutral-700"
                   }`}>
                     {growthOpps.length}
                   </span>
@@ -344,17 +411,17 @@ export default function RankTrackingPage() {
 
               <button
                 onClick={() => setActiveTab("recovery")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                   activeTab === "recovery"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    ? "bg-white text-rose-700 shadow-xs border border-neutral-200"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
                 }`}
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
                 <span>Rank Drop Recovery</span>
                 {rankDrops.length > 0 && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                    activeTab === "recovery" ? "bg-white/20 text-white" : "bg-rose-100 text-rose-700"
+                    activeTab === "recovery" ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-neutral-200 text-neutral-700"
                   }`}>
                     {rankDrops.length}
                   </span>
@@ -363,13 +430,13 @@ export default function RankTrackingPage() {
 
               <button
                 onClick={() => setActiveTab("all")}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
                   activeTab === "all"
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
+                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
                 }`}
               >
-                <BarChart2 className="w-3.5 h-3.5" />
+                <BarChart2 className="w-3.5 h-3.5 text-neutral-600" />
                 <span>Tracked Queries &amp; SERP Trends</span>
               </button>
             </div>
@@ -377,7 +444,7 @@ export default function RankTrackingPage() {
             {/* TAB 1: STRIKING-DISTANCE GROWTH */}
             {activeTab === "growth" && (
               <div className="space-y-4">
-                <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 text-xs text-indigo-800">
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-xs text-indigo-900">
                   <span className="font-bold">Striking-Distance Acceleration Principle:</span>
                   <p className="text-indigo-700 text-[11px] mt-0.5">
                     Keywords ranking between positions 4 and 20 already possess domain authority and index approval. Moving from position 7 to position 2 generates up to an 8x click surge with a fraction of fresh writing effort.
@@ -385,10 +452,10 @@ export default function RankTrackingPage() {
                 </div>
 
                 {growthOpps.length === 0 ? (
-                  <div className="p-12 text-center bg-white border border-slate-200/80 rounded-2xl space-y-3 shadow-xs">
+                  <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-3 shadow-xs">
                     <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                    <h4 className="font-semibold text-slate-900 text-sm">No Striking-Distance Queries Identified Yet</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    <h4 className="font-semibold text-neutral-900 text-sm">No Striking-Distance Queries Identified Yet</h4>
+                    <p className="text-xs text-neutral-500 max-w-md mx-auto">
                       Click &ldquo;Run SERP Recovery Audit&rdquo; to pull fresh performance data from Google Search Console.
                     </p>
                   </div>
@@ -401,22 +468,22 @@ export default function RankTrackingPage() {
                       return (
                         <div
                           key={opp.keyword}
-                          className="bg-white border border-slate-200/80 hover:border-slate-300 rounded-xl p-5 shadow-xs transition-all space-y-4"
+                          className="bg-white border border-neutral-200 hover:border-neutral-300 rounded-xl p-5 shadow-xs transition-all space-y-4"
                         >
                           <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-mono">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
                                   Current Pos: #{opp.current_position}
                                 </span>
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-mono">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono">
                                   Target: #{opp.potential_target_position} ({opp.estimated_click_multiplier})
                                 </span>
                               </div>
-                              <h3 className="text-base font-bold text-slate-900 mt-2">
+                              <h3 className="text-base font-bold text-neutral-900 mt-2">
                                 {opp.keyword}
                               </h3>
-                              <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                              <p className="text-xs text-neutral-500 mt-0.5 font-mono">
                                 {opp.impressions.toLocaleString()} impressions · {opp.clicks} clicks · {opp.ctr}% CTR
                               </p>
                             </div>
@@ -425,29 +492,29 @@ export default function RankTrackingPage() {
                               <div className="text-sm font-bold font-mono text-emerald-600">
                                 +{opp.estimated_monthly_clicks_gain} Clicks/Mo
                               </div>
-                              <div className="text-[10px] text-slate-400 font-medium">Estimated Gain</div>
+                              <div className="text-[10px] text-neutral-400 font-medium">Estimated Gain</div>
                             </div>
                           </div>
 
                           {/* Prescriptive Formula */}
-                          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3.5 space-y-2 text-xs">
-                            <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                          <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3.5 space-y-2 text-xs">
+                            <div className="font-semibold text-neutral-800 flex items-center gap-1.5">
                               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
                               <span>1-Click Optimization Blueprint:</span>
                             </div>
                             {opp.prescriptive_actions.title_hook_suggestion && (
-                              <div className="text-slate-600">
-                                <span className="font-semibold text-slate-900">High-CTR Title:</span> &ldquo;{opp.prescriptive_actions.title_hook_suggestion}&rdquo;
+                              <div className="text-neutral-600">
+                                <span className="font-semibold text-neutral-900">High-CTR Title:</span> &ldquo;{opp.prescriptive_actions.title_hook_suggestion}&rdquo;
                               </div>
                             )}
                             {opp.prescriptive_actions.meta_description_suggestion && (
-                              <div className="text-slate-600">
-                                <span className="font-semibold text-slate-900">Meta Hook:</span> {opp.prescriptive_actions.meta_description_suggestion}
+                              <div className="text-neutral-600">
+                                <span className="font-semibold text-neutral-900">Meta Hook:</span> {opp.prescriptive_actions.meta_description_suggestion}
                               </div>
                             )}
                             {opp.prescriptive_actions.recommended_h2_subtopics && (
-                              <div className="text-slate-600">
-                                <span className="font-semibold text-slate-900">H2 Additions:</span> {opp.prescriptive_actions.recommended_h2_subtopics.join(" · ")}
+                              <div className="text-neutral-600">
+                                <span className="font-semibold text-neutral-900">H2 Additions:</span> {opp.prescriptive_actions.recommended_h2_subtopics.join(" · ")}
                               </div>
                             )}
                           </div>
@@ -459,8 +526,8 @@ export default function RankTrackingPage() {
                               <span>{actionSuccess[opp.keyword]}</span>
                             </div>
                           ) : (
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-100">
-                              <span className="text-[11px] text-slate-500">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-neutral-100">
+                              <span className="text-[11px] text-neutral-500">
                                 Updates on-page metadata, injects schema, and triggers priority Google re-indexing.
                               </span>
                               <button
@@ -501,18 +568,18 @@ export default function RankTrackingPage() {
             {/* TAB 2: RANK DROP RECOVERY */}
             {activeTab === "recovery" && (
               <div className="space-y-4">
-                <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-4 text-xs text-rose-800">
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-900">
                   <span className="font-bold">Automated Forensic Diagnosis:</span>
                   <p className="text-rose-700 text-[11px] mt-0.5">
-                    When positions drop $\ge 3$ spots, the diagnostic engine isolates root causes (freshness decay, competitor content updates, internal link cannibalization) and generates recovery plans.
+                    When positions drop by 3 or more spots, the diagnostic engine isolates root causes (freshness decay, competitor content updates, internal link cannibalization) and generates recovery plans.
                   </p>
                 </div>
 
                 {rankDrops.length === 0 ? (
-                  <div className="p-12 text-center bg-white border border-slate-200/80 rounded-2xl space-y-3 shadow-xs">
+                  <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-3 shadow-xs">
                     <ShieldCheck className="w-8 h-8 text-emerald-500 mx-auto" />
-                    <h4 className="font-semibold text-slate-900 text-sm">All Monitored Keywords Are Stable</h4>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    <h4 className="font-semibold text-neutral-900 text-sm">All Monitored Keywords Are Stable</h4>
+                    <p className="text-xs text-neutral-500 max-w-md mx-auto">
                       Zero critical position drops detected across {currentWebsite.domain}. The monitoring engine is actively watching SERP shifts.
                     </p>
                   </div>
@@ -525,7 +592,7 @@ export default function RankTrackingPage() {
                       return (
                         <div
                           key={drop.keyword}
-                          className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs space-y-4"
+                          className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-4"
                         >
                           <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
                             <div>
@@ -537,14 +604,14 @@ export default function RankTrackingPage() {
                                 }`}>
                                   {drop.severity.toUpperCase()} DROP: #{drop.previous_position} &rarr; #{drop.current_position}
                                 </span>
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 capitalize">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200 capitalize">
                                   Cause: {drop.primary_root_cause.replace(/_/g, " ")}
                                 </span>
                               </div>
-                              <h3 className="text-base font-bold text-slate-900 mt-2">
+                              <h3 className="text-base font-bold text-neutral-900 mt-2">
                                 {drop.keyword}
                               </h3>
-                              <p className="text-xs text-slate-500 mt-0.5 font-mono">
+                              <p className="text-xs text-neutral-500 mt-0.5 font-mono">
                                 Dropped {drop.position_drop} positions · Lost {drop.traffic_loss_pct}% traffic
                               </p>
                             </div>
@@ -556,19 +623,19 @@ export default function RankTrackingPage() {
                             </div>
                           </div>
 
-                          <div className="bg-slate-50 border border-slate-200/80 rounded-lg p-3.5 space-y-2 text-xs">
-                            <div className="font-semibold text-slate-800 flex items-center gap-1.5">
+                          <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3.5 space-y-2 text-xs">
+                            <div className="font-semibold text-neutral-800 flex items-center gap-1.5">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                               <span>Forensic Root Cause:</span>
                             </div>
-                            <p className="text-slate-700">{drop.root_cause_explanation}</p>
-                            <p className="text-[11px] text-slate-500 italic">Evidence: {drop.evidence}</p>
+                            <p className="text-neutral-700">{drop.root_cause_explanation}</p>
+                            <p className="text-[11px] text-neutral-500 italic">Evidence: {drop.evidence}</p>
 
-                            <div className="pt-2 border-t border-slate-200/80">
-                              <div className="font-semibold text-slate-800 mb-1">Prescriptive Recovery Plan:</div>
+                            <div className="pt-2 border-t border-neutral-200">
+                              <div className="font-semibold text-neutral-800 mb-1">Prescriptive Recovery Plan:</div>
                               <div className="space-y-1">
                                 {drop.recovery_plan.map((step) => (
-                                  <div key={step.step} className="flex items-start gap-1.5 text-slate-600">
+                                  <div key={step.step} className="flex items-start gap-1.5 text-neutral-600">
                                     <span className="font-bold text-indigo-600 font-mono">{step.step}.</span>
                                     <span>
                                       {step.description} <strong className="text-emerald-700 font-medium">({step.impact})</strong>
@@ -585,8 +652,8 @@ export default function RankTrackingPage() {
                               <span>{actionSuccess[drop.keyword]}</span>
                             </div>
                           ) : (
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-100">
-                              <span className="text-[11px] text-slate-500">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-neutral-100">
+                              <span className="text-[11px] text-neutral-500">
                                 Applies content freshness injection, fixes internal links, and triggers Google index refresh.
                               </span>
                               <button
@@ -627,29 +694,29 @@ export default function RankTrackingPage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="relative flex-1 max-w-xs">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                     <input
                       type="text"
                       placeholder="Filter tracked queries..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                      className="w-full pl-8 pr-3 py-1.5 bg-neutral-50 border border-neutral-200 rounded-lg text-xs text-neutral-800 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs font-sans"
                     />
                   </div>
-                  <span className="text-xs text-slate-500 font-mono">
+                  <span className="text-xs text-neutral-500 font-mono">
                     Showing {filteredKeywords.length} of {keywords.length} keywords
                   </span>
                 </div>
 
                 {filteredKeywords.length === 0 ? (
-                  <div className="p-8 text-center bg-white border border-slate-200/80 rounded-xl">
-                    <p className="text-xs text-slate-500">No keywords match your search query.</p>
+                  <div className="p-8 text-center bg-white border border-neutral-200 rounded-xl">
+                    <p className="text-xs text-neutral-500">No keywords match your search query.</p>
                   </div>
                 ) : (
-                  <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-xs">
+                  <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-xs">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="border-b border-slate-200/80 bg-slate-50/75 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                        <tr className="border-b border-neutral-200 bg-neutral-50 text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
                           <th className="py-3 px-4">Tracked Search Query</th>
                           <th className="py-3 px-4">Search Volume</th>
                           <th className="py-3 px-4">Difficulty</th>
@@ -657,18 +724,18 @@ export default function RankTrackingPage() {
                           <th className="py-3 px-4 text-right">Quick Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-neutral-100">
                         {filteredKeywords.map((kw) => (
-                          <tr key={kw.id || kw.term} className="hover:bg-slate-50/75 transition-colors">
-                            <td className="py-3 px-4 font-semibold text-slate-900">{kw.term}</td>
-                            <td className="py-3 px-4 font-mono text-slate-700">
-                              {kw.volume ? Number(kw.volume).toLocaleString() : "1,200"}
+                          <tr key={kw.id || kw.term} className="hover:bg-neutral-50 transition-colors">
+                            <td className="py-3 px-4 font-semibold text-neutral-900">{kw.term}</td>
+                            <td className="py-3 px-4 font-mono text-neutral-700">
+                              {kw.volume ? Number(kw.volume).toLocaleString() : "—"}
                             </td>
-                            <td className="py-3 px-4 font-mono text-slate-700">
-                              {kw.difficulty || 25}
+                            <td className="py-3 px-4 font-mono text-neutral-700">
+                              {kw.difficulty ?? "—"}
                             </td>
                             <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 capitalize">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-700 border border-neutral-200 capitalize">
                                 {kw.intent || "Informational"}
                               </span>
                             </td>

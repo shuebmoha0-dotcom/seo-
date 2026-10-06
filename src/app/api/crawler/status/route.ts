@@ -14,6 +14,13 @@ export async function GET(request: Request) {
     const crawlService = new CrawlService();
     const result = await crawlService.getAnalysisStatus(crawl_id, task_id);
 
+    // Fire Telegram completion notification on transition to completed
+    if (result.status === 'completed' && result.result) {
+      const websiteId = (result as any).websiteId || null;
+      // Fire-and-forget — don't block the polling response
+      crawlService.sendCrawlCompletionNotification(websiteId, result.result).catch(() => {});
+    }
+
     return NextResponse.json({
       success: true,
       status: result.status,

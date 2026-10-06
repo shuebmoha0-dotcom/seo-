@@ -124,7 +124,15 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Semrush-Grade Keyword Discovery (540M+ db)</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-neutral-700">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>Autonomous AI Agent (24/7 Monitoring)</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-neutral-700">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Claude Sonnet 5 Article Drafting</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -178,6 +186,10 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span><strong>Competitor Reverse-Engineering Engine</strong></span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-neutral-800">
+                  <Check className="w-4 h-4 text-indigo-600 shrink-0" />
                   <span>Full Autonomous Content Planner &amp; Engine</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
@@ -186,11 +198,11 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span>Competitor Keyword Gap Analysis</span>
+                  <span>Telegram Approval Bot Integration</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-800">
                   <Check className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span>Telegram Approval Bot Integration</span>
+                  <span>Replaces $139/mo Semrush + $3k Copywriting</span>
                 </div>
               </div>
             </div>
@@ -234,6 +246,10 @@ export default function PricingPage() {
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>White-Label Scheduled Executive Reports</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-neutral-700">
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Unlimited Competitor Reverse-Engineering</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />

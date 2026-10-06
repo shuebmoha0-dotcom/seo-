@@ -153,6 +153,10 @@ export class KeywordAgent {
       const targetAudience = profile?.targetAudience || 'Core target customers and readers';
       const negativeBoundaries = profile?.negativeBoundaries?.length ? profile.negativeBoundaries.join('; ') : 'Do not recommend unrelated cross-niche topics';
       
+      const availableCategories = (params.categories && params.categories.length > 0)
+        ? params.categories
+        : (profile?.liveCategories?.map(c => c.name) || contentPillars);
+
       const { object } = await LLMProvider.generateObject({
         agent: 'KeywordAgent',
         schema: z.object({
@@ -182,7 +186,7 @@ export class KeywordAgent {
         prompt: `Conduct an in-depth SEO keyword research and topical clustering analysis for:
 Domain: "${params.domain}"
 Verified Primary Niche: "${primaryNiche}"
-${contentPillars.length > 0 ? `CORE CONTENT PILLARS (CLUSTERS MUST MAP DIRECTLY TO THESE PILLARS):\n${contentPillars.map(p => `• ${p}`).join('\n')}\n` : ''}
+${contentPillars.length > 0 ? `CORE CONTENT PILLARS:\n${contentPillars.map(p => `• ${p}`).join('\n')}\n` : ''}
 Core Offerings & Solutions: "${coreOfferings}"
 Target Audience: "${targetAudience}"
 ${params.siteDescription ? `Site Description: ${params.siteDescription}` : ''}
@@ -192,7 +196,7 @@ NEGATIVE NICHE BOUNDARIES (STRICT PROHIBITION):
 ${negativeBoundaries}
 NEVER recommend keywords from unrelated niches outside of "${primaryNiche}".
 
-${params.categories && params.categories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES:\n${params.categories.map(c => `• ${c}`).join('\n')}\n` : ''}
+${availableCategories.length > 0 ? `VERIFIED CLIENT WEBSITE CATEGORIES / PILLARS:\n${availableCategories.map(c => `• ${c}`).join('\n')}\n` : ''}
 ${params.existingArticles && params.existingArticles.length > 0 ? `ALREADY PUBLISHED ARTICLES (DO NOT CANNIBALIZE OR DUPLICATE):\n${params.existingArticles.slice(0, 30).map(t => `- "${t}"`).join('\n')}\n` : ''}
 
 ${params.projectMemory ? `\n🧠 PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY:\n${params.projectMemory}\n` : ''}
@@ -221,13 +225,30 @@ MANDATE FOR ESTABLISHED SITES (WITH BACKLINKS & TOPICAL AUTHORITY):
    - Target core commercial head terms, category comparison hubs, and comprehensive pillar playbooks in "${primaryNiche}".
 `}
 
+MANDATORY TOPIC DIVERSITY & PILLAR SPREAD (CRITICAL ANTI-REPETITION MANDATE):
+1. MULTI-PILLAR SPREAD:
+   - Each of the 4 to 6 clusters MUST represent a completely DIFFERENT content pillar or category.
+   - PROHIBITION: DO NOT generate multiple clusters about the same root topic (e.g., if one cluster focuses on cold email, do NOT make another cluster about cold email).
+   - Distribute the clusters evenly across available categories/pillars:
+${availableCategories.length > 0 ? availableCategories.map(c => `     • ${c}`).join('\n') : contentPillars.map(p => `     • ${p}`).join('\n')}
+   - Guarantee that distinct operational angles are represented:
+     * Tooling, Software & Tech Stack Comparisons / Reviews (commercial investigation)
+     * Channel / Platform Specific Execution Playbooks (e.g. LinkedIn, multichannel outreach)
+     * Technical Setup, Infrastructure & Optimization / Troubleshooting (e.g. deliverability, DNS, inbox warming, audit)
+     * Strategy, Frameworks, Copywriting & Conversion Psychology
+     * Campaign Architecture & Performance Scaling / Metrics
+2. DO NOT MONOPOLIZE ANY SINGLE SUBTOPIC:
+   - If the site already has articles on a specific subtopic, avoid that subtopic and focus on under-served categories.
+3. WITHIN-CLUSTER LONG-TAIL VARIETY:
+   - Secondary keywords within each cluster must target distinct specific problems, questions, comparisons, and workflows rather than minor phrasing permutations of the primary keyword.
+
 Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS strictly within "${primaryNiche}".
 For each cluster:
-1. Provide a clear cluster name specifically relevant to "${primaryNiche}" (e.g. "[Core Solution] Practical Guides", "[Pain Point] Solutions", "[Solution Category] Comparisons").
+1. Provide a clear cluster name specifically relevant to the respective distinct pillar/category.
 2. Provide a high-intent primary keyword (Pillar) with verified search demand (${isEstablished ? '1,500 to 10,000/mo, KD 30-55' : '500 to 2,500/mo, KD 12-28'}).
 3. Provide 3 to 5 long-tail secondary keywords (Supporting articles) with verified search demand (${isEstablished ? '800 to 4,000/mo, KD 25-45' : '250 to 1,200/mo, KD 10-25'}).
 4. Provide realistic estimated search volumes (MUST be >= 200 for new sites, >= 1,000 for established), keyword difficulties strictly matching the authority tier rules above, business relevance scores (85-100), and specific tactical evidence explaining the search intent and revenue potential.`,
-        system: `You are an elite SEO strategist and growth intelligence architect who identifies high-converting, on-niche keyword opportunities strictly tailored to "${primaryNiche}".`
+        system: `You are an elite SEO strategist and growth intelligence architect who identifies high-converting, on-niche keyword opportunities across diverse content pillars, strictly preventing repetitive topic clustering.`
       });
 
       const existingTitles = params.existingArticles || [];

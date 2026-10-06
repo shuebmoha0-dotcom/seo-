@@ -13,6 +13,14 @@ export interface CrawledPageData {
   internal_links: string[];
   external_links: string[];
   images: { src: string; alt: string }[];
+  missing_alt_count?: number;
+  word_count?: number;
+  has_schema?: boolean;
+  schema_types?: string[];
+  viewport?: string | null;
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image?: string | null;
   http_status: number;
   is_indexable: boolean;
 }
@@ -42,6 +50,10 @@ export class WebsiteCrawler {
       const meta_description = $('meta[name="description"]').attr('content') || null;
       const robots_directives = $('meta[name="robots"]').attr('content') || null;
       const canonical = $('link[rel="canonical"]').attr('href') || null;
+      const viewport = $('meta[name="viewport"]').attr('content') || null;
+      const og_title = $('meta[property="og:title"]').attr('content') || null;
+      const og_description = $('meta[property="og:description"]').attr('content') || null;
+      const og_image = $('meta[property="og:image"]').attr('content') || null;
 
       const h1: string[] = [];
       $('h1').each((_, el) => { h1.push($(el).text().trim()); });
@@ -53,6 +65,7 @@ export class WebsiteCrawler {
       $('h3').each((_, el) => { h3.push($(el).text().trim()); });
 
       const raw_body = $('body').text().replace(/\s+/g, ' ').trim();
+      const word_count = raw_body ? raw_body.split(/\s+/).filter(Boolean).length : 0;
       const body_text = raw_body.length > 5000 ? raw_body.slice(0, 5000) : raw_body;
 
       const internal_links: string[] = [];
@@ -74,14 +87,45 @@ export class WebsiteCrawler {
         }
       });
 
+      let missing_alt_count = 0;
       const images: { src: string; alt: string }[] = [];
       $('img').each((_, el) => {
         const src = $(el).attr('src');
         const alt = $(el).attr('alt') || '';
         if (src) {
           images.push({ src, alt });
+          if (!alt.trim()) {
+            missing_alt_count++;
+          }
         }
       });
+
+      const schema_types: string[] = [];
+      $('script[type="application/ld+json"]').each((_, el) => {
+        try {
+          const content = $(el).html();
+          if (content) {
+            const parsed = JSON.parse(content);
+            const extractType = (obj: any) => {
+              if (!obj || typeof obj !== 'object') return;
+              if (obj['@type']) {
+                if (Array.isArray(obj['@type'])) {
+                  schema_types.push(...obj['@type'].map(String));
+                } else if (typeof obj['@type'] === 'string') {
+                  schema_types.push(obj['@type']);
+                }
+              }
+              if (Array.isArray(obj['@graph'])) {
+                obj['@graph'].forEach(extractType);
+              }
+            };
+            extractType(parsed);
+          }
+        } catch {
+          // ignore malformed schema script
+        }
+      });
+      const uniqueSchemaTypes = [...new Set(schema_types)];
 
       let is_indexable = true;
       if (robots_directives && robots_directives.toLowerCase().includes('noindex')) {
@@ -105,6 +149,14 @@ export class WebsiteCrawler {
         internal_links: [...new Set(internal_links)],
         external_links: [...new Set(external_links)],
         images,
+        missing_alt_count,
+        word_count,
+        has_schema: uniqueSchemaTypes.length > 0,
+        schema_types: uniqueSchemaTypes,
+        viewport,
+        og_title,
+        og_description,
+        og_image,
         http_status,
         is_indexable
       };
@@ -129,6 +181,14 @@ export class WebsiteCrawler {
       internal_links: [],
       external_links: [],
       images: [],
+      missing_alt_count: 0,
+      word_count: 0,
+      has_schema: false,
+      schema_types: [],
+      viewport: null,
+      og_title: null,
+      og_description: null,
+      og_image: null,
       http_status,
       is_indexable: false
     };

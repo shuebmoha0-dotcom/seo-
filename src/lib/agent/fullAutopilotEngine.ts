@@ -435,87 +435,169 @@ export class FullAutopilotEngine {
       const gaps = await SiteContentGapDetector.findContentGaps({
         inventory,
         siteProfile: profile,
-        limit: 5,
+        limit: 8,
       });
 
-      // Filter gaps strictly through DuplicateArticleChecker
-      let selectedGap: any = null;
-      for (const candidate of gaps) {
-        const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(candidate.keyword, inventory);
+      // Pre-filter candidate gaps against live DuplicateArticleChecker
+      const candidateGaps: any[] = [];
+      for (const gap of gaps) {
+        const dupCheck = await DuplicateArticleChecker.check({
+          website_id: websiteId,
+          primary_keyword: gap.keyword,
+          working_title: gap.working_title,
+          site_url: siteUrl,
+        });
+
         if (!dupCheck.isDuplicate) {
-          selectedGap = candidate;
-          break;
+          candidateGaps.push(gap);
+        } else {
+          console.warn(`[FullAutopilotEngine] Filtered out duplicate gap candidate: "${gap.working_title}" (${dupCheck.reason})`);
         }
       }
 
-      // Fallback if all gaps matched or list empty
-      if (!selectedGap) {
-        selectedGap = {
-          keyword: `${profile.coreOfferings[0] || profile.primaryNiche} best practices`,
-          working_title: `${profile.coreOfferings[0] || profile.primaryNiche}: Practical Implementation Guide`,
-          target_category: inventory.categories[0]?.name || 'Guides',
-          estimated_volume: 850,
-          estimated_kd: profile.keywordStrategy.kdMin + 5,
-        };
+      // If all gaps were filtered out or list was empty, synthesize distinct candidates from thin categories
+      if (candidateGaps.length === 0) {
+        const availableCategories = inventory.thinCategories.length > 0
+          ? inventory.thinCategories
+          : inventory.categories.map(c => c.name).filter(c => c.toLowerCase() !== 'uncategorized');
+
+        const fallbackPillars = [
+          'Implementation Playbook',
+          'Comprehensive Architecture & Best Practices',
+          'Troubleshooting and Optimization Guide',
+          'Strategic Framework for High-Growth Teams'
+        ];
+
+        for (let i = 0; i < Math.max(3, availableCategories.length); i++) {
+          const cat = availableCategories[i % availableCategories.length] || profile.primaryNiche || 'Guides';
+          const pillar = fallbackPillars[i % fallbackPillars.length];
+          const candKw = `${cat} ${pillar.toLowerCase().split(' ')[0]}`.trim();
+          const candTitle = `${cat}: ${pillar}`;
+
+          const dupCheck = await DuplicateArticleChecker.check({
+            website_id: websiteId,
+            primary_keyword: candKw,
+            working_title: candTitle,
+            site_url: siteUrl,
+          });
+
+          if (!dupCheck.isDuplicate) {
+            candidateGaps.push({
+              keyword: candKw,
+              working_title: candTitle,
+              target_category: cat,
+              estimated_volume: 750,
+              estimated_kd: profile.keywordStrategy.kdMin + 5,
+            });
+          }
+        }
       }
 
-      console.log(`[FullAutopilotEngine] Selected high-ROI keyword: "${selectedGap.keyword}" (KD ${selectedGap.estimated_kd}, Vol: ${selectedGap.estimated_volume}/mo)`);
+      console.log(`[FullAutopilotEngine] Found ${candidateGaps.length} verified non-duplicate candidate topic(s) to process.`);
 
-      // ── STEP 3: AUTONOMOUS WRITING VIA CLAUDE SONNET 5 ───────────────────
-      // Pre-insert draft ticket so the user sees it in Content Planner immediately
-      const { data: preDraft } = await supabase
-        .from('content_drafts')
-        .insert({
-          website_id: websiteId,
-          working_title: selectedGap.working_title,
-          primary_keyword: selectedGap.keyword,
-          status: 'writing',
-          url_slug: selectedGap.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
-
-      const draftId = preDraft?.id;
-
-      // Compile internal links from inventory
+      // ── STEP 3: AUTONOMOUS WRITING VIA CLAUDE SONNET 5 (WITH DUPLICATE ADVANCEMENT LOOP) ──
       const candidateInternalLinks = inventory.coveredItems
         .filter(item => item.url || item.slug)
         .slice(0, 6)
         .map(item => `[${item.title}](${item.url || `${siteUrl.replace(/\/$/, '')}/${item.slug}/`})`);
 
       const contentAgent = new ContentAgent();
-      const articleOutput = await contentAgent.runFullPipeline({
-        website_id: websiteId,
-        primary_keyword: selectedGap.keyword,
-        secondary_keywords: [
-          `${selectedGap.keyword} checklist`,
-          `${selectedGap.keyword} examples`,
-          `how to implement ${selectedGap.keyword}`,
-        ],
-        search_intent: 'informational',
-        content_type: 'blog_article',
-        target_audience: profile.targetAudience,
-        working_title: selectedGap.working_title,
-        internal_linking_opportunities: candidateInternalLinks,
-        rules: {
-          word_count_min: 1200,
-          word_count_max: 1600,
-          language: 'U.S. English',
-          tone: 'Authoritative, practical, practitioner-first',
-          audience: profile.targetAudience,
-          author_style: 'Experienced technical consultant and industry specialist',
-          structure_rules: 'Use H2 and H3 headings. High information density. Do not include raw table of contents in text.',
-          paragraph_style: 'Clear, concise, scannable paragraphs.',
-          image_rules: 'Include relevant visual diagram or hero image.',
-          source_rules: 'Verify factual claims.',
-          brand_rules: 'Do not make unsupported marketing claims.',
-          cta_rules: 'Include one clear contextual next step.',
-          avoid_rules: 'No keyword stuffing. No fluff or repetitive filler.',
-        },
-        draft_id: draftId || undefined,
-        site_url: siteUrl,
-      });
+      let articleOutput: any = null;
+      let selectedGap: any = null;
+      let draftId: string | undefined = undefined;
+
+      // Try candidates sequentially. If one is caught as duplicate or blocked, cleanly advance to the next!
+      for (let attempt = 0; attempt < Math.min(candidateGaps.length, 3); attempt++) {
+        const candidate = candidateGaps[attempt];
+        console.log(`[FullAutopilotEngine] Attempting draft for candidate [${attempt + 1}/${candidateGaps.length}]: "${candidate.working_title}" (${candidate.keyword})...`);
+
+        // Real-time pre-check against database right before reserving draft ID
+        const preCheck = await DuplicateArticleChecker.check({
+          website_id: websiteId,
+          primary_keyword: candidate.keyword,
+          working_title: candidate.working_title,
+          site_url: siteUrl,
+        });
+
+        if (preCheck.isDuplicate) {
+          console.warn(`[FullAutopilotEngine] Candidate "${candidate.working_title}" is duplicate (${preCheck.reason}). Advancing to next topic...`);
+          continue;
+        }
+
+        // Pre-insert draft ticket so user sees it in Content Planner
+        const { data: preDraft } = await supabase
+          .from('content_drafts')
+          .insert({
+            website_id: websiteId,
+            working_title: candidate.working_title,
+            primary_keyword: candidate.keyword,
+            status: 'writing',
+            url_slug: candidate.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        const currentDraftId = preDraft?.id;
+
+        try {
+          articleOutput = await contentAgent.runFullPipeline({
+            website_id: websiteId,
+            primary_keyword: candidate.keyword,
+            secondary_keywords: [
+              `${candidate.keyword} checklist`,
+              `${candidate.keyword} examples`,
+              `how to implement ${candidate.keyword}`,
+            ],
+            search_intent: candidate.search_intent || 'informational',
+            content_type: 'blog_article',
+            target_audience: profile.targetAudience,
+            working_title: candidate.working_title,
+            internal_linking_opportunities: candidateInternalLinks,
+            rules: {
+              word_count_min: 1200,
+              word_count_max: 1600,
+              language: 'U.S. English',
+              tone: 'Authoritative, practical, practitioner-first',
+              audience: profile.targetAudience,
+              author_style: 'Experienced technical consultant and industry specialist',
+              structure_rules: 'Use H2 and H3 headings. High information density. Do not include raw table of contents in text.',
+              paragraph_style: 'Clear, concise, scannable paragraphs.',
+              image_rules: 'Include relevant visual diagram or hero image.',
+              source_rules: 'Verify factual claims.',
+              brand_rules: 'Do not make unsupported marketing claims.',
+              cta_rules: 'Include one clear contextual next step.',
+              avoid_rules: 'No keyword stuffing. No fluff or repetitive filler.',
+            },
+            draft_id: currentDraftId || undefined,
+            site_url: siteUrl,
+          });
+
+          selectedGap = candidate;
+          draftId = currentDraftId;
+          console.log(`[FullAutopilotEngine] Successfully drafted article for candidate: "${candidate.working_title}"!`);
+          break; // Succeeded! Break out of candidate loop
+        } catch (draftErr: any) {
+          // If draft failed or was caught as duplicate, remove placeholder draft immediately
+          if (currentDraftId) {
+            try {
+              await supabase.from('content_drafts').delete().eq('id', currentDraftId);
+            } catch (_) {}
+          }
+
+          if (draftErr?.message?.includes('Duplicate article prevented')) {
+            console.warn(`[FullAutopilotEngine] Candidate "${candidate.working_title}" triggered duplicate prevention: ${draftErr.message}. Advancing to next topic candidate...`);
+            continue;
+          }
+
+          // If it was another error, rethrow
+          throw draftErr;
+        }
+      }
+
+      if (!articleOutput || !selectedGap) {
+        throw new Error('All candidate topics were identified as duplicates or could not be drafted. Autopilot safely preserved existing content.');
+      }
 
       // ── STEP 4: AUTONOMOUS PUBLISHING (ZERO HUMAN APPROVAL BOTTLENECK) ────
       let livePostUrl = '';

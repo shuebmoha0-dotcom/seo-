@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { encryptCredential, decryptCredential } from '@/lib/utils/encryption';
 import { ContentPresentationAuditor } from '@/lib/crawler/contentPresentationAuditor';
 
@@ -184,18 +185,42 @@ export async function createWordPressJob(params: {
   jobType: string;
   payload: Record<string, any>;
   idempotencyKey?: string;
+  client?: any;
 }): Promise<{ job?: WordPressJob; error?: string }> {
-  const supabase = await createClient();
+  let supabase = params.client;
+  if (!supabase) {
+    try {
+      supabase = await createClient();
+    } catch {
+      supabase = createAdminClient();
+    }
+  }
 
   // Find outbound site
-  const { data: site, error: siteErr } = await supabase
+  let { data: site, error: siteErr } = await supabase
     .from('wordpress_outbound_sites')
     .select('id, status')
     .eq('website_id', params.websiteId)
     .eq('status', 'active')
     .maybeSingle();
 
-  if (siteErr || !site) {
+  if (!site) {
+    // Fallback to admin client for background tasks/scripts without browser cookies
+    const admin = createAdminClient();
+    const { data: adminSite } = await admin
+      .from('wordpress_outbound_sites')
+      .select('id, status')
+      .eq('website_id', params.websiteId)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (adminSite) {
+      site = adminSite;
+      supabase = admin;
+    }
+  }
+
+  if (!site) {
     return { error: 'No active outbound WordPress connection found for this website.' };
   }
 
@@ -259,15 +284,30 @@ export async function waitForJobCompletion(jobId: string, timeoutMs = 15000): Pr
   job?: WordPressJob;
   error?: string;
 }> {
-  const supabase = await createClient();
+  let supabase: any;
+  try {
+    supabase = await createClient();
+  } catch {
+    supabase = createAdminClient();
+  }
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
-    const { data: job } = await supabase
+    let { data: job } = await supabase
       .from('wordpress_jobs')
       .select('*')
       .eq('id', jobId)
-      .single();
+      .maybeSingle();
+
+    if (!job) {
+      const admin = createAdminClient();
+      const { data: adminJob } = await admin
+        .from('wordpress_jobs')
+        .select('*')
+        .eq('id', jobId)
+        .maybeSingle();
+      if (adminJob) job = adminJob;
+    }
 
     if (job) {
       if (job.status === 'completed') {

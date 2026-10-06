@@ -18,27 +18,29 @@ export async function GET(req: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Check platform admin status
-    let isAdmin = false;
-    const userRole = user.user_metadata?.role || (user as any).role;
-    if (isPlatformAdmin(user.email, userRole)) {
-      isAdmin = true;
-    } else {
-      const { data: dbUser } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (isPlatformAdmin(user.email, dbUser?.role || userRole)) {
-        isAdmin = true;
-      }
-    }
-
-    if (!isAdmin) {
+    // Check platform admin status strictly for shuebmoha0@gmail.com
+    if (!isPlatformAdmin(user.email)) {
       return NextResponse.json(
         { error: "Forbidden: Platform administrator privileges required" },
         { status: 403 }
       );
+    }
+
+    const { searchParams } = new URL(req.url);
+    const period = searchParams.get("period") || "all_time";
+    
+    let startDate: string | null = null;
+    if (period === "current_month") {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    } else if (period === "last_2_weeks") {
+      const now = new Date();
+      now.setDate(now.getDate() - 14);
+      startDate = now.toISOString();
+    } else if (period === "last_3_months") {
+      const now = new Date();
+      now.setMonth(now.getMonth() - 3);
+      startDate = now.toISOString();
     }
 
     // Fetch Admin Usage Controls
@@ -46,7 +48,7 @@ export async function GET(req: NextRequest) {
       .from("admin_usage_controls")
       .select("*")
       .eq("id", "global")
-      .single();
+      .maybeSingle();
 
     const controls = controlsData || {
       id: "global",
@@ -60,19 +62,63 @@ export async function GET(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    // Fetch Usage Events
-    const { data: events, error: eventsError } = await supabase
-      .from("usage_events")
-      .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at")
-      .order("created_at", { ascending: false })
-      .limit(1000);
+    // Fetch Usage Events via Security Definer RPC (bypasses tenant RLS safely for verified admin)
+    const limit = period === "all_time" || period === "last_3_months" ? 10000 : 2000;
+    let allEvents: any[] = [];
 
-    if (eventsError) {
-      console.error("[Admin Usage API] Error fetching usage events:", eventsError);
-      return NextResponse.json({ error: "Failed to fetch usage data" }, { status: 500 });
+    const { data: rpcEvents, error: rpcErr } = await authClient.rpc(
+      "get_platform_admin_usage_events",
+      {
+        p_start_date: startDate,
+        p_limit: limit,
+      }
+    );
+
+    if (!rpcErr && Array.isArray(rpcEvents)) {
+      allEvents = rpcEvents;
+    } else {
+      console.warn("[Admin Usage API] RPC notice, using direct query fallback:", rpcErr?.message);
+      let query = supabase
+        .from("usage_events")
+        .select("id, provider, model, api_type, agent_type, input_tokens, output_tokens, total_tokens, estimated_cost, created_at")
+        .order("created_at", { ascending: false });
+        
+      if (startDate) {
+        query = query.gte("created_at", startDate);
+      }
+      query = query.limit(limit);
+
+      const { data: directEvents } = await query;
+      allEvents = directEvents || [];
     }
 
-    const allEvents = events || [];
+    // If current_month has 0 events, fetch all-time events so the dashboard isn't completely blank
+    if (allEvents.length === 0 && period === "current_month") {
+      const { data: fallbackEvents } = await authClient.rpc(
+        "get_platform_admin_usage_events",
+        {
+          p_start_date: null,
+          p_limit: limit,
+        }
+      );
+      if (Array.isArray(fallbackEvents) && fallbackEvents.length > 0) {
+        allEvents = fallbackEvents;
+      }
+    }
+
+    // Fetch Total Posts Written
+    let postsQuery = supabase
+      .from('content_drafts')
+      .select('id', { count: 'exact', head: true })
+      .neq('status', 'failed');
+      
+    if (startDate) {
+      postsQuery = postsQuery.gte('created_at', startDate);
+    }
+    
+    const { count: postsCount } = await postsQuery;
+
+    const totalPostsWritten = postsCount || 0;
 
     // Aggregations
     let totalInputTokens = 0;
@@ -176,7 +222,7 @@ export async function GET(req: NextRequest) {
         cost: Number(d.cost.toFixed(4)),
       }));
 
-    const recentEvents = allEvents.slice(0, 50).map((ev) => ({
+    const recentEvents = allEvents.slice(0, 50).map((ev: any) => ({
       id: ev.id,
       agent: ev.agent_type || "System",
       model: ev.model,
@@ -201,6 +247,7 @@ export async function GET(req: NextRequest) {
         totalLlmCost: Number(totalLlmCost.toFixed(4)),
         activeAgents: agentMap.size,
         modelsUsed: modelMap.size,
+        totalPostsWritten,
       },
       controls,
       byAgent,

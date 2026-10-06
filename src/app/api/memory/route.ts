@@ -24,7 +24,7 @@ export async function GET(request: Request) {
       .order('is_important', { ascending: false })
       .order('created_at', { ascending: false });
 
-    if (website_id) query = query.or(`website_id.eq.${website_id},website_id.is.null`);
+    if (website_id) query = query.eq('website_id', website_id);
     if (category) query = query.eq('category', category);
     if (!include_outdated) query = query.eq('is_outdated', false);
 
@@ -302,12 +302,12 @@ export async function DELETE(request: Request) {
     }
 
     if (type === 'instructions') {
-      await supabase.from('project_memory').delete().eq('source', 'project_custom_instructions');
+      await supabase.from('project_memory').delete().eq('source', 'project_custom_instructions').eq('website_id', website_id);
       if (website_id) {
         await supabase.from('content_rules').update({ custom_rules: '' }).eq('website_id', website_id);
       }
     } else if (type === 'memory') {
-      await supabase.from('project_memory').delete().eq('source', 'project_knowledge_bank');
+      await supabase.from('project_memory').delete().eq('source', 'project_knowledge_bank').eq('website_id', website_id);
     }
 
     return NextResponse.json({ success: true });

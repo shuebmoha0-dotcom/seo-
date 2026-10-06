@@ -1,297 +1,322 @@
 "use client";
 
-import { Sidebar } from "@/components/Sidebar";
-import {
-  Settings, Globe, GitBranch, Search, Key, Save, CheckCircle2,
-  Shield, Bell, Smartphone, Copy, Check, Eye, EyeOff, Sparkles,
-  ExternalLink, Layers, RefreshCw
-} from "lucide-react";
 import { useState, useEffect } from "react";
+import { Sidebar } from "@/components/Sidebar";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import { 
+  Settings, 
+  Users, 
+  CreditCard, 
+  Key, 
+  Webhook, 
+  ShieldAlert,
+  CheckCircle2
+} from "lucide-react";
+
+type Tab = "general" | "team" | "billing" | "api-keys" | "webhooks" | "advanced";
 
 export default function SettingsPage() {
   const { currentWebsite } = useWebsite();
-  const [saved, setSaved] = useState(false);
-  const [websiteUrl, setWebsiteUrl] = useState("");
-  const [sitemapUrl, setSitemapUrl] = useState("");
-  const [repoOwner, setRepoOwner] = useState("");
-  const [repoName, setRepoName] = useState("");
-  const [branch, setBranch] = useState("main");
-  const [autoPr, setAutoPr] = useState(true);
-  const [crawlFreq, setCrawlFreq] = useState("daily");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  
+  const [activeTab, setActiveTab] = useState<Tab>("general");
+  
+  const [siteName, setSiteName] = useState("");
+  const [siteUrl, setSiteUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (currentWebsite) {
+      setSiteName(currentWebsite.name || currentWebsite.domain || "");
       const url = currentWebsite.url || (currentWebsite.domain ? `https://${currentWebsite.domain}` : "");
-      setWebsiteUrl(url);
-      setSitemapUrl(url ? `${url}/sitemap.xml` : "");
-      const githubIntegration = currentWebsite.integrations?.find((i) => i.provider === "github");
-      const repo = githubIntegration?.config?.repo || (currentWebsite as any).github_repo;
-      if (repo && typeof repo === "string") {
-        const parts = repo.split("/");
-        if (parts.length === 2) {
-          setRepoOwner(parts[0]);
-          setRepoName(parts[1]);
-        }
-      }
+      setSiteUrl(url);
     }
   }, [currentWebsite]);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const handleSave = async () => {
+    setSaving(true);
+    // Mock save delay
+    setTimeout(() => {
+      setSaving(false);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 3000);
+    }, 800);
   };
 
-  const copyText = (text: string, id: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedKey(id);
-    setTimeout(() => setCopiedKey(null), 2000);
-  };
+  const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+    { id: "general", label: "General", icon: Settings },
+    { id: "team", label: "Team", icon: Users },
+    { id: "billing", label: "Billing", icon: CreditCard },
+    { id: "api-keys", label: "API Keys", icon: Key },
+    { id: "webhooks", label: "Webhooks", icon: Webhook },
+    { id: "advanced", label: "Advanced", icon: ShieldAlert },
+  ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50/50 text-slate-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-neutral-50 text-neutral-900 font-sans">
       <Sidebar />
-
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-5xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <span className="font-medium text-slate-400">System</span>
-              <span className="text-slate-300">/</span>
-              <span className="font-semibold text-slate-700">Settings</span>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Workspace &amp; Engine Settings
-            </h1>
-            <p className="text-slate-500 text-xs mt-1">
-              Configure target website properties, GitOps execution pipelines, and notification webhooks.
-            </p>
+      
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-6 py-10 md:px-10 lg:px-12">
+          
+          <div className="mb-8 border-b border-neutral-200 pb-8">
+            <h1 className="text-3xl font-semibold tracking-tight text-neutral-900">Settings</h1>
+            <p className="text-sm text-neutral-500 mt-2">Manage your workspace settings and preferences.</p>
           </div>
 
-          <button
-            onClick={handleSave}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all flex items-center gap-2 shadow-xs active:scale-[0.98] self-start md:self-auto"
-          >
-            <Save className="w-3.5 h-3.5" />
-            <span>Save All Settings</span>
-          </button>
+          <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
+            
+            {/* Sidebar Tabs */}
+            <aside className="w-full md:w-56 shrink-0">
+              <nav className="flex flex-col space-y-1">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        isActive 
+                          ? "bg-neutral-200/50 text-neutral-900" 
+                          : "text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100"
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 ${isActive ? "text-neutral-900" : "text-neutral-400"}`} />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </aside>
+
+            {/* Content Area */}
+            <div className="flex-1 w-full space-y-8">
+              
+              {activeTab === "general" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  {/* Card 1 */}
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">Workspace Name</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        This is your workspace's visible name within the application.
+                      </p>
+                      
+                      <div className="mt-6 max-w-md">
+                        <input
+                          type="text"
+                          value={siteName}
+                          onChange={(e) => setSiteName(e.target.value)}
+                          className="w-full border border-neutral-300 rounded-lg px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/20 focus:border-neutral-900 transition-all"
+                          placeholder="My Workspace"
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Please use 32 characters at maximum.</span>
+                      <button 
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-70 flex items-center gap-2"
+                      >
+                        {saving ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </section>
+
+                  {/* Card 2 */}
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">Website URL</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        The primary production URL of your website.
+                      </p>
+                      
+                      <div className="mt-6 max-w-md">
+                        <input
+                          type="url"
+                          value={siteUrl}
+                          onChange={(e) => setSiteUrl(e.target.value)}
+                          className="w-full border border-neutral-300 rounded-lg px-4 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900/20 focus:border-neutral-900 transition-all"
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Used for automated SEO audits.</span>
+                      <button 
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors disabled:opacity-70"
+                      >
+                        {saving ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "team" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">Team Members</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        Manage who has access to this workspace.
+                      </p>
+                      
+                      <div className="mt-6 border border-neutral-200 rounded-lg overflow-hidden">
+                        <div className="px-4 py-3 bg-neutral-50 border-b border-neutral-200 text-sm font-medium text-neutral-700 flex justify-between">
+                          <span>User</span>
+                          <span>Role</span>
+                        </div>
+                        <div className="divide-y divide-neutral-100">
+                          <div className="px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs font-semibold">
+                                ME
+                              </div>
+                              <span className="text-sm font-medium text-neutral-900">You (Owner)</span>
+                            </div>
+                            <span className="text-xs font-medium text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200">Admin</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Enterprise plans support unlimited members.</span>
+                      <button className="bg-white border border-neutral-300 text-neutral-900 px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-50 transition-colors">
+                        Invite Member
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "billing" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">Current Plan</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        You are currently on the <strong className="text-neutral-900">Pro Plan</strong>.
+                      </p>
+                      
+                      <div className="mt-6 bg-neutral-50 border border-neutral-200 rounded-lg p-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="text-2xl font-semibold text-neutral-900">$49<span className="text-sm font-normal text-neutral-500">/mo</span></span>
+                            <p className="text-sm text-neutral-500 mt-1">Billed monthly</p>
+                          </div>
+                          <span className="px-3 py-1 bg-neutral-900 text-white text-xs font-medium rounded-full">Active</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Manage your subscription via Stripe.</span>
+                      <button className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors">
+                        Manage Billing
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "api-keys" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">API Keys</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        Use these keys to authenticate API requests.
+                      </p>
+                      
+                      <div className="mt-6">
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="password"
+                            readOnly
+                            value="key_••••••••••••••••••••••••••••••"
+                            className="flex-1 border border-neutral-300 rounded-lg px-4 py-2 text-sm text-neutral-500 font-mono focus:outline-none bg-neutral-50"
+                          />
+                          <button className="bg-white border border-neutral-300 text-neutral-900 px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-50 transition-colors shrink-0">
+                            Copy Key
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Never share your secret keys.</span>
+                      <button className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors">
+                        Generate New Key
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "webhooks" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  <section className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-neutral-900">Webhooks</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        Configure webhooks to receive real-time event payloads.
+                      </p>
+                      
+                      <div className="mt-8 text-center py-10 bg-neutral-50 border border-dashed border-neutral-300 rounded-lg">
+                        <Webhook className="w-8 h-8 text-neutral-400 mx-auto mb-3" />
+                        <h3 className="text-sm font-medium text-neutral-900">No Webhooks configured</h3>
+                        <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">Get notified when events happen in your workspace.</p>
+                      </div>
+                    </div>
+                    <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
+                      <span className="text-sm text-neutral-500">Listen to events like article generation.</span>
+                      <button className="bg-white border border-neutral-300 text-neutral-900 px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-50 transition-colors">
+                        Add Webhook
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
+              {activeTab === "advanced" && (
+                <div className="space-y-8 animate-in fade-in duration-200">
+                  <section className="bg-white border border-red-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="p-6 md:p-8">
+                      <h2 className="text-lg font-medium text-red-600">Danger Zone</h2>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        Irreversible actions related to your workspace.
+                      </p>
+                      
+                      <div className="mt-6 border border-red-100 bg-red-50/50 rounded-lg p-5 flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-medium text-neutral-900">Delete Workspace</h3>
+                          <p className="text-xs text-neutral-500 mt-1">Permanently remove this workspace and all its data.</p>
+                        </div>
+                        <button className="bg-red-600 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-red-700 transition-colors">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              )}
+              
+            </div>
+          </div>
+
         </div>
-
-        {saved && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-in fade-in duration-200 shadow-2xs">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span className="font-medium">Settings updated and synchronized across all autonomous agents.</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-6">
-          {/* Target Website Configuration */}
-          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-semibold text-sm text-slate-900">Target Website Configuration</h3>
-              </div>
-              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                Active Website Scope
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Production Website URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={websiteUrl}
-                  onChange={(e) => setWebsiteUrl(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  XML Sitemap Endpoint
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://example.com/sitemap.xml"
-                  value={sitemapUrl}
-                  onChange={(e) => setSitemapUrl(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
-              <div>
-                <span className="font-medium text-slate-900 block">Autonomous Crawl Frequency</span>
-                <span className="text-[11px] text-slate-500">How often the agent audits indexability and technical health</span>
-              </div>
-              <div className="inline-flex p-0.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium">
-                {["daily", "weekly", "manual"].map((freq) => (
-                  <button
-                    key={freq}
-                    type="button"
-                    onClick={() => setCrawlFreq(freq)}
-                    className={`px-3 py-1 rounded-md capitalize transition-all ${
-                      crawlFreq === freq ? "bg-white text-slate-900 shadow-2xs font-semibold" : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {freq}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* GitHub Repository Binding (GitOps Engine) */}
-          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <GitBranch className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-semibold text-sm text-slate-900">GitHub GitOps Execution Engine</h3>
-              </div>
-              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
-                Code Deployment Ready
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  GitHub Organization / Owner
-                </label>
-                <input
-                  type="text"
-                  placeholder="acme-org"
-                  value={repoOwner}
-                  onChange={(e) => setRepoOwner(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Repository Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="website"
-                  value={repoName}
-                  onChange={(e) => setRepoName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Production Branch
-                </label>
-                <input
-                  type="text"
-                  placeholder="main"
-                  value={branch}
-                  onChange={(e) => setBranch(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-between text-xs">
-              <div>
-                <span className="font-medium text-slate-900 block">Autonomous Pull Request Workflow</span>
-                <span className="text-[11px] text-slate-500">Generate review-ready PRs for schema updates and metadata fixes</span>
-              </div>
-              <input
-                type="checkbox"
-                checked={autoPr}
-                onChange={(e) => setAutoPr(e.target.checked)}
-                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Telegram Mobile Controller Link */}
-          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-semibold text-sm text-slate-900">Telegram Bot Controller</h3>
-              </div>
-              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Webhook Active
-              </span>
-            </div>
-
-            <div className="p-4 bg-slate-50/75 border border-slate-200/80 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-900">@Autonomous_seo_agent_bot</span>
-                  <span className="text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-mono font-semibold">
-                    v2.4 Live
-                  </span>
-                </div>
-                <p className="text-slate-500 text-[11px]">
-                  Send SEO tasks, request instant articles, and approve 1-click publishing directly from Telegram.
-                </p>
-              </div>
-
-              <a
-                href="https://t.me/Autonomous_seo_agent_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-slate-900 hover:bg-slate-800 text-white font-medium px-3.5 py-1.5 rounded-lg text-xs inline-flex items-center gap-1.5 shadow-2xs self-start sm:self-auto transition-colors"
-              >
-                <span>Open in Telegram</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          </div>
-
-          {/* API Keys & Webhook Endpoints */}
-          <div className="bg-white border border-slate-200/80 rounded-xl p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Key className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-semibold text-sm text-slate-900">API Credentials &amp; Webhook URL</h3>
-              </div>
-              <span className="text-[11px] text-slate-400 font-mono">REST v1</span>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                  Agent Webhook Delivery Endpoint
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value="https://seo-hazel-eight.vercel.app/api/telegram/webhook"
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-700 font-mono select-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => copyText("https://seo-hazel-eight.vercel.app/api/telegram/webhook", "webhook")}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1.5"
-                  >
-                    {copiedKey === "webhook" ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>Copy</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </form>
       </main>
+
+      {/* Toast Notification */}
+      {savedSuccess && (
+        <div className="fixed bottom-6 right-6 bg-neutral-900 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-5">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          <span className="text-sm font-medium">Settings saved successfully</span>
+        </div>
+      )}
     </div>
   );
 }

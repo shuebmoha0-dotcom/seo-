@@ -155,72 +155,76 @@ function LoginForm() {
   return (
     <div className="min-h-screen flex bg-white">
       {/* Left: Branding Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 flex-col justify-between p-12 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 left-20 w-64 h-64 rounded-full bg-white blur-3xl" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 rounded-full bg-purple-300 blur-3xl" />
-        </div>
-
+      <div className="hidden lg:flex lg:w-1/2 bg-neutral-900 border-r border-neutral-800 flex-col justify-between p-12 relative overflow-hidden">
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-white font-bold text-xl tracking-tight">SEO Autopilot</span>
-          </div>
+          <Link href="/" className="inline-flex items-center gap-2.5 mb-14">
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-neutral-900">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 17 9 11 13 15 21 7" />
+                <polyline points="15 7 21 7 21 13" />
+              </svg>
+            </span>
+            <span className="text-white font-semibold text-base tracking-tight">SEO Autopilot</span>
+          </Link>
 
-          <h1 className="text-4xl font-black text-white leading-tight mb-6">
-            Your autonomous<br />SEO employee,<br />working 24/7.
+          <h1 className="text-3xl font-semibold text-white leading-tight mb-4 tracking-tight">
+            Autonomous search growth for ambitious teams.
           </h1>
-          <p className="text-indigo-200 text-lg leading-relaxed max-w-sm">
-            AI agents that research, write, optimize, and monitor — with full multi-tenant isolation and human approvals.
+          <p className="text-neutral-400 text-sm leading-relaxed max-w-md">
+            Continuous technical auditing, keyword cluster mapping, and structured article drafting — with strict human approval workflows.
           </p>
         </div>
 
-        <div className="relative z-10 grid grid-cols-2 gap-4">
-          {[
-            { value: "18,247", label: "Organic clicks tracked" },
-            { value: "135+", label: "Agent modules active" },
-            { value: "24/7", label: "Autonomous monitoring" },
-            { value: "100%", label: "Human-approved actions" },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
-              <div className="text-2xl font-black text-white">{stat.value}</div>
-              <div className="text-indigo-200 text-xs font-medium mt-0.5">{stat.label}</div>
+        <div className="relative z-10 border-t border-neutral-800/80 pt-8">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <div className="text-xs font-medium text-neutral-400">Strict Human Approvals</div>
+              <div className="text-xs text-neutral-500 mt-1 leading-normal">
+                No changes or articles are published to production without explicit verification.
+              </div>
             </div>
-          ))}
+            <div>
+              <div className="text-xs font-medium text-neutral-400">Multi-CMS Connectors</div>
+              <div className="text-xs text-neutral-500 mt-1 leading-normal">
+                Direct synchronization with WordPress, GitHub repos, and custom API webhooks.
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Right: Auth Form */}
       <div className="flex-1 flex flex-col justify-center px-8 py-12 sm:px-16 lg:px-20">
-        <div className="max-w-md w-full mx-auto">
+        <div className="max-w-sm w-full mx-auto">
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="p-2 bg-indigo-600 rounded-xl">
-              <Bot className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-neutral-900">SEO Autopilot</span>
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-900 text-white">
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 17 9 11 13 15 21 7" />
+                <polyline points="15 7 21 7 21 13" />
+              </svg>
+            </span>
+            <span className="font-semibold text-neutral-900 tracking-tight">SEO Autopilot</span>
           </div>
 
-          <h2 className="text-2xl font-bold text-neutral-900 mb-1">
+          <h2 className="text-xl font-semibold text-neutral-900 mb-1 tracking-tight">
             {isVerifyingOtp ? "Verify your email" : isSignUp ? "Create your account" : "Welcome back"}
           </h2>
-          <p className="text-neutral-500 text-sm mb-8">
+          <p className="text-neutral-500 text-xs mb-6">
             {isVerifyingOtp 
               ? "Enter the 6-digit code sent to " + email
               : isSignUp 
-                ? "Start your autonomous SEO journey." 
-                : "Sign in to your SEO command centre."}
+                ? "Get started with your autonomous SEO agent." 
+                : "Sign in to manage your connected properties."}
           </p>
 
           {error && (
-            <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm mb-6">
+            <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg text-xs mb-5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
           {success && (
-            <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-xl text-sm mb-6">
+            <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 p-3 rounded-lg text-xs mb-5">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{success}</span>
             </div>
@@ -228,21 +232,21 @@ function LoginForm() {
 
           {isVerifyingOtp ? (
             /* OTP Code Verification Form */
-            <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-neutral-600 uppercase tracking-wider mb-2">
-                  6-Digit Verification Code
+                <label className="block text-xs font-medium text-neutral-700 mb-1.5">
+                  Verification Code
                 </label>
                 <div className="relative">
-                  <KeyRound className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <KeyRound className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={otpCode}
                     onChange={(e) => setOtpCode(e.target.value)}
-                    placeholder="e.g. 123456"
+                    placeholder="123456"
                     maxLength={10}
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 text-lg font-mono tracking-widest focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:tracking-normal placeholder:text-neutral-400"
+                    className="w-full pl-9 pr-3 h-9 bg-white border border-neutral-300 rounded-lg text-neutral-900 text-sm font-mono tracking-wider focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-colors placeholder:text-neutral-400"
                   />
                 </div>
               </div>
@@ -250,31 +254,31 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading || !otpCode.trim()}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
+                className="w-full h-9 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-60 text-white rounded-lg font-medium text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
               >
                 {loading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    Verify & Continue
-                    <ArrowRight className="w-4 h-4" />
+                    <span>Verify & Continue</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </button>
 
-              <div className="flex items-center justify-between text-xs pt-2">
+              <div className="flex items-center justify-between text-xs pt-1">
                 <button
                   type="button"
                   onClick={handleResendEmail}
                   disabled={loading}
-                  className="text-indigo-600 hover:underline font-medium flex items-center gap-1.5"
+                  className="text-neutral-600 hover:text-neutral-900 font-medium flex items-center gap-1"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Resend verification email
+                  <RefreshCw className="w-3 h-3" /> Resend code
                 </button>
                 <button
                   type="button"
                   onClick={() => { setIsVerifyingOtp(false); setError(null); setSuccess(null); }}
-                  className="text-neutral-500 hover:text-neutral-700"
+                  className="text-neutral-500 hover:text-neutral-800"
                 >
                   Back to login
                 </button>
@@ -282,70 +286,70 @@ function LoginForm() {
             </form>
           ) : (
             /* Sign In / Sign Up Form */
-            <form onSubmit={handleAuth} className="space-y-5">
+            <form onSubmit={handleAuth} className="space-y-4">
               {isSignUp && (
                 <div>
-                  <label className="block text-xs font-semibold text-neutral-600 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-medium text-neutral-700 mb-1.5">
                     Full Name
                   </label>
                   <div className="relative">
-                    <User className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <User className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="Your name"
+                      placeholder="Jane Doe"
                       required
-                      className="w-full pl-10 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-neutral-400"
+                      className="w-full pl-9 pr-3 h-9 bg-white border border-neutral-300 rounded-lg text-neutral-900 text-xs focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-colors placeholder:text-neutral-400"
                     />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-600 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-medium text-neutral-700 mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder="name@company.com"
                     required
-                    className="w-full pl-10 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-neutral-400"
+                    className="w-full pl-9 pr-3 h-9 bg-white border border-neutral-300 rounded-lg text-neutral-900 text-xs focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-colors placeholder:text-neutral-400"
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-medium text-neutral-700">
                     Password
                   </label>
                   {!isSignUp && (
-                    <Link href="/forgot-password" className="text-xs text-indigo-600 hover:underline font-medium">
-                      Forgot password?
+                    <Link href="/forgot-password" className="text-xs text-neutral-500 hover:text-neutral-900 font-medium transition-colors">
+                      Forgot?
                     </Link>
                   )}
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-neutral-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isSignUp ? "At least 8 characters" : "Your password"}
+                    placeholder="••••••••"
                     required
-                    className="w-full pl-10 pr-10 py-3 bg-neutral-50 border border-neutral-200 rounded-xl text-neutral-900 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all placeholder:text-neutral-400"
+                    className="w-full pl-9 pr-8 h-9 bg-white border border-neutral-300 rounded-lg text-neutral-900 text-xs focus:outline-none focus:ring-1 focus:ring-neutral-900 focus:border-neutral-900 transition-colors placeholder:text-neutral-400"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               </div>
@@ -353,14 +357,14 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white py-3 rounded-xl font-semibold text-sm transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+                className="w-full h-9 bg-neutral-900 hover:bg-neutral-800 disabled:opacity-60 text-white rounded-lg font-medium text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5 mt-2"
               >
                 {loading ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <>
-                    {isSignUp ? "Create Account" : "Sign In"}
-                    <ArrowRight className="w-4 h-4" />
+                    <span>{isSignUp ? "Create account" : "Sign in"}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}
               </button>
@@ -368,13 +372,13 @@ function LoginForm() {
           )}
 
           {!isVerifyingOtp && (
-            <p className="text-center text-sm text-neutral-500 mt-6">
+            <p className="text-center text-xs text-neutral-500 mt-5">
               {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
               <button
                 onClick={() => { setIsSignUp(!isSignUp); setError(null); setSuccess(null); }}
-                className="text-indigo-600 font-semibold hover:underline"
+                className="text-neutral-900 font-medium hover:underline"
               >
-                {isSignUp ? "Sign in" : "Sign up free"}
+                {isSignUp ? "Sign in" : "Sign up"}
               </button>
             </p>
           )}

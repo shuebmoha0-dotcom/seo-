@@ -324,7 +324,8 @@ class SEO_Autopilot_Worker {
             $lines = explode("\n", trim($matches[1]));
             $items = '';
             foreach ($lines as $line) {
-                $line = trim(preg_replace('/^[*-]\s+/', '', $line));
+                $line = trim(preg_replace('/^[*-]\s*(?:(?:>|&gt;)\s*)?/', '', $line));
+                $line = trim(preg_replace('/^(?:>|&gt;)\s*/', '', $line));
                 if (!empty($line)) {
                     $items .= '<li>' . esc_html($line) . '</li>';
                 }
@@ -337,7 +338,8 @@ class SEO_Autopilot_Worker {
             $lines = explode("\n", trim($matches[1]));
             $items = '';
             foreach ($lines as $line) {
-                $line = trim(preg_replace('/^\d+\.\s+/', '', $line));
+                $line = trim(preg_replace('/^\d+\.\s*(?:(?:>|&gt;)\s*)?/', '', $line));
+                $line = trim(preg_replace('/^(?:>|&gt;)\s*/', '', $line));
                 if (!empty($line)) {
                     $items .= '<li>' . esc_html($line) . '</li>';
                 }
@@ -356,13 +358,38 @@ class SEO_Autopilot_Worker {
             return "<a href=\"{$href}\">{$anchor}</a>";
         }, $content);
 
+        // Protect and clean existing list elements before splitting paragraphs
+        $content = preg_replace_callback('/(<ul[^>]*>[\s\S]*?<\/ul>)/i', function($m) {
+            $cleaned = preg_replace('/<\/?p[^>]*>/i', '', $m[1]);
+            $cleaned = preg_replace('/<br\s*\/?>/i', '', $cleaned);
+            $cleaned = preg_replace('/<li([^>]*)>\s*(?:&gt;|>)\s*/i', '<li$1>', $cleaned);
+            return "\n\n" . trim($cleaned) . "\n\n";
+        }, $content);
+
+        $content = preg_replace_callback('/(<ol[^>]*>[\s\S]*?<\/ol>)/i', function($m) {
+            $cleaned = preg_replace('/<\/?p[^>]*>/i', '', $m[1]);
+            $cleaned = preg_replace('/<br\s*\/?>/i', '', $cleaned);
+            $cleaned = preg_replace('/<li([^>]*)>\s*(?:&gt;|>)\s*/i', '<li$1>', $cleaned);
+            return "\n\n" . trim($cleaned) . "\n\n";
+        }, $content);
+
         // Convert Paragraphs
         $paragraphs = preg_split('/\r?\n\s*\r?\n/', $content);
         $formatted = array();
         foreach ($paragraphs as $p) {
             $p = trim($p);
             if (empty($p)) continue;
-            if (strpos($p, '<!-- wp:') === 0 || strpos($p, '<h') === 0 || strpos($p, '<figure') === 0 || strpos($p, '<ul') === 0 || strpos($p, '<ol') === 0 || strpos($p, '<blockquote') === 0) {
+            if (
+                strpos($p, '<!-- wp:') === 0 || 
+                strpos($p, '<h') === 0 || 
+                strpos($p, '<figure') === 0 || 
+                strpos($p, '<ul') === 0 || 
+                strpos($p, '<ol') === 0 || 
+                strpos($p, '<li') === 0 || 
+                strpos($p, '<blockquote') === 0 ||
+                strpos($p, '<hr') === 0 ||
+                strpos($p, '<table') === 0
+            ) {
                 $formatted[] = $p;
             } else {
                 $formatted[] = "<!-- wp:paragraph -->\n<p>" . nl2br($p) . "</p>\n<!-- /wp:paragraph -->";

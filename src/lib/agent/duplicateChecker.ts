@@ -265,7 +265,7 @@ export class DuplicateArticleChecker {
     }
 
     if (params.website_id) {
-      draftsQuery = draftsQuery.or(`website_id.eq.${params.website_id},website_id.is.null`);
+      draftsQuery = draftsQuery.eq('website_id', params.website_id);
     }
 
     const { data: drafts } = await draftsQuery;
@@ -387,11 +387,17 @@ export class DuplicateArticleChecker {
     }
 
     // 3. Query wordpress_jobs (recently published or queued posts)
-    const { data: jobs } = await supabase
+    let jobsQuery = supabase
       .from('wordpress_jobs')
-      .select('payload')
+      .select('payload, website_id')
       .order('created_at', { ascending: false })
-      .limit(25);
+      .limit(50);
+
+    if (params.website_id) {
+      jobsQuery = jobsQuery.eq('website_id', params.website_id);
+    }
+
+    const { data: jobs } = await jobsQuery;
 
     if (jobs && jobs.length > 0) {
       const targetString = `${params.working_title || ''} ${params.primary_keyword || ''}`.trim();
@@ -434,7 +440,7 @@ export class DuplicateArticleChecker {
     // 1. From content_drafts
     let query = supabase.from('content_drafts').select('working_title, primary_keyword');
     if (website_id) {
-      query = query.or(`website_id.eq.${website_id},website_id.is.null`);
+      query = query.eq('website_id', website_id);
     }
     const { data: drafts } = await query;
     (drafts || []).forEach(d => {

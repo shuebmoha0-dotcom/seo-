@@ -20,7 +20,10 @@ interface OpportunityProps {
   };
 }
 
+import { useWebsite } from "@/lib/context/WebsiteContext";
+
 export function OpportunityCard({ opportunity }: OpportunityProps) {
+  const { currentWebsite } = useWebsite();
   const [status, setStatus] = useState<"pending" | "approved" | "rejected" | "rolled_back">("pending");
   const [rollingBack, setRollingBack] = useState(false);
 
@@ -33,10 +36,11 @@ export function OpportunityCard({ opportunity }: OpportunityProps) {
   const handleRollback = async () => {
     setRollingBack(true);
     try {
+      const targetUrl = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "/");
       await fetch("/api/agent/autonomous/rollback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action_id: opportunity.id, target_url: "https://my-saas-company.com" }),
+        body: JSON.stringify({ action_id: opportunity.id, target_url: targetUrl }),
       });
       setStatus("rolled_back");
     } catch (e) {
@@ -119,80 +123,81 @@ export function OpportunityCard({ opportunity }: OpportunityProps) {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white border border-neutral-200 rounded-2xl p-6 transition-all hover:bg-neutral-50 shadow-sm group"
+      className="bg-white border border-neutral-200 rounded-xl p-5 transition-colors shadow-xs group"
     >
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h3 className="text-lg font-semibold text-neutral-900 mb-2">{opportunity.problem}</h3>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <span className={`text-xs px-2.5 py-1 rounded-full border ${getBadgeColor(opportunity.priority)}`}>
+          <h3 className="text-base font-semibold text-neutral-900 mb-2">{opportunity.problem}</h3>
+          <div className="flex flex-wrap gap-2">
+            <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${getBadgeColor(opportunity.priority)}`}>
               Priority: {opportunity.priority}
             </span>
-            <span className={`text-xs px-2.5 py-1 rounded-full border ${getBadgeColor(opportunity.confidence)}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-md border font-medium ${getBadgeColor(opportunity.confidence)}`}>
               Confidence: {opportunity.confidence}
             </span>
-            <span className={`text-xs px-2.5 py-1 rounded-full border bg-white border-neutral-200 text-neutral-700`}>
+            <span className="text-xs px-2 py-0.5 rounded-md border bg-neutral-50 border-neutral-200 text-neutral-600 font-medium">
               Effort: {opportunity.effort}
             </span>
           </div>
         </div>
-        <div className="p-2 bg-indigo-50 rounded-xl">
-          <Zap className="w-5 h-5 text-indigo-600" />
+        <div className="p-2 bg-neutral-100 rounded-lg text-neutral-600">
+          <Zap className="w-4 h-4" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-xl border border-neutral-200">
-          <div className="flex items-center gap-2 text-neutral-500 mb-2">
-            <BarChart2 className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">Evidence</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+        <div className="bg-neutral-50/70 p-3.5 rounded-lg border border-neutral-200/80">
+          <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
+            <BarChart2 className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">Evidence</span>
           </div>
-          <p className="text-sm text-neutral-700">{opportunity.evidence}</p>
+          <p className="text-xs text-neutral-700 leading-relaxed">{opportunity.evidence}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-neutral-200">
-          <div className="flex items-center gap-2 text-neutral-500 mb-2">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wider">Expected Impact</span>
+        <div className="bg-neutral-50/70 p-3.5 rounded-lg border border-neutral-200/80">
+          <div className="flex items-center gap-1.5 text-neutral-500 mb-1">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">Expected Impact</span>
           </div>
-          <p className="text-sm text-neutral-700">{opportunity.expected_impact}</p>
-        </div>
-      </div>
-
-      <div className="mb-6">
-        <h4 className="text-sm font-medium text-neutral-800 mb-3">Proposed Change</h4>
-        <div className="font-mono text-xs rounded-xl overflow-hidden border border-neutral-200">
-          <div className="bg-red-50 text-red-300 p-3 flex gap-4 border-b border-neutral-200 relative">
-            <span className="text-red-500/50 select-none">-</span>
-            <span>{opportunity.diff_before}</span>
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-red-500/10 to-transparent" />
-          </div>
-          <div className="bg-emerald-50 text-emerald-300 p-3 flex gap-4 relative">
-            <span className="text-emerald-500/50 select-none">+</span>
-            <span>{opportunity.diff_after}</span>
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-emerald-500/10 to-transparent" />
-          </div>
+          <p className="text-xs text-neutral-700 leading-relaxed">{opportunity.expected_impact}</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pt-4 border-t border-neutral-200">
+      {(opportunity.diff_before || opportunity.diff_after) && (
+        <div className="mb-5">
+          <h4 className="text-xs font-medium text-neutral-700 mb-2">Proposed Code/Content Change</h4>
+          <div className="font-mono text-xs rounded-lg overflow-hidden border border-neutral-200">
+            {opportunity.diff_before && (
+              <div className="bg-red-50 text-red-800 p-2.5 flex items-start gap-3 border-b border-red-100">
+                <span className="text-red-500 select-none font-bold">-</span>
+                <span className="break-all">{opportunity.diff_before}</span>
+              </div>
+            )}
+            {opportunity.diff_after && (
+              <div className="bg-emerald-50 text-emerald-800 p-2.5 flex items-start gap-3">
+                <span className="text-emerald-600 select-none font-bold">+</span>
+                <span className="break-all">{opportunity.diff_after}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-3 border-t border-neutral-100">
         <button 
           onClick={() => setStatus("approved")}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(79,70,229,0.3)] flex justify-center items-center gap-2 text-xs"
+          className="inline-flex h-8 items-center justify-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-medium px-4 rounded-lg transition-colors shadow-xs"
         >
-          <Check className="w-4 h-4" /> Approve &amp; PR
-        </button>
-        <button 
-          className="px-4 py-2.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 font-medium rounded-xl transition-colors flex justify-center items-center gap-2 text-xs"
-        >
-          <Edit2 className="w-4 h-4" /> Edit
+          <Check className="w-3.5 h-3.5" />
+          <span>Approve &amp; Queue</span>
         </button>
         <button 
           onClick={() => setStatus("rejected")}
-          className="px-4 py-2.5 bg-white border border-neutral-200 hover:bg-red-50 hover:text-red-600 text-neutral-500 font-medium rounded-xl transition-colors flex justify-center items-center"
+          className="inline-flex h-8 items-center justify-center gap-1.5 bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-600 text-xs font-medium px-3 rounded-lg transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
+          <span>Dismiss</span>
         </button>
       </div>
     </motion.div>

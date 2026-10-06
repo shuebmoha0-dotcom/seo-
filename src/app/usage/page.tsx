@@ -25,7 +25,7 @@ interface AdminUsageData {
     totalImages?: number;
     totalImageCost?: number;
     totalLlmCost?: number;
-    activeAgents: number;
+    activeAgents: number; totalPostsWritten?: number;
     modelsUsed: number;
   };
   controls: {
@@ -158,12 +158,28 @@ const AGENT_COLORS: Record<string, string> = {
 export default function UsagePage() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [userEmail, setUserEmail] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("seo_cached_admin_usage");
+        if (cached) return false;
+      } catch {}
+    }
+    return true;
+  });
   const [activeTab, setActiveTab] = useState<"overview" | "agents" | "models" | "stream" | "controls">("overview");
   const [viewMode, setViewMode] = useState<"admin" | "client">("admin");
 
   // Telemetry data
-  const [adminData, setAdminData] = useState<AdminUsageData | null>(null);
+  const [adminData, setAdminData] = useState<AdminUsageData | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("seo_cached_admin_usage");
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
   const [tenantData, setTenantData] = useState<TenantUsageData | null>(null);
   const [filterAgent, setFilterAgent] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -180,7 +196,7 @@ export default function UsagePage() {
 
   // Client / Tenant view filters
   const [selectedWebsite, setSelectedWebsite] = useState<string>("all");
-  const [selectedPeriod, setSelectedPeriod] = useState<"current_month" | "all_time">("current_month");
+  const [selectedPeriod, setSelectedPeriod] = useState<"current_month" | "last_2_weeks" | "last_3_months" | "all_time">("all_time");
   const [clientSearchQuery, setClientSearchQuery] = useState<string>("");
   const [clientFilterType, setClientFilterType] = useState<"all" | "writing" | "images" | "research">("all");
 
@@ -194,24 +210,14 @@ export default function UsagePage() {
         let adminStatus = false;
         if (user) {
           setUserEmail(user.email || "");
-          const role = user.user_metadata?.role || (user as any).role;
-          adminStatus = isPlatformAdmin(user.email, role);
-
-          if (!adminStatus) {
-            const { data: dbUser } = await supabase
-              .from("users")
-              .select("role")
-              .eq("id", user.id)
-              .single();
-            adminStatus = isPlatformAdmin(user.email, dbUser?.role || role);
-          }
+          adminStatus = isPlatformAdmin(user.email);
         }
 
         setIsAdmin(adminStatus);
         setViewMode(adminStatus ? "admin" : "client");
 
         if (adminStatus) {
-          await loadAdminTelemetry();
+          await loadAdminTelemetry("all_time");
         } else {
           await loadTenantUsage("all", "current_month");
         }
@@ -225,12 +231,15 @@ export default function UsagePage() {
     initUserAndData();
   }, []);
 
-  const loadAdminTelemetry = async () => {
+  const loadAdminTelemetry = async (period: string = selectedPeriod) => {
     try {
-      const res = await fetch("/api/admin/usage");
+      const res = await fetch(`/api/admin/usage?period=${period}`);
       if (res.ok) {
         const data: AdminUsageData = await res.json();
         setAdminData(data);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("seo_cached_admin_usage", JSON.stringify(data));
+        }
         if (data.controls) {
           setTokenBudget(data.controls.monthly_token_budget || 5000000);
           setCostBudget(data.controls.monthly_cost_budget || 50.0);
@@ -299,7 +308,7 @@ export default function UsagePage() {
   const totalCalls = adminData?.summary?.totalCalls ?? 0;
   const totalImages = adminData?.summary?.totalImages ?? 0;
   const totalImageCost = adminData?.summary?.totalImageCost ?? 0;
-  const totalLlmCost = adminData?.summary?.totalLlmCost ?? 0;
+  const totalLlmCost = adminData?.summary?.totalLlmCost ?? 0; const totalPostsWritten = adminData?.summary?.totalPostsWritten ?? 0;
   const budgetBurnPercent = tokenBudget > 0 ? Math.min(100, Math.round((totalTokens / tokenBudget) * 100)) : 0;
 
   const filteredEvents = (adminData?.recentEvents || []).filter((ev) => {
@@ -312,31 +321,36 @@ export default function UsagePage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900 font-sans">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto p-8 space-y-8">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <div className="max-w-7xl w-full mx-auto p-6 md:p-8 space-y-8">
 
           {/* Top Admin Telemetry Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
             <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1.5">
+                <span>Settings</span>
+                <span>/</span>
+                <span className="text-neutral-800">Usage & Token Governance</span>
+              </div>
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-600 rounded-xl shadow-sm text-white">
-                  <Cpu className="w-6 h-6" />
+                  <Cpu className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-black text-neutral-900 tracking-tight">
+                    <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
                       {isAdmin && viewMode === "admin" ? "Token & Usage Control Center" : "Usage & Monthly Credits"}
                     </h1>
                     {isAdmin && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
                         Admin Access
                       </span>
                     )}
                   </div>
-                  <p className="text-neutral-500 text-sm mt-0.5">
+                  <p className="text-neutral-500 text-xs mt-0.5">
                     {isAdmin && viewMode === "admin"
                       ? "Platform-wide LLM token tracking, autonomous agent telemetry & budget governance."
                       : "Monthly execution quotas and credit consumption for connected properties."}
@@ -348,16 +362,16 @@ export default function UsagePage() {
             {/* Admin View Mode Toggles & Refresh */}
             <div className="flex items-center gap-3">
               {isAdmin && (
-                <div className="flex bg-neutral-200/70 p-1 rounded-xl text-xs font-semibold">
+                <div className="flex bg-neutral-100 p-1 rounded-xl text-xs font-semibold border border-neutral-200">
                   <button
                     onClick={() => setViewMode("admin")}
                     className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                       viewMode === "admin"
-                        ? "bg-white text-indigo-700 shadow-sm"
-                        : "text-neutral-600 hover:text-neutral-900"
+                        ? "bg-white text-indigo-700 shadow-sm border border-neutral-200/80 font-bold"
+                        : "text-neutral-500 hover:text-neutral-900"
                     }`}
                   >
-                    <Shield className="w-3.5 h-3.5" />
+                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
                     Admin Cockpit
                   </button>
                   <button
@@ -367,11 +381,11 @@ export default function UsagePage() {
                     }}
                     className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
                       viewMode === "client"
-                        ? "bg-white text-indigo-700 shadow-sm"
-                        : "text-neutral-600 hover:text-neutral-900"
+                        ? "bg-white text-indigo-700 shadow-sm border border-neutral-200/80 font-bold"
+                        : "text-neutral-500 hover:text-neutral-900"
                     }`}
                   >
-                    <Bot className="w-3.5 h-3.5" />
+                    <Bot className="w-3.5 h-3.5 text-neutral-500" />
                     Tenant View
                   </button>
                 </div>
@@ -383,7 +397,7 @@ export default function UsagePage() {
                   else loadTenantUsage(selectedWebsite, selectedPeriod);
                 }}
                 disabled={loading}
-                className="p-2 border border-neutral-300 rounded-xl bg-white hover:bg-neutral-100 transition-colors text-neutral-600"
+                className="p-2 border border-neutral-200 rounded-xl bg-white hover:bg-neutral-50 transition-colors text-neutral-600 shadow-xs"
                 title="Refresh Telemetry"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`} />
@@ -397,17 +411,30 @@ export default function UsagePage() {
           {isAdmin && viewMode === "admin" && (
             <div className="space-y-8">
               {/* Telemetry Status Bar */}
-              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3.5 text-sm text-emerald-900">
-                <div className="flex items-center gap-2.5">
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                  </span>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-5 py-3 text-xs text-emerald-900">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
                   <span className="font-semibold">Live Empirical Telemetry Active:</span>
                   <span className="text-emerald-700">Tracking all Autonomous Agents in Supabase</span>
                 </div>
-                <div className="text-xs font-mono text-emerald-800 bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-200">
-                  Total Runs: {totalCalls} API calls
+                <div className="flex items-center gap-3">
+                  <select
+                    value={selectedPeriod}
+                    onChange={(e) => {
+                      const newPeriod = e.target.value as any;
+                      setSelectedPeriod(newPeriod);
+                      loadAdminTelemetry(newPeriod);
+                    }}
+                    className="bg-white border border-emerald-200 rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-400 cursor-pointer"
+                  >
+                    <option value="current_month">Current Month</option>
+                    <option value="last_2_weeks">Last 2 Weeks</option>
+                    <option value="last_3_months">Last 3 Months</option>
+                    <option value="all_time">All Time</option>
+                  </select>
+                  <div className="text-xs font-mono text-emerald-800 bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    Total Runs: {totalCalls} API calls
+                  </div>
                 </div>
               </div>
 
@@ -488,11 +515,11 @@ export default function UsagePage() {
                       <Bot className="w-4 h-4 text-amber-600" />
                     </div>
                     <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">
-                      Active Agents
+                      Articles Written
                     </span>
                   </div>
                   <div className="text-2xl font-black text-neutral-900">
-                    {adminData?.summary?.activeAgents ?? 0}
+                    {totalPostsWritten}
                   </div>
                   <div className="text-[11px] text-neutral-500 mt-1">
                     Autonomous agents active
@@ -536,28 +563,32 @@ export default function UsagePage() {
               </div>
 
               {/* Navigation Tabs */}
-              <div className="flex gap-1 bg-neutral-100 rounded-xl p-1 w-fit">
+              <div className="flex flex-wrap gap-1 bg-neutral-100/80 p-1 rounded-xl border border-neutral-200/80 w-fit">
                 {(
                   [
-                    { id: "overview", label: "Token Timeline" },
-                    { id: "agents", label: "Agents Breakdown" },
-                    { id: "models", label: "Model Intelligence" },
-                    { id: "stream", label: "Live Token Stream" },
-                    { id: "controls", label: "Usage Controls & Limits" },
+                    { id: "overview", label: "Token Timeline", icon: TrendingUp },
+                    { id: "agents", label: "Agents Breakdown", icon: Bot },
+                    { id: "models", label: "Model Intelligence", icon: Cpu },
+                    { id: "stream", label: "Live Token Stream", icon: Activity },
+                    { id: "controls", label: "Usage Controls & Limits", icon: Sliders },
                   ] as const
-                ).map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setActiveTab(t.id)}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      activeTab === t.id
-                        ? "bg-white text-neutral-900 shadow-sm"
-                        : "text-neutral-500 hover:text-neutral-700"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+                ).map((t) => {
+                  const Icon = t.icon;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setActiveTab(t.id)}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        activeTab === t.id
+                          ? "bg-white text-indigo-700 shadow-sm border border-neutral-200/80"
+                          : "text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${activeTab === t.id ? "text-indigo-600" : "text-neutral-400"}`} />
+                      {t.label}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Tab 1: Token Timeline */}
@@ -1000,34 +1031,29 @@ export default function UsagePage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 self-end md:self-auto">
-                  <div className="flex bg-neutral-100 p-1 rounded-xl text-xs font-semibold text-neutral-600">
-                    <button
-                      onClick={() => {
-                        setSelectedPeriod("current_month");
-                        loadTenantUsage(selectedWebsite, "current_month");
-                      }}
-                      className={`px-3 py-1.5 rounded-lg transition-all ${
-                        selectedPeriod === "current_month"
-                          ? "bg-white text-indigo-700 shadow-sm font-bold"
-                          : "hover:text-neutral-900"
-                      }`}
-                    >
-                      Current Month
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedPeriod("all_time");
-                        loadTenantUsage(selectedWebsite, "all_time");
-                      }}
-                      className={`px-3 py-1.5 rounded-lg transition-all ${
-                        selectedPeriod === "all_time"
-                          ? "bg-white text-indigo-700 shadow-sm font-bold"
-                          : "hover:text-neutral-900"
-                      }`}
-                    >
-                      All Time
-                    </button>
+                <div className="flex items-center gap-2.5 self-end md:self-auto overflow-x-auto">
+                  <div className="flex bg-neutral-100 p-1 rounded-lg text-xs font-medium text-neutral-600 border border-neutral-200">
+                    {[
+                      { id: "current_month", label: "Current Month" },
+                      { id: "last_2_weeks", label: "Last 2 Weeks" },
+                      { id: "last_3_months", label: "Last 3 Months" },
+                      { id: "all_time", label: "All Time" },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedPeriod(p.id as any);
+                          loadTenantUsage(selectedWebsite, p.id);
+                        }}
+                        className={`px-3 py-1.5 rounded-md transition-all whitespace-nowrap ${
+                          selectedPeriod === p.id
+                            ? "bg-white text-indigo-700 shadow-xs font-semibold"
+                            : "hover:text-neutral-900"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

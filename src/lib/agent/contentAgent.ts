@@ -239,54 +239,18 @@ export class ContentAgent {
         taskType: 'long_form_article',
         complexity: 'complex',
         context: usageContext,
-        system: `You are an elite enterprise SEO content strategist and authoritative industry author. Follow these instructions and guidelines strictly:
+        system: `You are an expert SEO author. Write a high-density Markdown article starting directly with # [Title].
 
-${projectMemory ? `==================================================
-🧠 CRITICAL PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY (MANDATORY ACTIVE INTEGRATION):
-${projectMemory}
-==================================================\n` : ''}${projectInstructions ? `==================================================
-📋 MANDATORY PROJECT CUSTOM INSTRUCTIONS & SPECIFICATIONS:
-${projectInstructions}
-==================================================\n` : ''}CONTENT RULES:
-- Language: ${rules.language}
-- Tone: ${rules.tone}
-- Audience: ${rules.audience}
-- Style: ${rules.author_style}
-- Structure: ${rules.structure_rules}
-- Paragraphs: ${rules.paragraph_style}
-- STRICT LENGTH REQUIREMENT: Target length is ${rules.word_count_min}–${rules.word_count_max} words. Stay tightly within this word range without unnecessary padding or bloated sections.
-- CTA rule: ${rules.cta_rules}
-- Avoid: ${rules.avoid_rules}
-- Brand rule: ${rules.brand_rules}
-- Sources: ${rules.source_rules}
-${rules.custom_rules ? `- Custom: ${rules.custom_rules}` : ''}
-
-WRITING PRINCIPLES — STRICT MEMORY & INSTRUCTION ADHERENCE:
-- 🚫 ZERO META TAGS IN BODY: DO NOT output "Meta title:", "**Meta title:**", "Meta description:", or "**Meta description:**" anywhere in the article text. Start directly with the H1.
-- 🚫 ZERO TABLE OF CONTENTS: NEVER generate a "Table of Contents", "## Table of Contents", or bullet lists of anchor links anywhere in the article. Flow directly from the H1 and introduction into your first H2 topic.
-- 👤 AUTHOR PERSONA & AUDIENCE ALIGNMENT:
-  ${rules.author_style ? `- Embody the designated author persona and style: ${rules.author_style}.` : '- Write from an authoritative, experienced practitioner perspective with authentic industry expertise.'}
-  - Target Audience: Write directly for readers searching for "${brief.primary_keyword}" (${rules.audience || 'decision-makers, practitioners, and relevant industry professionals'}).
-  - Industry Relevance: Deeply tailor all advice, frameworks, workflows, and terminology to the target domain, niche, and user search intent. Provide real-world, actionable value without generic filler.
-- 🧠 MANDATORY DEEP MEMORY UTILIZATION:
-  - Actively weave specific facts, domain knowledge, experiences, past lessons, and real positioning from the PROJECT KNOWLEDGE BANK & ACCUMULATED MEMORY into the article.
-- 🎯 STRICT INSTRUCTION COMPLIANCE: Embody the human user's PROJECT CUSTOM INSTRUCTIONS, brand voice, deliverable specs, power words, and structure rules with 100% precision.
-- 🔗 MANDATORY INTERNAL LINKING REQUIREMENT (MINIMUM 3 REAL LIVE URLS):
-  - You MUST embed AT LEAST 3 internal links into the article body using standard markdown syntax: [anchor text](EXACT_URL).
-  - Use the exact live URLs provided in the candidate list below. Embed them seamlessly mid-sentence (e.g. "As we covered in our guide on [topic guide](https://example.com/relevant-post/), keeping your ask low-friction is essential.").
-  - Anchor text MUST be concise (2 to 4 words), natural, and relevant. Never use generic anchors like "click here", "read more", or raw URLs.
-- 📏 STRICT LENGTH TARGET (${rules.word_count_min}–${rules.word_count_max} WORDS TOTAL):
-  - The human explicitly requested a ${rules.word_count_min}–${rules.word_count_max} word article.
-  - You MUST stay strictly within this target. For each H2/H3 section, write ONLY 1 to 2 compact, actionable paragraphs (around 120–180 words per heading) so the TOTAL article word count stays under ${rules.word_count_max} words.
-  - Do NOT write bloated fluff, multiple repeated explanations, or long multi-page dissertations. Keep every sentence high-signal and punchy.
-- 🏆 POSITION 0 & FEATURED SNIPPET ACCELERATION (MANDATORY FOR FAST RANKING):
-  - In the first 80–120 words directly under the H1/intro, write a crisp Direct Answer Box answering "${brief.primary_keyword}" directly. State the core definition, key steps, or standard benchmarks in 40–60 words so Google can extract it as a Featured Snippet (Position 0).
-- ❓ HIGH-INTENT FAQ SECTION (RICH SNIPPET SCHEMA):
-  - Include a "## Frequently Asked Questions" section near the conclusion with 3 to 4 real questions that searchers ask about "${brief.primary_keyword}", each followed by a concise 2-sentence direct answer for search snippet indexing.
-- Short paragraphs. Clear sentences. High information density.
-- Place image markers exactly where specified: [IMAGE: ...]
-- DO NOT write fake markdown image tags or type "Image prompt:". ONLY use the exact bracket syntax [IMAGE: ...] provided.
-${revisionNotes ? `\nREVISION NOTES FROM HUMAN/QA: ${revisionNotes}` : ''}`,
+STRICT RULES:
+1. STRICT LENGTH: Exactly ${rules.word_count_min}–${rules.word_count_max} words. 1–2 compact paragraphs (120–160 words) per H2. No filler.
+2. ZERO TABLE OF CONTENTS: Never generate a Table of Contents or anchor bullet list.
+3. ZERO META TAGS: Never output "Meta title:", "SEO title:", or meta descriptions in text.
+4. FEATURED SNIPPET: Directly under H1, provide a 40–50 word direct definition/answer for "${brief.primary_keyword}".
+5. INTERNAL LINKS: Embed at least 3 exact links from the candidate list as [anchor](URL).
+6. IMAGES: Place exact markers [IMAGE: ...].
+7. FAQ: Near conclusion, include 3 FAQ H3s with 2-sentence direct answers.
+8. TONE & AUDIENCE: ${rules.tone} | Written for ${rules.audience}.
+${projectMemory ? `\nPROJECT INSIGHTS:\n${projectMemory}\n` : ''}${projectInstructions ? `\nCUSTOM INSTRUCTIONS:\n${projectInstructions}\n` : ''}${revisionNotes ? `\nREVISION:\n${revisionNotes}\n` : ''}`,
         prompt: `Write a focused, high-value ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below. Stay tightly within the target ${rules.word_count_min}–${rules.word_count_max} word range.
 
 TITLE: ${brief.working_title}
@@ -490,7 +454,7 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
         .order('is_important', { ascending: false });
 
       if (websiteId) {
-        query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
+        query = query.eq('website_id', websiteId);
       }
 
       const { data: rows } = await query;
@@ -502,18 +466,20 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
         );
 
         if (!input.project_instructions && instrRow?.content) {
-          input.project_instructions = instrRow.content;
+          input.project_instructions = instrRow.content.slice(0, 600);
         }
 
         if (!input.project_memory || input.project_memory.length < 50) {
           const parts: string[] = [];
-          if (memoryRow?.content) parts.push(memoryRow.content);
+          if (memoryRow?.content) parts.push(memoryRow.content.slice(0, 400));
           if (otherFacts.length > 0) {
-            const factText = otherFacts.map((f: any) => `[${f.category?.toUpperCase() || 'INSIGHT'}] ${f.content}`).join('\n\n');
+            // Strictly cap at top 5 highest-signal memory insights to conserve tokens
+            const prioritizedFacts = otherFacts.slice(0, 5);
+            const factText = prioritizedFacts.map((f: any) => `• [${f.category?.toUpperCase() || 'INSIGHT'}] ${f.content.slice(0, 150)}`).join('\n');
             parts.push(factText);
           }
           if (parts.length > 0) {
-            input.project_memory = parts.join('\n\n');
+            input.project_memory = parts.join('\n');
           }
         }
       }

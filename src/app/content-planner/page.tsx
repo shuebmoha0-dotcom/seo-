@@ -3,7 +3,7 @@
 import { Sidebar } from "@/components/Sidebar";
 import {
   Sparkles, FileText, Check, X, Edit2, Send, RefreshCw, AlertTriangle, ShieldAlert,
-  Loader2, Clock, BookOpen, Image as ImageIcon, Link as LinkIcon, ChevronDown, ChevronRight,
+  Loader2, Clock, BookOpen, Image as ImageIcon, Link as LinkIcon, ChevronDown, ChevronRight, ChevronLeft,
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
   PenLine, Cpu, Globe, Zap, Brain, ExternalLink, ArrowLeft, Copy, CheckCheck,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type DraftStatus = "brief_pending" | "writing" | "generating" | "qa_pending" | "needs_revision" | "ready_for_approval" | "approved" | "rejected" | "published" | "draft";
@@ -118,7 +119,7 @@ const QA_LABELS: Record<string, string> = {
 };
 
 export default function ContentPlannerPage() {
-  const { currentWebsite, openAddModal } = useWebsite();
+  const { currentWebsite, openAddModal, loading: websiteLoading } = useWebsite();
 
   const [activeTab, setActiveTab] = useState<"queue" | "studio" | "rules">("queue");
   const [selectedDraft, setSelectedDraft] = useState<ContentDraft | null>(null);
@@ -126,8 +127,30 @@ export default function ContentPlannerPage() {
   const [approving, setApproving] = useState<string | null>(null);
   const [revisionNote, setRevisionNote] = useState("");
   const [showRevisionInput, setShowRevisionInput] = useState(false);
-  const [drafts, setDrafts] = useState<ContentDraft[]>([]);
-  const [loadingDrafts, setLoadingDrafts] = useState(true);
+  const [drafts, setDrafts] = useState<ContentDraft[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_drafts_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return [];
+  });
+  const [loadingDrafts, setLoadingDrafts] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_cached_drafts_${storedSiteId}`);
+          if (cached) return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
   const [rules, setRules] = useState(DEFAULT_RULES);
   const [rulesSaved, setRulesSaved] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
@@ -328,6 +351,10 @@ export default function ContentPlannerPage() {
         const loadedDrafts = data.drafts || [];
         setDrafts(loadedDrafts);
 
+        if (typeof window !== "undefined" && currentWebsite) {
+          sessionStorage.setItem(`seo_cached_drafts_${currentWebsite.id}`, JSON.stringify(loadedDrafts));
+        }
+
         if (selectedDraft) {
           const updatedSelected = loadedDrafts.find((d: any) => d.id === selectedDraft.id);
           if (updatedSelected) {
@@ -355,7 +382,7 @@ export default function ContentPlannerPage() {
 
   useEffect(() => {
     fetchDrafts(false);
-  }, [currentWebsite?.id]);
+  }, [currentWebsite?.id, websiteLoading]);
 
   const activeWritingCount = drafts.filter(d => d.status === "writing" || d.status === "generating").length;
   useEffect(() => {
@@ -369,6 +396,51 @@ export default function ContentPlannerPage() {
 
     return () => clearInterval(interval);
   }, [activeWritingCount, publishing]);
+
+  // Current draft index & navigation
+  const currentDraftIndex = drafts.findIndex(d => d.id === selectedDraft?.id);
+  const prevDraft = currentDraftIndex > 0 ? drafts[currentDraftIndex - 1] : null;
+  const nextDraft = currentDraftIndex >= 0 && currentDraftIndex < drafts.length - 1 ? drafts[currentDraftIndex + 1] : null;
+
+  const goToPrevDraft = () => {
+    if (prevDraft) {
+      setSelectedDraft(prevDraft);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const goToNextDraft = () => {
+    if (nextDraft) {
+      setSelectedDraft(nextDraft);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const handleReturnToQueue = () => {
+    setActiveTab("queue");
+  };
+
+  // Keyboard shortcut support (Esc to return, Alt+Left/Right to switch posts)
+  useEffect(() => {
+    if (activeTab !== "studio") return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return;
+      }
+      if (e.key === "Escape") {
+        handleReturnToQueue();
+      } else if (e.key === "ArrowLeft" && (e.altKey || e.metaKey)) {
+        goToPrevDraft();
+      } else if (e.key === "ArrowRight" && (e.altKey || e.metaKey)) {
+        goToNextDraft();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeTab, currentDraftIndex, drafts]);
 
   const handleGenerateDraft = async (keywordOverride?: string) => {
     const keyword = (keywordOverride || quickKeyword).trim();
@@ -496,10 +568,10 @@ export default function ContentPlannerPage() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to request indexing");
-      alert(`🚀 Indexing Requested Successfully!\n\n${data.summary || "Googlebot and Bingbot notified."}`);
+      alert(`Indexing Requested Successfully!\n\n${data.summary || "Googlebot and Bingbot notified."}`);
     } catch (err: any) {
       console.error("Indexing request error:", err);
-      alert(`⚠️ Indexing Request Notice:\n${err.message || "Failed to submit request"}`);
+      alert(`Indexing Request Notice:\n${err.message || "Failed to submit request"}`);
     } finally {
       setRequestingIndex(null);
     }
@@ -544,7 +616,21 @@ export default function ContentPlannerPage() {
   const qaPassed = qaItems.filter(([, v]) => v === true).length;
   const qaTotal = qaItems.length;
 
-  const measuredScore = selectedDraft?.rankmath_score || 96;
+  const measuredScore: number | null = selectedDraft?.rankmath_score && selectedDraft.rankmath_score > 0
+    ? selectedDraft.rankmath_score
+    : selectedDraft?.content_body
+      ? (() => {
+          let s = 50;
+          const wc = selectedDraft.word_count || selectedDraft.content_body.split(/\s+/).filter(Boolean).length;
+          if (wc >= 1200) s += 20;
+          else if (wc >= 800) s += 10;
+          if (selectedDraft.content_body.includes("## ")) s += 10;
+          if (selectedDraft.primary_keyword && selectedDraft.content_body.toLowerCase().includes(selectedDraft.primary_keyword.toLowerCase())) s += 10;
+          if (selectedDraft.meta_description) s += 5;
+          if (selectedDraft.images && selectedDraft.images.length > 0) s += 5;
+          return Math.min(100, s);
+        })()
+      : null;
 
   // Filtered drafts
   const filteredDrafts = drafts.filter(d => {
@@ -702,14 +788,16 @@ export default function ContentPlannerPage() {
                 />
               </div>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => handleGenerateDraft(quickKeyword)}
                 disabled={generating || !quickKeyword.trim()}
-                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
+                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm shrink-0"
               >
                 {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
                 <span>{generating ? "Writing Article..." : "Generate Article"}</span>
-              </button>
+              </motion.button>
             </div>
 
             {/* ERROR / DUPLICATE PREVENTION BANNER */}
@@ -770,34 +858,38 @@ export default function ContentPlannerPage() {
             <div className="space-y-4">
               
               {/* Top Studio Control Bar */}
-              <div className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                <div className="space-y-2">
+              <div className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-3.5">
+                {/* Row 1: Return to All Articles & Quick Post Switcher */}
+                <div className="flex items-center justify-between gap-3 pb-3 border-b border-neutral-100 flex-wrap">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {/* Back to All Articles button */}
+                    {/* Primary Back Button */}
                     <button
-                      onClick={() => setActiveTab("queue")}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg text-xs font-semibold transition-colors shadow-2xs"
-                      title="Back to All Articles"
+                      onClick={handleReturnToQueue}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg text-xs font-bold transition-all shadow-sm group"
+                      title="Return to Articles Inventory (Esc)"
                     >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>All Articles ({drafts.length})</span>
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                      <span>Back to All Articles</span>
+                      <span className="bg-neutral-800 text-neutral-300 text-[10px] px-1.5 py-0.5 rounded font-mono ml-0.5">
+                        {drafts.length}
+                      </span>
                     </button>
 
                     {/* Switch Article Dropdown */}
                     <div className="relative">
                       <button
                         onClick={() => setIsDraftDropdownOpen(!isDraftDropdownOpen)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-neutral-50 border border-neutral-200 text-neutral-700 rounded-lg text-xs font-medium transition-colors shadow-2xs"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-700 rounded-lg text-xs font-semibold transition-colors"
                       >
                         <History className="w-3.5 h-3.5 text-neutral-500" />
-                        <span>Switch Article ▾</span>
+                        <span>Select Other Post ▾</span>
                       </button>
 
                       {isDraftDropdownOpen && (
                         <div className="absolute top-full left-0 mt-1.5 w-80 max-h-72 overflow-y-auto bg-white border border-neutral-200 rounded-xl shadow-xl z-50 p-1.5 space-y-1">
                           <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400 border-b border-neutral-100 flex items-center justify-between">
-                            <span>Previous Articles ({drafts.length})</span>
-                            <span className="text-[9px] text-indigo-600 font-semibold">Click to Open</span>
+                            <span>All Articles ({drafts.length})</span>
+                            <span className="text-[9px] text-indigo-600 font-semibold">Click to Switch</span>
                           </div>
                           {drafts.map((d) => (
                             <button
@@ -823,76 +915,114 @@ export default function ContentPlannerPage() {
                       )}
                     </div>
 
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${STATUS_CONFIG[selectedDraft.status]?.color || "bg-neutral-100"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedDraft.status]?.dot || "bg-neutral-400"}`} />
-                      <span>{STATUS_CONFIG[selectedDraft.status]?.label || selectedDraft.status}</span>
-                    </span>
-
-                    {selectedDraft.status === "published" && selectedDraft.published_at && (
-                      <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        {formatPublishDate(selectedDraft.published_at)}
-                      </span>
-                    )}
-
-                    <span className="text-xs text-neutral-400 font-mono">
-                      {selectedDraft.word_count || 0} words · {selectedDraft.reading_time || 5} min read
+                    <span className="text-[11px] text-neutral-400 hidden sm:inline">
+                      Press <kbd className="px-1.5 py-0.5 bg-neutral-100 border border-neutral-200 rounded text-[10px] font-mono text-neutral-600">Esc</kbd> to return
                     </span>
                   </div>
 
-                  <h2 className="text-base md:text-lg font-bold text-neutral-900 tracking-tight">
-                    {selectedDraft.working_title}
-                  </h2>
+                  {/* Previous / Next Stepper Controls */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-neutral-500 font-medium">
+                      Article <strong className="text-neutral-900">{currentDraftIndex >= 0 ? currentDraftIndex + 1 : 1}</strong> of <strong className="text-neutral-900">{drafts.length}</strong>
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={goToPrevDraft}
+                        disabled={!prevDraft}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 disabled:opacity-40 disabled:hover:bg-white text-xs font-semibold transition-colors"
+                        title={prevDraft ? `Previous: ${prevDraft.working_title}` : "First article"}
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Previous</span>
+                      </button>
+                      <button
+                        onClick={goToNextDraft}
+                        disabled={!nextDraft}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 disabled:opacity-40 disabled:hover:bg-white text-xs font-semibold transition-colors"
+                        title={nextDraft ? `Next: ${nextDraft.working_title}` : "Last article"}
+                      >
+                        <span className="hidden sm:inline">Next</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Primary Action Buttons */}
-                <div className="flex items-center gap-2 flex-wrap shrink-0">
-                  {selectedDraft.wordpress_post_url ? (
-                    <a
-                      href={selectedDraft.wordpress_post_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>View on WordPress</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : (
+                {/* Row 2: Status badges, title & publishing actions */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1.5 ${STATUS_CONFIG[selectedDraft.status]?.color || "bg-neutral-100"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CONFIG[selectedDraft.status]?.dot || "bg-neutral-400"}`} />
+                        <span>{STATUS_CONFIG[selectedDraft.status]?.label || selectedDraft.status}</span>
+                      </span>
+
+                      {selectedDraft.status === "published" && selectedDraft.published_at && (
+                        <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          {formatPublishDate(selectedDraft.published_at)}
+                        </span>
+                      )}
+
+                      <span className="text-xs text-neutral-400 font-mono">
+                        {selectedDraft.word_count || 0} words · {selectedDraft.reading_time || 5} min read
+                      </span>
+                    </div>
+
+                    <h2 className="text-base md:text-lg font-bold text-neutral-900 tracking-tight">
+                      {selectedDraft.working_title}
+                    </h2>
+                  </div>
+
+                  {/* Primary Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    {selectedDraft.wordpress_post_url ? (
+                      <a
+                        href={selectedDraft.wordpress_post_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>View on WordPress</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <button
+                        onClick={() => handlePublishWordPress(selectedDraft)}
+                        disabled={publishing === selectedDraft.id}
+                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm"
+                      >
+                        {publishing === selectedDraft.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+                        <span>{publishing === selectedDraft.id ? "Publishing..." : "Publish Live to WordPress"}</span>
+                      </button>
+                    )}
+
                     <button
-                      onClick={() => handlePublishWordPress(selectedDraft)}
-                      disabled={publishing === selectedDraft.id}
-                      className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs px-3.5 py-2 rounded-lg transition-all shadow-sm"
+                      onClick={() => handleRequestIndexing(selectedDraft)}
+                      disabled={requestingIndex === selectedDraft.id}
+                      className="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-50 border border-neutral-200/80 text-neutral-700 font-medium text-xs px-3.5 py-2 rounded-lg transition-colors shadow-xs"
+                      title="Notify Googlebot & IndexNow"
                     >
-                      {publishing === selectedDraft.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-                      <span>{publishing === selectedDraft.id ? "Publishing..." : "Publish Live to WordPress"}</span>
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{requestingIndex === selectedDraft.id ? "Submitting..." : "Google Indexing"}</span>
                     </button>
-                  )}
 
-                  <button
-                    onClick={() => handleRequestIndexing(selectedDraft)}
-                    disabled={requestingIndex === selectedDraft.id}
-                    className="inline-flex items-center gap-1.5 bg-white hover:bg-neutral-50 border border-neutral-200/80 text-neutral-700 font-medium text-xs px-3.5 py-2 rounded-lg transition-colors shadow-xs"
-                    title="Notify Googlebot & IndexNow"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{requestingIndex === selectedDraft.id ? "Submitting..." : "Google Indexing"}</span>
-                  </button>
+                    <button
+                      onClick={() => setShowRevisionInput(!showRevisionInput)}
+                      className="inline-flex items-center gap-1 bg-white hover:bg-neutral-50 border border-neutral-200/80 text-neutral-700 font-medium text-xs px-3 py-2 rounded-lg transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-neutral-500" />
+                      <span>Revise</span>
+                    </button>
 
-                  <button
-                    onClick={() => setShowRevisionInput(!showRevisionInput)}
-                    className="inline-flex items-center gap-1 bg-white hover:bg-neutral-50 border border-neutral-200/80 text-neutral-700 font-medium text-xs px-3 py-2 rounded-lg transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5 text-neutral-500" />
-                    <span>Revise</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleApproval("reject")}
-                    className="inline-flex items-center gap-1 bg-white hover:bg-red-50 border border-neutral-200/80 text-red-600 font-medium text-xs px-3 py-2 rounded-lg transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    <span>Reject</span>
-                  </button>
+                    <button
+                      onClick={() => handleApproval("reject")}
+                      className="inline-flex items-center gap-1 bg-white hover:bg-red-50 border border-neutral-200/80 text-red-600 font-medium text-xs px-3 py-2 rounded-lg transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1010,6 +1140,52 @@ export default function ContentPlannerPage() {
                       {selectedDraft.content_body || "No content body generated."}
                     </pre>
                   )}
+
+                  {/* Bottom Return & Post Stepper Bar */}
+                  <div className="pt-6 border-t border-neutral-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <button
+                      onClick={handleReturnToQueue}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 bg-neutral-900 hover:bg-neutral-800 text-white rounded-lg font-bold transition-all shadow-sm group"
+                    >
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                      <span>Back to All Articles</span>
+                      <span className="bg-neutral-800 text-neutral-300 text-[10px] px-1.5 py-0.5 rounded font-mono ml-0.5">
+                        {drafts.length}
+                      </span>
+                    </button>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                      {prevDraft && (
+                        <button
+                          onClick={goToPrevDraft}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg font-semibold text-neutral-700 transition-colors"
+                          title={prevDraft.working_title}
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5 text-neutral-500" />
+                          <span className="max-w-[150px] truncate">Previous Post</span>
+                        </button>
+                      )}
+
+                      {nextDraft && (
+                        <button
+                          onClick={goToNextDraft}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg font-semibold text-neutral-700 transition-colors"
+                          title={nextDraft.working_title}
+                        >
+                          <span className="max-w-[150px] truncate">Next Post</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-neutral-500" />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                        className="px-2.5 py-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition-colors font-medium ml-1"
+                        title="Scroll to top of article"
+                      >
+                        ↑ Top
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* RIGHT COLUMN: SEO INSPECTION & SCORECARD (4 COLS) */}
@@ -1026,7 +1202,7 @@ export default function ContentPlannerPage() {
 
                     <div className="flex items-center gap-4 py-1">
                       {/* Circular Gauge */}
-                      <div className="relative w-20 h-20 shrink-0">
+                      <div className="relative w-16 h-16 shrink-0">
                         <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
                           <path
                             className="text-neutral-100 stroke-current"
@@ -1035,26 +1211,40 @@ export default function ContentPlannerPage() {
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                           />
                           <path
-                            className="text-emerald-500 stroke-current transition-all duration-1000"
+                            className={`${measuredScore !== null && measuredScore >= 80 ? 'text-emerald-500' : measuredScore !== null && measuredScore >= 60 ? 'text-amber-500' : 'text-neutral-300'} stroke-current transition-all duration-1000`}
                             strokeWidth="3.5"
-                            strokeDasharray={`${measuredScore}, 100`}
+                            strokeDasharray={`${measuredScore || 0}, 100`}
                             strokeLinecap="round"
                             fill="none"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                           />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-xl font-bold text-neutral-900 tracking-tight">{measuredScore}</span>
+                          <span className="text-base font-bold text-neutral-900 tracking-tight">
+                            {measuredScore !== null ? measuredScore : "—"}
+                          </span>
                           <span className="text-[9px] text-neutral-400 font-medium">/100</span>
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block">
-                          Fully Optimized
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded inline-block ${
+                          measuredScore !== null && measuredScore >= 80
+                            ? "text-emerald-700 bg-emerald-50"
+                            : measuredScore !== null && measuredScore >= 60
+                            ? "text-amber-700 bg-amber-50"
+                            : "text-neutral-600 bg-neutral-100"
+                        }`}>
+                          {measuredScore !== null && measuredScore >= 80
+                            ? "Optimized"
+                            : measuredScore !== null && measuredScore >= 60
+                            ? "Acceptable"
+                            : "Pending Draft"}
                         </span>
                         <p className="text-[11px] text-neutral-500 leading-tight">
-                          Exceeds content depth, keyword density, and search intent standards.
+                          {measuredScore !== null
+                            ? "Evaluated against content depth, headings, and search intent."
+                            : "Generate or write draft content to evaluate score."}
                         </p>
                       </div>
                     </div>
@@ -1173,30 +1363,24 @@ export default function ContentPlannerPage() {
 
                   {/* Filter Pills */}
                   <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
-                    <button
-                      onClick={() => setFilterStatus("all")}
-                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        filterStatus === "all" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
-                      }`}
-                    >
-                      All ({drafts.length})
-                    </button>
-                    <button
-                      onClick={() => setFilterStatus("draft")}
-                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        filterStatus === "draft" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
-                      }`}
-                    >
-                      Drafts ({drafts.filter(d => d.status !== "published").length})
-                    </button>
-                    <button
-                      onClick={() => setFilterStatus("published")}
-                      className={`px-3 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        filterStatus === "published" ? "bg-white text-neutral-900 shadow-sm font-semibold" : "text-neutral-500 hover:text-neutral-700"
-                      }`}
-                    >
-                      Published ({drafts.filter(d => d.status === "published").length})
-                    </button>
+                    {(["all", "draft", "published"] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setFilterStatus(tab)}
+                        className="relative px-3 py-1 text-[11px] font-medium transition-colors"
+                      >
+                        {filterStatus === tab && (
+                          <motion.div
+                            layoutId="contentPlannerFilterPill"
+                            className="absolute inset-0 bg-white rounded-md shadow-xs"
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                          />
+                        )}
+                        <span className={`relative z-10 ${filterStatus === tab ? "text-neutral-900 font-semibold" : "text-neutral-500 hover:text-neutral-700"}`}>
+                          {tab === "all" ? `All (${drafts.length})` : tab === "draft" ? `Drafts (${drafts.filter(d => d.status !== "published").length})` : `Published (${drafts.filter(d => d.status === "published").length})`}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

@@ -93,7 +93,7 @@ export default function AutopilotPage() {
         if (res.ok) {
           const data = await res.json();
           setFullAutopilot(data.status);
-          setStatusFeedback({ message: '🚀 Zero-Touch Full Autopilot activated! Initiating first autonomous cycle now...', ok: true });
+          setStatusFeedback({ message: 'Zero-Touch Full Autopilot activated! Initiating first autonomous cycle now...', ok: true });
           await fetchTasks(true);
           // Automatically launch initial autonomous cycle so user gets immediate results
           handleRunFullCycleNow();
@@ -112,7 +112,7 @@ export default function AutopilotPage() {
   const handleRunFullCycleNow = async () => {
     if (!currentWebsite) return;
     setRunningFullCycle(true);
-    setStatusFeedback({ message: '🚀 Running Zero-Touch autonomous cycle in background... Profiling niche, finding keyword gaps, drafting with Claude Sonnet 5, and publishing live.', ok: true });
+    setStatusFeedback({ message: 'Running Zero-Touch autonomous cycle in background... Profiling niche, finding keyword gaps, drafting with Claude Sonnet 5, and publishing live.', ok: true });
     try {
       const res = await fetch('/api/autopilot/full/run-now', {
         method: 'POST',
@@ -323,10 +323,10 @@ export default function AutopilotPage() {
   };
 
   const PRESET_IDEAS = [
-    { label: "✍️ Write an article on AI workflows", text: `Write an in-depth article about AI workflows and automation for ${currentWebsite?.domain || 'my site'}` },
-    { label: "🔍 Discover high-intent keywords", text: `Discover high-converting topical keyword clusters for ${currentWebsite?.domain || 'my site'}` },
-    { label: "🛠️ Audit technical SEO & crawl", text: `Audit technical SEO, indexability, and crawl errors` },
-    { label: "🕒 Schedule weekly article", text: `Every Monday at 09:00 publish an SEO article for ${currentWebsite?.domain || 'my site'}` },
+    { label: "Write an article on AI workflows", text: `Write an in-depth article about AI workflows and automation for ${currentWebsite?.domain || 'my site'}` },
+    { label: "Discover high-intent keywords", text: `Discover high-converting topical keyword clusters for ${currentWebsite?.domain || 'my site'}` },
+    { label: "Audit technical SEO & crawl", text: `Audit technical SEO, indexability, and crawl errors` },
+    { label: "Schedule weekly article", text: `Every Monday at 09:00 publish an SEO article for ${currentWebsite?.domain || 'my site'}` },
   ];
 
   return (
@@ -374,7 +374,7 @@ export default function AutopilotPage() {
                 {statusFeedback.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
                 <span className="font-semibold leading-relaxed">{statusFeedback.message}</span>
               </div>
-              <button onClick={() => setStatusFeedback(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold ml-4">✕</button>
+              <button onClick={() => setStatusFeedback(null)} className="text-neutral-400 hover:text-neutral-600 text-sm font-bold ml-4">×</button>
             </div>
           )}
 
@@ -406,13 +406,13 @@ export default function AutopilotPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="bg-indigo-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        {lastAction.intent_type === 'immediate_action' ? '⚡ Immediate Action Launched' : '🕒 Schedule Created'}
+                        {lastAction.intent_type === 'immediate_action' ? 'Immediate Action Launched' : 'Schedule Created'}
                       </span>
                       <span className="text-xs font-bold text-neutral-900 capitalize">
                         {lastAction.action_type?.replace(/_/g, ' ')}
                       </span>
                     </div>
-                    <button onClick={() => setLastAction(null)} className="text-neutral-400 hover:text-neutral-600 text-xs font-bold">✕</button>
+                    <button onClick={() => setLastAction(null)} className="text-neutral-400 hover:text-neutral-600 text-xs font-bold">×</button>
                   </div>
                   <p className="text-xs text-neutral-700 leading-relaxed font-medium">{lastAction.summary}</p>
                   {lastAction.link_url && (
@@ -431,7 +431,7 @@ export default function AutopilotPage() {
 
               {/* Action Package Awaiting Approval Banner */}
               {executions.some(e => e.status === 'waiting_for_approval') && (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-sm space-y-3 animate-fadeIn">
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm space-y-3 animate-fadeIn">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="bg-amber-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
@@ -470,148 +470,111 @@ export default function AutopilotPage() {
               {/* ═══════════════════════════════════════════════════════════════════ */}
               {/* ── ZERO-TOUCH FULL AUTOPILOT MODE (MONTHS OF CONTINUOUS RUNS) ──── */}
               {/* ═══════════════════════════════════════════════════════════════════ */}
-              <div className={`relative overflow-hidden bg-gradient-to-br from-indigo-50/50 via-white to-emerald-50/30 border-2 ${
-                fullAutopilot?.enabled 
-                  ? 'border-emerald-500/40 shadow-emerald-500/5 ring-1 ring-emerald-500/20' 
-                  : 'border-neutral-200 shadow-xs'
-              } rounded-3xl p-6 sm:p-8 space-y-6 shadow-sm transition-all`}>
-                
-                {/* Decorative background glow */}
-                <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-                {fullAutopilot?.enabled && (
-                  <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                )}
-
+              <div className="rounded-xl border border-neutral-200 bg-white p-6 space-y-6 shadow-xs">
                 {/* Top Header Bar */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-10">
-                  <div className="space-y-1.5">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${
-                        fullAutopilot?.enabled ? 'bg-emerald-600 text-white' : 'bg-indigo-600 text-white'
-                      } shadow-sm`}>
-                        <Zap className="w-5 h-5" />
-                      </div>
-                      <h2 className="text-xl font-bold tracking-tight text-neutral-900">
-                        Zero-Touch Full Autopilot Mode
+                      <h2 className="text-base font-semibold text-neutral-900">
+                        Autonomous Autopilot Engine
                       </h2>
-                      <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-md flex items-center gap-1.5 ${
                         fullAutopilot?.enabled 
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
                           : 'bg-neutral-100 text-neutral-600 border border-neutral-200'
                       }`}>
-                        <span className={`w-2 h-2 rounded-full ${
-                          fullAutopilot?.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-neutral-400'
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          fullAutopilot?.enabled ? 'bg-emerald-500' : 'bg-neutral-400'
                         }`} />
-                        {fullAutopilot?.enabled ? 'Running 24/7 Autonomously • 0 Human Needed' : 'Paused • 1-Click Activate'}
+                        {fullAutopilot?.enabled ? 'Active · Recurring' : 'Paused'}
                       </span>
                     </div>
-                    <p className="text-xs text-neutral-600 leading-relaxed max-w-2xl font-medium">
-                      Continuous, end-to-end autonomous engine: discovers high-ROI keywords, crafts 1,200–1,600 word comprehensive articles, generates custom visual assets, publishes directly to WordPress, and auto-repairs technical SEO issues for months without human bottlenecks.
+                    <p className="text-xs text-neutral-500 leading-relaxed max-w-2xl">
+                      Discovers keyword gaps, creates structured articles, generates visual assets, and optimizes technical SEO signals automatically on schedule.
                     </p>
                   </div>
 
                   {/* Actions & Master Toggle */}
-                  <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <button
                       type="button"
                       onClick={handleRunFullCycleNow}
                       disabled={runningFullCycle || !currentWebsite}
-                      className="bg-white hover:bg-neutral-50 disabled:opacity-50 text-neutral-800 border border-neutral-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-2xs hover:shadow-xs"
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50 disabled:opacity-50"
                     >
-                      {runningFullCycle ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <Play className="w-3.5 h-3.5 text-indigo-600" />}
-                      <span>{runningFullCycle ? 'Running Autonomous Cycle...' : 'Run Cycle Now 🚀'}</span>
+                      {runningFullCycle ? <Loader2 className="w-3.5 h-3.5 animate-spin text-neutral-600" /> : <Play className="w-3.5 h-3.5 text-neutral-600" />}
+                      <span>{runningFullCycle ? 'Running cycle…' : 'Run cycle now'}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleToggleFullAutopilot()}
                       disabled={updatingAutopilot || loadingFullAutopilot}
-                      className={`text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 shadow-xs ${
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium shadow-xs transition-colors ${
                         fullAutopilot?.enabled
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                          ? 'bg-neutral-900 hover:bg-neutral-800 text-white'
+                          : 'border border-indigo-700 bg-indigo-600 hover:bg-indigo-700 text-white'
                       }`}
                     >
                       {updatingAutopilot ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : fullAutopilot?.enabled ? (
-                        <CheckCircle className="w-3.5 h-3.5" />
+                        <Pause className="w-3.5 h-3.5" />
                       ) : (
                         <Zap className="w-3.5 h-3.5" />
                       )}
-                      <span>{fullAutopilot?.enabled ? 'Autopilot Active (Click to Pause)' : 'Activate Zero-Touch Autopilot'}</span>
+                      <span>{fullAutopilot?.enabled ? 'Pause autopilot' : 'Enable autopilot'}</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Active Execution Banner */}
                 {runningFullCycle && (
-                  <div className="bg-indigo-50/90 border border-indigo-200 rounded-2xl p-4 flex items-center gap-3.5 relative z-10 shadow-xs animate-pulse">
-                    <Loader2 className="w-5 h-5 text-indigo-600 animate-spin shrink-0" />
-                    <div className="space-y-0.5">
-                      <div className="text-xs font-bold text-indigo-900 flex items-center gap-2">
-                        <span>Autonomous Cycle In Progress...</span>
-                        <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">Zero-Touch Mode</span>
-                      </div>
-                      <div className="text-[11px] text-indigo-700">
-                        Analyzing topical authority, detecting keyword gaps, drafting article via Claude Sonnet 5, creating visual assets, and auto-publishing to WordPress.
-                      </div>
+                  <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3.5 flex items-center gap-3 text-xs">
+                    <Loader2 className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
+                    <div>
+                      <span className="font-semibold text-neutral-900">Autonomous cycle in progress: </span>
+                      <span className="text-neutral-600">
+                        Analyzing authority, detecting keyword gaps, and drafting content.
+                      </span>
                     </div>
                   </div>
                 )}
 
                 {/* Real-time Metrics Dashboard Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 relative z-10">
-                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
-                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
-                      <span>Articles Published</span>
-                      <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                    </div>
-                    <div className="text-xl font-black text-neutral-900">
+                <div className="grid grid-cols-2 sm:grid-cols-4 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                  <div className="p-4 border-r border-b sm:border-b-0 border-neutral-200">
+                    <div className="text-xs text-neutral-500">Articles published</div>
+                    <div className="mt-1 text-2xl font-semibold text-neutral-900 tabular-nums">
                       {fullAutopilot?.stats?.total_articles_published ?? 0}
                     </div>
-                    <div className="text-[10px] text-emerald-600 font-semibold mt-0.5">
-                      Direct Live to WordPress
-                    </div>
+                    <div className="text-xs text-neutral-400 mt-1">Live on connected CMS</div>
                   </div>
 
-                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
-                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
-                      <span>Tech SEO Fixes</span>
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                    </div>
-                    <div className="text-xl font-black text-neutral-900">
+                  <div className="p-4 sm:border-r border-b sm:border-b-0 border-neutral-200">
+                    <div className="text-xs text-neutral-500">Technical fixes applied</div>
+                    <div className="mt-1 text-2xl font-semibold text-neutral-900 tabular-nums">
                       {fullAutopilot?.stats?.total_fixes_applied ?? 0}
                     </div>
-                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5">
-                      Meta tags & broken links
-                    </div>
+                    <div className="text-xs text-neutral-400 mt-1">Meta tags and redirects</div>
                   </div>
 
-                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
-                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
-                      <span>Cycles Run</span>
-                      <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
-                    </div>
-                    <div className="text-xl font-black text-neutral-900">
+                  <div className="p-4 border-r border-neutral-200">
+                    <div className="text-xs text-neutral-500">Completed cycles</div>
+                    <div className="mt-1 text-2xl font-semibold text-neutral-900 tabular-nums">
                       {fullAutopilot?.stats?.total_cycles_completed ?? 0}
                     </div>
-                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5">
-                      Continuous operation
-                    </div>
+                    <div className="text-xs text-neutral-400 mt-1">End-to-end runs</div>
                   </div>
 
-                  <div className="bg-white border border-neutral-200/90 rounded-2xl p-4 shadow-2xs">
-                    <div className="flex items-center justify-between text-xs text-neutral-500 mb-1">
-                      <span>Next Execution</span>
-                      <Clock className="w-3.5 h-3.5 text-amber-500" />
-                    </div>
-                    <div className="text-xs font-bold text-neutral-900 truncate">
+                  <div className="p-4">
+                    <div className="text-xs text-neutral-500">Next execution</div>
+                    <div className="mt-1 text-base font-semibold text-neutral-900 truncate">
                       {fullAutopilot?.next_run_at 
                         ? new Date(fullAutopilot.next_run_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) 
-                        : fullAutopilot?.enabled ? 'Within 24h' : 'When Activated'}
+                        : fullAutopilot?.enabled ? 'Within 24h' : 'When enabled'}
                     </div>
-                    <div className="text-[10px] text-neutral-500 font-medium mt-0.5 capitalize">
+                    <div className="text-xs text-neutral-400 mt-1 capitalize">
                       Cadence: {selectedCadence.replace('_', ' ')}
                     </div>
                   </div>
@@ -733,9 +696,9 @@ export default function AutopilotPage() {
                   {/* Mode Selector */}
                   <div className="flex items-center gap-1 bg-white border border-neutral-200 rounded-xl p-1 text-[11px] font-semibold shadow-2xs">
                     {[
-                      { id: 'auto', label: '⚡ Auto-Detect' },
-                      { id: 'immediate', label: '🚀 Run Once Now' },
-                      { id: 'recurring', label: '🕒 Schedule' },
+                      { id: 'auto', label: 'Auto-Detect' },
+                      { id: 'immediate', label: 'Run Once Now' },
+                      { id: 'recurring', label: 'Schedule' },
                     ].map((m) => (
                       <button
                         key={m.id}
