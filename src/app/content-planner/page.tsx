@@ -328,16 +328,52 @@ export default function ContentPlannerPage() {
     }
   };
 
+  const fetchRules = async (siteId: string) => {
+    try {
+      const res = await fetch(`/api/agent/content/rules?website_id=${siteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.rules) {
+          setRules({
+            word_count_min: data.rules.word_count_min || DEFAULT_RULES.word_count_min,
+            word_count_max: data.rules.word_count_max || DEFAULT_RULES.word_count_max,
+            language: data.rules.language || DEFAULT_RULES.language,
+            tone: data.rules.tone || DEFAULT_RULES.tone,
+            audience: data.rules.audience || DEFAULT_RULES.audience,
+            author_style: data.rules.author_style || DEFAULT_RULES.author_style,
+            structure_rules: data.rules.structure_rules || DEFAULT_RULES.structure_rules,
+            paragraph_style: data.rules.paragraph_style || DEFAULT_RULES.paragraph_style,
+            image_rules: data.rules.image_rules || DEFAULT_RULES.image_rules,
+            source_rules: data.rules.source_rules || DEFAULT_RULES.source_rules,
+            brand_rules: data.rules.brand_rules || DEFAULT_RULES.brand_rules,
+            cta_rules: data.rules.cta_rules || DEFAULT_RULES.cta_rules,
+            avoid_rules: data.rules.avoid_rules || DEFAULT_RULES.avoid_rules,
+            custom_rules: data.rules.custom_rules || '',
+          });
+        } else {
+          setRules(DEFAULT_RULES);
+        }
+      }
+    } catch (e) {
+      console.warn("Error fetching content rules:", e);
+    }
+  };
+
   const fetchDrafts = async (isBackground = false) => {
+    if (!currentWebsite?.id) {
+      if (!isBackground) {
+        setDrafts([]);
+        setLoadingDrafts(false);
+      }
+      return;
+    }
+
     try {
       if (!isBackground && drafts.length === 0) {
         setLoadingDrafts(true);
       }
 
-      const baseUrl = currentWebsite
-        ? `/api/agent/content/draft?website_id=${currentWebsite.id}`
-        : `/api/agent/content/draft`;
-      const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+      const url = `/api/agent/content/draft?website_id=${currentWebsite.id}&_t=${Date.now()}`;
 
       const res = await fetch(url, {
         cache: 'no-store',
@@ -368,6 +404,8 @@ export default function ContentPlannerPage() {
             if (updatedSelected.status === "published" && publishing === updatedSelected.id) {
               setPublishing(null);
             }
+          } else {
+            setSelectedDraft(null);
           }
         }
       }
@@ -381,8 +419,30 @@ export default function ContentPlannerPage() {
   };
 
   useEffect(() => {
+    setSelectedDraft(null);
+    if (!currentWebsite?.id) {
+      setDrafts([]);
+      setLoadingDrafts(false);
+      return;
+    }
+
+    try {
+      const cached = sessionStorage.getItem(`seo_cached_drafts_${currentWebsite.id}`);
+      if (cached) {
+        setDrafts(JSON.parse(cached));
+        setLoadingDrafts(false);
+      } else {
+        setDrafts([]);
+        setLoadingDrafts(true);
+      }
+    } catch {
+      setDrafts([]);
+      setLoadingDrafts(true);
+    }
+
     fetchDrafts(false);
-  }, [currentWebsite?.id, websiteLoading]);
+    fetchRules(currentWebsite.id);
+  }, [currentWebsite?.id]);
 
   const activeWritingCount = drafts.filter(d => d.status === "writing" || d.status === "generating").length;
   useEffect(() => {
@@ -443,6 +503,11 @@ export default function ContentPlannerPage() {
   }, [activeTab, currentDraftIndex, drafts]);
 
   const handleGenerateDraft = async (keywordOverride?: string) => {
+    if (!currentWebsite?.id) {
+      openAddModal();
+      return;
+    }
+
     const keyword = (keywordOverride || quickKeyword).trim();
     if (!keyword) return;
 
@@ -469,11 +534,8 @@ export default function ContentPlannerPage() {
           word_count_min: targetRange.min,
           word_count_max: targetRange.max,
         },
+        website_id: currentWebsite.id,
       };
-
-      if (currentWebsite?.id) {
-        payload.website_id = currentWebsite.id;
-      }
 
       const res = await fetch("/api/agent/content/draft", {
         method: "POST",
@@ -584,7 +646,12 @@ export default function ContentPlannerPage() {
       await fetch("/api/agent/content/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ draft_id: selectedDraft.id, action, notes: revisionNote }),
+        body: JSON.stringify({
+          draft_id: selectedDraft.id,
+          action,
+          notes: revisionNote,
+          website_id: currentWebsite?.id,
+        }),
       });
 
       const statusMap: Record<string, DraftStatus> = { approve: "approved", reject: "rejected", revise: "needs_revision" };
@@ -601,10 +668,11 @@ export default function ContentPlannerPage() {
   };
 
   const handleSaveRules = async () => {
+    if (!currentWebsite?.id) return;
     await fetch("/api/agent/content/rules", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(rules),
+      body: JSON.stringify({ ...rules, website_id: currentWebsite.id }),
     });
     setRulesSaved(true);
     setTimeout(() => setRulesSaved(false), 2500);

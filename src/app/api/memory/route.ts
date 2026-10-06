@@ -14,8 +14,7 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
 
     if (!website_id) {
-      const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
-      if (firstSite) website_id = firstSite.id;
+      return NextResponse.json({ memories: [], instructions: '', knowledge_bank: '' });
     }
 
     let query = supabase
@@ -100,8 +99,7 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
 
     if (!website_id) {
-      const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
-      if (firstSite) website_id = firstSite.id;
+      return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
 
     // 1. Save Human Custom Instructions
@@ -111,11 +109,12 @@ export async function POST(request: Request) {
       await supabase
         .from('project_memory')
         .delete()
+        .eq('website_id', website_id)
         .eq('source', 'project_custom_instructions');
 
       if (safeInstructions.trim()) {
         await supabase.from('project_memory').insert({
-          website_id: website_id || null,
+          website_id,
           category: 'brand',
           content: safeInstructions,
           source: 'project_custom_instructions',
@@ -166,11 +165,12 @@ export async function POST(request: Request) {
       await supabase
         .from('project_memory')
         .delete()
+        .eq('website_id', website_id)
         .eq('source', 'project_knowledge_bank');
 
       if (safeMemory.trim()) {
         await supabase.from('project_memory').insert({
-          website_id: website_id || null,
+          website_id,
           category: 'content_strategy',
           content: safeMemory,
           source: 'project_knowledge_bank',
@@ -200,10 +200,11 @@ export async function POST(request: Request) {
         await supabase
           .from('project_memory')
           .delete()
+          .eq('website_id', website_id)
           .eq('source', 'project_custom_instructions');
 
         await supabase.from('project_memory').insert({
-          website_id: website_id || null,
+          website_id,
           category: 'brand',
           content: customInstr.trim(),
           source: 'project_custom_instructions',
@@ -224,6 +225,7 @@ export async function POST(request: Request) {
           const { data: currentMem } = await supabase
             .from('project_memory')
             .select('content')
+            .eq('website_id', website_id)
             .eq('source', 'project_knowledge_bank')
             .maybeSingle();
 
@@ -235,10 +237,11 @@ export async function POST(request: Request) {
         await supabase
           .from('project_memory')
           .delete()
+          .eq('website_id', website_id)
           .eq('source', 'project_knowledge_bank');
 
         await supabase.from('project_memory').insert({
-          website_id: website_id || null,
+          website_id,
           category: 'content_strategy',
           content: finalMemory,
           source: 'project_knowledge_bank',
@@ -266,7 +269,7 @@ export async function POST(request: Request) {
     const { data: memoryItem, error } = await supabase
       .from('project_memory')
       .insert({
-        website_id: website_id || null,
+        website_id,
         category,
         content,
         source: source || 'user_added',
@@ -292,20 +295,17 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'instructions';
-    let website_id = searchParams.get('website_id');
+    const website_id = searchParams.get('website_id');
+
+    if (!website_id) {
+      return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
+    }
 
     const supabase = createAdminClient();
 
-    if (!website_id) {
-      const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
-      if (firstSite) website_id = firstSite.id;
-    }
-
     if (type === 'instructions') {
       await supabase.from('project_memory').delete().eq('source', 'project_custom_instructions').eq('website_id', website_id);
-      if (website_id) {
-        await supabase.from('content_rules').update({ custom_rules: '' }).eq('website_id', website_id);
-      }
+      await supabase.from('content_rules').update({ custom_rules: '' }).eq('website_id', website_id);
     } else if (type === 'memory') {
       await supabase.from('project_memory').delete().eq('source', 'project_knowledge_bank').eq('website_id', website_id);
     }

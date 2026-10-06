@@ -17,28 +17,18 @@ function safeBackground(fn: () => Promise<void>) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    let websiteId = searchParams.get('website_id');
+    const websiteId = searchParams.get('website_id');
+
+    if (!websiteId) {
+      return NextResponse.json({ drafts: [] });
+    }
 
     const supabase = createAdminClient();
 
-    // If websiteId is missing, resolve the first active website
-    if (!websiteId) {
-      const { data: firstSite } = await supabase
-        .from('websites')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-
-      if (firstSite) {
-        websiteId = firstSite.id;
-      }
-    }
-
-    let drafts: any[] | null = null;
-    let fallbackUsed = false;
+    let drafts: any[] = [];
 
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('content_drafts')
         .select(`
           *,
@@ -46,57 +36,23 @@ export async function GET(request: Request) {
           content_qa_results (*),
           content_images (*)
         `)
+        .eq('website_id', websiteId)
         .order('created_at', { ascending: false });
 
-      if (websiteId) {
-        query = query.or(`website_id.eq.${websiteId},website_id.is.null`);
-      }
-
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         drafts = data;
       }
     } catch (queryErr: any) {
       console.warn('[Content Draft GET] Primary query warning:', queryErr?.message);
     }
 
-    // Fallback: if website filter returned 0 drafts or query had issue, return all available drafts so the user never loses previous posts
-    if (!drafts || drafts.length === 0) {
-      fallbackUsed = true;
-      try {
-        const { data: allDrafts, error: allErr } = await supabase
-          .from('content_drafts')
-          .select(`
-            *,
-            content_versions (*),
-            content_qa_results (*),
-            content_images (*)
-          `)
-          .order('created_at', { ascending: false });
-
-        if (!allErr && allDrafts && allDrafts.length > 0) {
-          drafts = allDrafts;
-        } else {
-          // Ultimate direct fallback without joins
-          const { data: rawDrafts } = await supabase
-            .from('content_drafts')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (rawDrafts && rawDrafts.length > 0) {
-            drafts = rawDrafts;
-          }
-        }
-      } catch (fallbackErr: any) {
-        console.error('[Content Draft GET] Fallback query error:', fallbackErr?.message);
-      }
-    }
-
-    // Query recently completed WordPress jobs to match live post URLs
+    // Query recently completed WordPress jobs strictly for this website
     const { data: wpJobs } = await supabase
       .from('wordpress_jobs')
       .select('id, idempotency_key, payload, result, completed_at')
       .in('job_type', ['create_post', 'update_post'])
       .eq('status', 'completed')
+      .eq('website_id', websiteId)
       .order('completed_at', { ascending: false })
       .limit(50);
 
@@ -279,17 +235,8 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient();
 
-    // Auto-resolve website_id if not provided from UI
     if (!website_id) {
-      const { data: firstSite } = await supabase
-        .from('websites')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
-
-      if (firstSite) {
-        website_id = firstSite.id;
-      }
+      return NextResponse.json({ error: 'website_id is required to create a content draft.' }, { status: 400 });
     }
 
     const agent = new ContentAgent();
@@ -311,26 +258,18 @@ export async function POST(request: Request) {
       custom_rules: rules?.custom_rules || '',
     };
 
-    // Auto-load Project Memory & Custom Instructions from Supabase (Strict Zero-Duplication)
+    // Auto-load Project Memory & Custom Instructions strictly for this website
     let projectInstructions = body.project_instructions || '';
     let projectMemory = body.project_memory || '';
 
     let targetWebsiteId = website_id;
     try {
-      if (!targetWebsiteId) {
-        const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
-        if (firstSite) targetWebsiteId = firstSite.id;
-      }
-
-      let memoryQuery = supabase
+      const memoryQuery = supabase
         .from('project_memory')
         .select('*')
         .eq('is_outdated', false)
+        .eq('website_id', targetWebsiteId)
         .order('is_important', { ascending: false });
-
-      if (targetWebsiteId) {
-        memoryQuery = memoryQuery.or(`website_id.eq.${targetWebsiteId},website_id.is.null`);
-      }
 
       const { data: memoryData } = await memoryQuery;
 

@@ -441,10 +441,9 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
       const { createAdminClient } = await import('@/lib/supabase/admin');
       const supabase = createAdminClient();
 
-      let websiteId = input.website_id;
+      const websiteId = input.website_id;
       if (!websiteId) {
-        const { data: firstSite } = await supabase.from('websites').select('id').limit(1).maybeSingle();
-        if (firstSite) websiteId = firstSite.id;
+        return;
       }
 
       let query = supabase

@@ -434,14 +434,13 @@ export class DuplicateArticleChecker {
    * to inject as negative constraints into Autonomous/Autopilot prompts.
    */
   public static async getCoveredTopics(website_id?: string): Promise<string[]> {
+    if (!website_id) return [];
+
     const supabase = createAdminClient();
     const topics = new Set<string>();
 
     // 1. From content_drafts
-    let query = supabase.from('content_drafts').select('working_title, primary_keyword');
-    if (website_id) {
-      query = query.eq('website_id', website_id);
-    }
+    const query = supabase.from('content_drafts').select('working_title, primary_keyword').eq('website_id', website_id);
     const { data: drafts } = await query;
     (drafts || []).forEach(d => {
       if (d.working_title) topics.add(d.working_title.trim());

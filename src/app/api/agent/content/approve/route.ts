@@ -262,10 +262,16 @@ export async function POST(request: Request) {
 
       // 2. Queue in Outbound Job Queue for background connector polling
       try {
-        const { data: wpSite } = await supabase
+        let wpSiteQuery = supabase
           .from('wordpress_outbound_sites')
           .select('*')
-          .eq('status', 'active')
+          .eq('status', 'active');
+
+        if (updatedDraft.website_id) {
+          wpSiteQuery = wpSiteQuery.eq('website_id', updatedDraft.website_id);
+        }
+
+        const { data: wpSite } = await wpSiteQuery
           .order('last_ping_at', { ascending: false })
           .limit(1)
           .maybeSingle();

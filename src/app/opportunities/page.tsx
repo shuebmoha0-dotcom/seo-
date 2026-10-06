@@ -35,13 +35,18 @@ export default function OpportunitiesPage() {
 
   useEffect(() => {
     async function fetchOpportunities() {
-      if (!currentWebsite) {
+      if (!currentWebsite?.id) {
         setOpportunities([]);
         setLoading(false);
         return;
       }
       try {
-        if (opportunities.length === 0) {
+        const cached = sessionStorage.getItem(`seo_cached_opps_${currentWebsite.id}`);
+        if (cached) {
+          setOpportunities(JSON.parse(cached));
+          setLoading(false);
+        } else {
+          setOpportunities([]);
           setLoading(true);
         }
         const res = await fetch(`/api/opportunities?website_id=${currentWebsite.id}`);

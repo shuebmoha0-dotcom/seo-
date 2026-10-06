@@ -127,7 +127,7 @@ export default function RankTrackingPage() {
 
   useEffect(() => {
     async function fetchAllData() {
-      if (!currentWebsite) {
+      if (!currentWebsite?.id) {
         if (!websiteLoading) {
           setKeywords([]);
           setGrowthOpps([]);
@@ -138,7 +138,18 @@ export default function RankTrackingPage() {
       }
 
       try {
-        if (keywords.length === 0 && growthOpps.length === 0) {
+        const cachedKws = sessionStorage.getItem(`seo_cached_keywords_${currentWebsite.id}`);
+        const cachedGrowth = sessionStorage.getItem(`seo_cached_growth_opps_${currentWebsite.id}`);
+        const cachedDrops = sessionStorage.getItem(`seo_cached_rank_drops_${currentWebsite.id}`);
+        if (cachedKws) {
+          setKeywords(JSON.parse(cachedKws));
+          setGrowthOpps(cachedGrowth ? JSON.parse(cachedGrowth) : []);
+          setRankDrops(cachedDrops ? JSON.parse(cachedDrops) : []);
+          setLoading(false);
+        } else {
+          setKeywords([]);
+          setGrowthOpps([]);
+          setRankDrops([]);
           setLoading(true);
         }
         const [kwRes, recRes] = await Promise.all([

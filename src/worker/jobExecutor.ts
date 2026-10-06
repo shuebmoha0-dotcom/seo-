@@ -211,7 +211,7 @@ export class JobExecutor {
         .order('is_important', { ascending: false });
 
       if (websiteId) {
-        memoryQuery = memoryQuery.or(`website_id.eq.${websiteId},website_id.is.null`);
+        memoryQuery = memoryQuery.eq('website_id', websiteId);
       }
 
       const { data: memoryRows } = await memoryQuery;

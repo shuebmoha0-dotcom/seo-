@@ -176,8 +176,8 @@ export async function POST(request: Request) {
             console.warn('[Telegram Webhook] WordPress dispatch notice:', wpErr);
           }
 
-          if (!siteBaseUrl) {
-            const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
+          if (!siteBaseUrl && draft.website_id) {
+            const { data: defaultSite } = await supabase.from('websites').select('domain, url').eq('id', draft.website_id).maybeSingle();
             siteBaseUrl = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : '');
           }
 
@@ -249,8 +249,8 @@ export async function POST(request: Request) {
           }
         }
 
-        if (!targetUrl) {
-          const { data: defaultSite } = await supabase.from('websites').select('domain, url').limit(1).maybeSingle();
+        if (!targetUrl && draftWebsiteId) {
+          const { data: defaultSite } = await supabase.from('websites').select('domain, url').eq('id', draftWebsiteId).maybeSingle();
           const base = defaultSite?.url || (defaultSite?.domain ? `https://${defaultSite.domain}` : '');
           if (base && executionId && executionId !== 'url') {
             targetUrl = `${base.replace(/\/$/, '')}/${executionId}/`;

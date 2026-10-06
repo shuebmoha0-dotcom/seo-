@@ -40,25 +40,38 @@ export default function ProjectMemoryPage() {
   const [importErrorMessage, setImportErrorMessage] = useState<string | null>(null);
 
   const fetchData = async () => {
+    if (!currentWebsite?.id) {
+      setInstructions("");
+      setSavedInstructionsSnapshot("");
+      setMemory("");
+      setSavedMemorySnapshot("");
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setSaveError(null);
     try {
       if (typeof window !== "undefined") {
-        const localInstr = localStorage.getItem("seo_project_instructions");
+        const localInstr = localStorage.getItem(`seo_project_instructions_${currentWebsite.id}`);
         if (localInstr) {
           setInstructions(localInstr);
           setSavedInstructionsSnapshot(localInstr);
+        } else {
+          setInstructions("");
+          setSavedInstructionsSnapshot("");
         }
-        const localMem = localStorage.getItem("seo_autonomous_memory");
+        const localMem = localStorage.getItem(`seo_autonomous_memory_${currentWebsite.id}`);
         if (localMem) {
           setMemory(localMem);
           setSavedMemorySnapshot(localMem);
+        } else {
+          setMemory("");
+          setSavedMemorySnapshot("");
         }
       }
 
-      const url = currentWebsite
-        ? `/api/memory?website_id=${currentWebsite.id}&_t=${Date.now()}`
-        : `/api/memory?_t=${Date.now()}`;
+      const url = `/api/memory?website_id=${currentWebsite.id}&_t=${Date.now()}`;
 
       const res = await fetch(url, {
         cache: 'no-store',
@@ -72,12 +85,12 @@ export default function ProjectMemoryPage() {
         if (data.instructions !== undefined) {
           setInstructions(data.instructions);
           setSavedInstructionsSnapshot(data.instructions);
-          if (typeof window !== "undefined") localStorage.setItem("seo_project_instructions", data.instructions);
+          if (typeof window !== "undefined") localStorage.setItem(`seo_project_instructions_${currentWebsite.id}`, data.instructions);
         }
         if (data.memory !== undefined) {
           setMemory(data.memory);
           setSavedMemorySnapshot(data.memory);
-          if (typeof window !== "undefined") localStorage.setItem("seo_autonomous_memory", data.memory);
+          if (typeof window !== "undefined") localStorage.setItem(`seo_autonomous_memory_${currentWebsite.id}`, data.memory);
         }
         setLastSavedTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
@@ -96,18 +109,19 @@ export default function ProjectMemoryPage() {
   const hasUnsavedMemory = memory !== savedMemorySnapshot;
 
   const handleSaveInstructions = async () => {
+    if (!currentWebsite?.id) return;
     setSavingInstructions(true);
     setSaveError(null);
     try {
       if (typeof window !== "undefined") {
-        localStorage.setItem("seo_project_instructions", instructions);
+        localStorage.setItem(`seo_project_instructions_${currentWebsite.id}`, instructions);
       }
 
       const res = await fetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          website_id: currentWebsite?.id,
+          website_id: currentWebsite.id,
           type: "instructions",
           instructions,
         }),
@@ -127,18 +141,19 @@ export default function ProjectMemoryPage() {
   };
 
   const handleSaveMemory = async () => {
+    if (!currentWebsite?.id) return;
     setSavingMemory(true);
     setSaveError(null);
     try {
       if (typeof window !== "undefined") {
-        localStorage.setItem("seo_autonomous_memory", memory);
+        localStorage.setItem(`seo_autonomous_memory_${currentWebsite.id}`, memory);
       }
 
       const res = await fetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          website_id: currentWebsite?.id,
+          website_id: currentWebsite.id,
           type: "memory",
           memory,
         }),
@@ -158,13 +173,14 @@ export default function ProjectMemoryPage() {
   };
 
   const handleDeleteInstructions = async () => {
+    if (!currentWebsite?.id) return;
     if (!confirm("Are you sure you want to clear Custom Instructions?")) return;
     setSavingInstructions(true);
     try {
       setInstructions("");
       setSavedInstructionsSnapshot("");
-      if (typeof window !== "undefined") localStorage.removeItem("seo_project_instructions");
-      await fetch(`/api/memory?type=instructions${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, { method: "DELETE" });
+      if (typeof window !== "undefined") localStorage.removeItem(`seo_project_instructions_${currentWebsite.id}`);
+      await fetch(`/api/memory?type=instructions&website_id=${currentWebsite.id}`, { method: "DELETE" });
     } catch (err: any) {
       setSaveError(err.message || "Failed to clear instructions");
     } finally {
@@ -173,13 +189,14 @@ export default function ProjectMemoryPage() {
   };
 
   const handleDeleteMemory = async () => {
+    if (!currentWebsite?.id) return;
     if (!confirm("Are you sure you want to clear the Autonomous Project Memory space?")) return;
     setSavingMemory(true);
     try {
       setMemory("");
       setSavedMemorySnapshot("");
-      if (typeof window !== "undefined") localStorage.removeItem("seo_autonomous_memory");
-      await fetch(`/api/memory?type=memory${currentWebsite?.id ? `&website_id=${currentWebsite.id}` : ""}`, { method: "DELETE" });
+      if (typeof window !== "undefined") localStorage.removeItem(`seo_autonomous_memory_${currentWebsite.id}`);
+      await fetch(`/api/memory?type=memory&website_id=${currentWebsite.id}`, { method: "DELETE" });
     } catch (err: any) {
       setSaveError(err.message || "Failed to clear memory");
     } finally {

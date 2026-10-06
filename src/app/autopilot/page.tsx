@@ -161,6 +161,9 @@ export default function AutopilotPage() {
   };
 
   useEffect(() => {
+    setTasks([]);
+    setExecutions([]);
+    setFullAutopilot(null);
     fetchTasks();
     fetchFullAutopilot();
   }, [currentWebsite?.id]);

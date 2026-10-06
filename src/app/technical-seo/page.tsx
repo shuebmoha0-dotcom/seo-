@@ -412,14 +412,31 @@ export default function TechnicalSEOPage() {
       }));
     }
 
-    async function fetchLatestCrawl() {
-      if (!currentWebsite) {
-        if (!websiteLoading) {
-          setResult(null);
-          setIssues([]);
-        }
-        return;
+    if (!currentWebsite?.id) {
+      if (!websiteLoading) {
+        setResult(null);
+        setIssues([]);
       }
+      return;
+    }
+
+    try {
+      const cached = sessionStorage.getItem(`seo_cached_crawl_${currentWebsite.id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setResult(parsed);
+        setIssues(parsed.issues || []);
+      } else {
+        setResult(null);
+        setIssues([]);
+      }
+    } catch {
+      setResult(null);
+      setIssues([]);
+    }
+
+    async function fetchLatestCrawl() {
+      if (!currentWebsite?.id) return;
       try {
         const res = await fetch(`/api/agent/technical/crawl?website_id=${currentWebsite.id}`);
         if (res.ok) {
@@ -429,6 +446,12 @@ export default function TechnicalSEOPage() {
             setIssues(data.result.issues || []);
             if (typeof window !== "undefined") {
               sessionStorage.setItem(`seo_cached_crawl_${currentWebsite.id}`, JSON.stringify(data.result));
+            }
+          } else {
+            setResult(null);
+            setIssues([]);
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem(`seo_cached_crawl_${currentWebsite.id}`);
             }
           }
         }

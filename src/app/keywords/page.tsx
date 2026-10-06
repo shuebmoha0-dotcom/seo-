@@ -133,6 +133,36 @@ export default function KeywordsPage() {
   };
 
   useEffect(() => {
+    if (!currentWebsite?.id) {
+      setClusters([]);
+      setRawKeywords([]);
+      setOpportunities([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const cachedClusters = sessionStorage.getItem(`seo_cached_kw_clusters_${currentWebsite.id}`);
+      const cachedRaw = sessionStorage.getItem(`seo_cached_kw_raw_${currentWebsite.id}`);
+      const cachedOpps = sessionStorage.getItem(`seo_cached_kw_opps_${currentWebsite.id}`);
+      if (cachedClusters) {
+        setClusters(JSON.parse(cachedClusters));
+        setRawKeywords(cachedRaw ? JSON.parse(cachedRaw) : []);
+        setOpportunities(cachedOpps ? JSON.parse(cachedOpps) : []);
+        setLoading(false);
+      } else {
+        setClusters([]);
+        setRawKeywords([]);
+        setOpportunities([]);
+        setLoading(true);
+      }
+    } catch {
+      setClusters([]);
+      setRawKeywords([]);
+      setOpportunities([]);
+      setLoading(true);
+    }
+
     fetchKeywordData();
   }, [currentWebsite?.id]);
 

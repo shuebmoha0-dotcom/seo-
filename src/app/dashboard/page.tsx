@@ -153,6 +153,56 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    if (!currentWebsite?.id) {
+      if (!websiteLoading) {
+        setStats({
+          tracked_keywords: 0,
+          crawled_pages: 0,
+          technical_issues: 0,
+          pending_approvals: 0,
+          tracked_competitors: 0,
+          health_score: null,
+        });
+        setRecentApprovals([]);
+        setChartData([]);
+        setActivityStream([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    try {
+      const cachedStats = sessionStorage.getItem(`seo_dashboard_stats_${currentWebsite.id}`);
+      const cachedApprovals = sessionStorage.getItem(`seo_dashboard_approvals_${currentWebsite.id}`);
+      const cachedChart = sessionStorage.getItem(`seo_dashboard_chart_${currentWebsite.id}`);
+      const cachedActivity = sessionStorage.getItem(`seo_dashboard_activity_${currentWebsite.id}`);
+      if (cachedStats) {
+        setStats(JSON.parse(cachedStats));
+        setRecentApprovals(cachedApprovals ? JSON.parse(cachedApprovals) : []);
+        setChartData(cachedChart ? JSON.parse(cachedChart) : []);
+        setActivityStream(cachedActivity ? JSON.parse(cachedActivity) : []);
+        setLoading(false);
+      } else {
+        setStats({
+          tracked_keywords: 0,
+          crawled_pages: 0,
+          technical_issues: 0,
+          pending_approvals: 0,
+          tracked_competitors: 0,
+          health_score: null,
+        });
+        setRecentApprovals([]);
+        setChartData([]);
+        setActivityStream([]);
+        setLoading(true);
+      }
+    } catch {
+      setRecentApprovals([]);
+      setChartData([]);
+      setActivityStream([]);
+      setLoading(true);
+    }
+
     fetchDashboardStats();
   }, [currentWebsite?.id, websiteLoading]);
 

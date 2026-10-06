@@ -94,6 +94,12 @@ export default function BacklinksPage() {
   };
 
   useEffect(() => {
+    setProspects([]);
+    setAcquiredLinks([]);
+    setLinkableAssets([]);
+    setCompetitorIntel([]);
+    setSelectedProspect(null);
+    setOutreachDraft(null);
     fetchBacklinkData();
     fetchCompetitorIntel();
   }, [currentWebsite?.id]);

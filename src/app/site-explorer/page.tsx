@@ -23,6 +23,8 @@ export default function SiteExplorerPage() {
   useEffect(() => {
     if (currentWebsite) {
       setUrlInput(currentWebsite.url || (currentWebsite.domain ? `https://${currentWebsite.domain}` : ""));
+      setPageResult(null);
+      setError(null);
     }
   }, [currentWebsite?.url, currentWebsite?.domain]);
 
