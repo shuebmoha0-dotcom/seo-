@@ -28,22 +28,59 @@ export async function GET(request: Request) {
     let drafts: any[] = [];
 
     try {
-      const { data, error } = await supabase
+      // 1. Fetch drafts directly without ambiguous PostgREST joins
+      const { data: rawDrafts, error: draftsErr } = await supabase
         .from('content_drafts')
-        .select(`
-          *,
-          content_versions (*),
-          content_qa_results (*),
-          content_images (*)
-        `)
+        .select('*')
         .eq('website_id', websiteId)
         .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        drafts = data;
+      if (draftsErr) {
+        console.error('[Content Draft GET] Error querying content_drafts:', draftsErr);
+      } else if (rawDrafts && rawDrafts.length > 0) {
+        const draftIds = rawDrafts.map((d: any) => d.id);
+
+        // 2. Safely populate related collections in parallel
+        const [
+          { data: versions },
+          { data: qaResults },
+          { data: images }
+        ] = await Promise.all([
+          supabase.from('content_versions').select('*').in('draft_id', draftIds),
+          supabase.from('content_qa_results').select('*').in('draft_id', draftIds),
+          supabase.from('content_images').select('*').in('draft_id', draftIds)
+        ]);
+
+        const versionsMap = new Map<string, any[]>();
+        for (const v of versions || []) {
+          const list = versionsMap.get(v.draft_id) || [];
+          list.push(v);
+          versionsMap.set(v.draft_id, list);
+        }
+
+        const qaMap = new Map<string, any[]>();
+        for (const q of qaResults || []) {
+          const list = qaMap.get(q.draft_id) || [];
+          list.push(q);
+          qaMap.set(q.draft_id, list);
+        }
+
+        const imagesMap = new Map<string, any[]>();
+        for (const img of images || []) {
+          const list = imagesMap.get(img.draft_id) || [];
+          list.push(img);
+          imagesMap.set(img.draft_id, list);
+        }
+
+        drafts = rawDrafts.map((d: any) => ({
+          ...d,
+          content_versions: versionsMap.get(d.id) || [],
+          content_qa_results: qaMap.get(d.id) || [],
+          content_images: imagesMap.get(d.id) || []
+        }));
       }
     } catch (queryErr: any) {
-      console.warn('[Content Draft GET] Primary query warning:', queryErr?.message);
+      console.warn('[Content Draft GET] Query assembly error:', queryErr?.message);
     }
 
     // Query recently completed WordPress jobs strictly for this website
