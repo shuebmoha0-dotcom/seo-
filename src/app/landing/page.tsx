@@ -210,10 +210,10 @@ export default function LandingPage() {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-black tracking-tight text-neutral-950 leading-[1.07]"
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-black tracking-tight text-neutral-950 leading-[1.08]"
             >
               Rank #1 on Google. <br />
-              <span className="text-neutral-950 underline decoration-indigo-500 decoration-wavy decoration-from-font underline-offset-8">
+              <span className="bg-gradient-to-r from-neutral-950 via-indigo-900 to-indigo-600 bg-clip-text text-transparent">
                 Outdart Your Competition on Autopilot.
               </span>
             </motion.h1>
