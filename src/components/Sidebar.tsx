@@ -161,14 +161,21 @@ export function Sidebar() {
     <aside className="sticky top-0 z-20 flex h-screen w-60 shrink-0 select-none flex-col self-start border-r border-neutral-200 bg-neutral-50/70">
       {/* Brand */}
       <div className="px-4 pt-4 pb-3">
-        <Link href="/" className="flex items-center gap-2.5 px-1">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-900 text-white">
-            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 17 9 11 13 15 21 7" />
-              <polyline points="15 7 21 7 21 13" />
+        <Link href="/" className="flex items-center gap-2.5 px-1 group">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-[#00102A] border border-[#0A2540] overflow-hidden shadow-2xs group-hover:scale-105 transition-transform">
+            <svg viewBox="0 0 32 32" fill="none" className="h-4 w-4">
+              <path d="M7 25L13 19L11 15L6 19L7 25Z" fill="#FF642D" opacity="0.85" />
+              <path d="M10 26L16 19L14 14L8 21L10 26Z" fill="#FF8A00" />
+              <path d="M12 18L15 21L17 17L13 15L12 18Z" fill="#1C3D6E" />
+              <path d="M18 12L21 15L17 17L15 13L18 12Z" fill="#1C3D6E" />
+              <path d="M14 17L24 7L25 8L17 18L14 17Z" fill="#FF642D" />
+              <path d="M22 6L26 6L26 10L24 7L22 6Z" fill="#FF4500" />
+              <polygon points="17,14 23,8 20,17 17,14" fill="#FFA143" />
             </svg>
+          </div>
+          <span className="text-sm font-bold tracking-tight text-neutral-950">
+            Outdart<span className="text-[#FF642D]">.</span>
           </span>
-          <span className="text-sm font-semibold tracking-tight text-neutral-900">SEO Autopilot</span>
         </Link>
       </div>
 

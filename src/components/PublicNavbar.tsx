@@ -17,11 +17,23 @@ export function PublicNavbar() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-xl bg-neutral-950 flex items-center justify-center text-white font-bold shadow-xs group-hover:scale-105 transition-transform">
-            <span className="text-sm font-black tracking-tighter text-indigo-400">⚡</span>
+          <div className="w-8 h-8 rounded-xl bg-[#00102A] border border-[#0A2540] flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
+            <svg viewBox="0 0 32 32" fill="none" className="w-5 h-5">
+              {/* Semrush Fire Flame Speed Tail */}
+              <path d="M7 25L13 19L11 15L6 19L7 25Z" fill="#FF642D" opacity="0.85" />
+              <path d="M10 26L16 19L14 14L8 21L10 26Z" fill="#FF8A00" />
+              {/* Rocket Dart Wings */}
+              <path d="M12 18L15 21L17 17L13 15L12 18Z" fill="#1C3D6E" />
+              <path d="M18 12L21 15L17 17L15 13L18 12Z" fill="#1C3D6E" />
+              {/* Rocket Dart Body & Head (Semrush Fire Orange) */}
+              <path d="M14 17L24 7L25 8L17 18L14 17Z" fill="#FF642D" />
+              <path d="M22 6L26 6L26 10L24 7L22 6Z" fill="#FF4500" />
+              {/* Dart Core Highlight */}
+              <polygon points="17,14 23,8 20,17 17,14" fill="#FFA143" />
+            </svg>
           </div>
           <span className="font-extrabold text-base tracking-tight text-neutral-950">
-            Outdart<span className="text-indigo-600">.</span>
+            Outdart<span className="text-[#FF642D]">.</span>
           </span>
         </Link>
 
