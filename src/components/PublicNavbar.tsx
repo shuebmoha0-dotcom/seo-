@@ -16,22 +16,15 @@ export function PublicNavbar() {
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-neutral-200/80">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF642D] to-[#FF4500] flex items-center justify-center shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all">
-            {/* Bold High-Contrast White + Navy Vector Dart */}
-            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 drop-shadow-xs">
-              {/* Outer Speed Fin */}
-              <path d="M4 19L9 15L6 11L3 14L4 19Z" fill="#FFF" fillOpacity="0.85" />
-              {/* Main Supersonic Dart Body */}
-              <path d="M8 15L19 4L20 5L12 16L8 15Z" fill="#FFFFFF" />
-              {/* Dark Navy Shadow Wing for depth */}
-              <path d="M12 16L15 19L19 19L16 14L12 16Z" fill="#00102A" />
-              {/* Sharp Dart Tip */}
-              <path d="M17 3L21 3L21 7L19 4L17 3Z" fill="#FFFFFF" />
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="w-8 h-8 rounded-lg bg-neutral-950 flex items-center justify-center group-hover:bg-indigo-600 transition-colors shadow-xs">
+            {/* Precision Flight Dart / Compass Arrow */}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-white -rotate-45 translate-x-0.5 -translate-y-0.5">
+              <polygon points="3 3 21 10 13 13 10 21 3 3" fill="currentColor" fillOpacity="0.2" />
             </svg>
           </div>
-          <span className="font-black text-lg tracking-tight text-neutral-950">
-            Outdart<span className="text-[#FF642D]">.</span>
+          <span className="font-extrabold text-lg tracking-tight text-neutral-950 flex items-center">
+            Outdart<span className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-1 inline-block" />
           </span>
         </Link>
 

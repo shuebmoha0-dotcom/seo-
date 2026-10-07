@@ -1,14 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <linearGradient id="fireGrad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#FF642D" />
-      <stop offset="100%" stop-color="#FF3800" />
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="8" fill="url(#fireGrad)" />
-  <!-- High-Contrast Clean White Vector Dart with Deep Navy Shadow Accent -->
-  <path d="M6 24L12 19L8 14L4 18L6 24Z" fill="#FFFFFF" fill-opacity="0.85" />
-  <path d="M11 19L24 6L25 7L16 20L11 19Z" fill="#FFFFFF" />
-  <path d="M16 20L19 24L24 24L21 18L16 20Z" fill="#00102A" />
-  <path d="M22 5L27 5L27 10L24 6L22 5Z" fill="#FFFFFF" />
+  <rect width="32" height="32" rx="8" fill="#0A0A0A" />
+  <!-- Precision Flight Dart / Compass Needle -->
+  <g transform="translate(4, 4)">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="3 3 21 10 13 13 10 21 3 3" fill="#6366F1" fill-opacity="0.3" transform="rotate(-45 12 12)" />
+    </svg>
+  </g>
 </svg>

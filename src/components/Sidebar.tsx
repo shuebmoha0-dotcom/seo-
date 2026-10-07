@@ -162,16 +162,13 @@ export function Sidebar() {
       {/* Brand */}
       <div className="px-4 pt-4 pb-3">
         <Link href="/" className="flex items-center gap-2.5 px-1 group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#FF642D] to-[#FF4500] shadow-sm group-hover:scale-105 transition-transform">
-            <svg viewBox="0 0 24 24" fill="none" className="h-4.5 w-4.5">
-              <path d="M4 19L9 15L6 11L3 14L4 19Z" fill="#FFF" fillOpacity="0.85" />
-              <path d="M8 15L19 4L20 5L12 16L8 15Z" fill="#FFFFFF" />
-              <path d="M12 16L15 19L19 19L16 14L12 16Z" fill="#00102A" />
-              <path d="M17 3L21 3L21 7L19 4L17 3Z" fill="#FFFFFF" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-950 text-white shadow-xs group-hover:bg-indigo-600 transition-colors">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 -rotate-45 translate-x-0.5 -translate-y-0.5">
+              <polygon points="3 3 21 10 13 13 10 21 3 3" fill="currentColor" fillOpacity="0.2" />
             </svg>
           </div>
-          <span className="text-base font-black tracking-tight text-neutral-950">
-            Outdart<span className="text-[#FF642D]">.</span>
+          <span className="text-base font-extrabold tracking-tight text-neutral-950 flex items-center">
+            Outdart<span className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-1 inline-block" />
           </span>
         </Link>
       </div>
