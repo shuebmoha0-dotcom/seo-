@@ -1,19 +1,43 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
 
 // GET all integrations for a website
 export async function GET(request: Request) {
   try {
+    const supabaseUserClient = await createClient();
+    const { data: { user } } = await supabaseUserClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required.' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const website_id = searchParams.get('website_id');
 
+    if (!website_id) {
+      return NextResponse.json({ error: 'website_id is required.' }, { status: 400 });
+    }
+
     const supabase = createAdminClient();
+
+    // Verify tenant ownership of this website (Rule #10)
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .select('id, user_id')
+      .eq('id', website_id)
+      .maybeSingle();
+
+    const isPlatformAdmin = user.email === 'shuebmoha0@gmail.com';
+    if (websiteError || !website || (website.user_id !== user.id && !isPlatformAdmin)) {
+      return NextResponse.json({ error: 'Forbidden: You do not own this website.' }, { status: 403 });
+    }
+
     let query = supabase
       .from('integrations')
       .select('id, provider, display_name, config, capabilities, status, status_message, last_tested_at, last_synced_at, last_success_at, error_code, error_detail, connected_at, has_access_token, scopes')
+      .eq('website_id', website_id)
       .order('created_at', { ascending: true });
-
-    if (website_id) query = query.eq('website_id', website_id);
 
     let { data, error } = await query;
     if (error) throw error;
@@ -109,12 +133,32 @@ export async function GET(request: Request) {
 // POST create/update integration record
 export async function POST(request: Request) {
   try {
+    const supabaseUserClient = await createClient();
+    const { data: { user } } = await supabaseUserClient.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized: Authentication required.' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { website_id, provider, config, capabilities, display_name } = body;
 
+    if (!website_id) return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     if (!provider) return NextResponse.json({ error: 'provider is required' }, { status: 400 });
 
     const supabase = createAdminClient();
+
+    // Verify tenant ownership of this website (Rule #10)
+    const { data: website, error: websiteError } = await supabase
+      .from('websites')
+      .select('id, user_id')
+      .eq('id', website_id)
+      .maybeSingle();
+
+    const isPlatformAdmin = user.email === 'shuebmoha0@gmail.com';
+    if (websiteError || !website || (website.user_id !== user.id && !isPlatformAdmin)) {
+      return NextResponse.json({ error: 'Forbidden: You do not own this website.' }, { status: 403 });
+    }
 
     // Upsert integration
     const { data, error } = await supabase

@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import { validateUrlForSSRF } from '@/lib/utils/urlValidator';
 
 export interface CrawledPageData {
   url: string;
@@ -34,6 +35,11 @@ export class WebsiteCrawler {
 
   async crawlPage(url: string, domain: string): Promise<CrawledPageData> {
     try {
+      const ssrfCheck = validateUrlForSSRF(url);
+      if (!ssrfCheck.isValid) {
+        return this.getEmptyData(url, 400);
+      }
+
       const response = await fetch(url, {
         headers: { 'User-Agent': this.userAgent }
       });

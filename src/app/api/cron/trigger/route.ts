@@ -17,10 +17,29 @@ export async function POST(request: Request) {
 async function handleCronExecution(request: Request) {
   try {
     const authHeader = request.headers.get('authorization');
-    const isVercelCron = request.headers.get('x-vercel-cron') === '1';
+    const cronSecret = process.env.CRON_SECRET;
 
-    if (process.env.CRON_SECRET && !isVercelCron && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return new Response('Unauthorized', { status: 401 });
+    let authorized = false;
+    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+      authorized = true;
+    } else {
+      // Allow manual trigger by authenticated platform admin
+      try {
+        const { createClient } = await import('@/lib/supabase/server');
+        const { isPlatformAdmin } = await import('@/lib/auth/admin');
+        const supabaseUser = await createClient();
+        const { data: { user } } = await supabaseUser.auth.getUser();
+        if (user && isPlatformAdmin(user.email)) {
+          authorized = true;
+        }
+      } catch {}
+    }
+
+    if (!authorized) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: Valid CRON_SECRET or Platform Admin credentials required.' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // 0. Continuous Self-Healing Watchdog: Guarantee Telegram webhook is locked to our production server

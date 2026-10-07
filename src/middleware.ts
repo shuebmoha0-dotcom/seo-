@@ -24,8 +24,8 @@ const PUBLIC_PAGE_PREFIXES = [
 
 const PUBLIC_API_PREFIXES = [
   '/api/auth/',
-  '/api/telegram/',
-  '/api/cron/',
+  '/api/telegram/webhook',
+  '/api/cron/trigger',
   '/api/webhooks/',
   '/api/integrations/wordpress/plugin',
   '/api/integrations/wordpress/outbound/',

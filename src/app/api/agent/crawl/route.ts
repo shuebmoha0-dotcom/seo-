@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
 import { WebsiteCrawler } from '@/lib/agent/crawler';
 import { createClient } from '@/lib/supabase/server';
+import { validateUrlForSSRF } from '@/lib/utils/urlValidator';
 
 export async function POST(request: Request) {
   try {
     const { url } = await request.json();
+    if (!url || typeof url !== 'string') {
+      return NextResponse.json({ error: 'Valid URL is required' }, { status: 400 });
+    }
+
+    const ssrfCheck = validateUrlForSSRF(url);
+    if (!ssrfCheck.isValid) {
+      return NextResponse.json({ error: ssrfCheck.error || 'Blocked URL' }, { status: 400 });
+    }
+
     const domain = new URL(url).hostname;
     const crawler = new WebsiteCrawler();
     const pageData = await crawler.crawlPage(url, domain);

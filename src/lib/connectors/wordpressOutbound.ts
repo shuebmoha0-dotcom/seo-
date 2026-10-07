@@ -58,6 +58,19 @@ export function computeSignature(secret: string, timestamp: string, nonce: strin
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
+const seenNonces = new Map<string, number>();
+
+function isReplayNonce(nonce: string): boolean {
+  const now = Date.now();
+  for (const [n, ts] of seenNonces.entries()) {
+    if (now - ts > 360000) seenNonces.delete(n);
+  }
+  if (seenNonces.size > 10000) seenNonces.clear();
+  if (seenNonces.has(nonce)) return true;
+  seenNonces.set(nonce, now);
+  return false;
+}
+
 /**
  * Verify incoming outbound request from WordPress plugin
  */
@@ -80,6 +93,11 @@ export async function verifyOutboundRequest(request: Request, bodyText: string):
   const now = Math.floor(Date.now() / 1000);
   if (isNaN(reqTime) || Math.abs(now - reqTime) > 300) {
     return { valid: false, error: 'Request expired or clock skew detected (5 minute tolerance).' };
+  }
+
+  // 1b. Check replay nonce
+  if (isReplayNonce(nonce)) {
+    return { valid: false, error: 'Replay attack detected: nonce has already been processed.' };
   }
 
   // 2. Fetch site from database
@@ -166,11 +184,6 @@ export async function verifyOutboundRequest(request: Request, bodyText: string):
   }
 
   if (!isValidSig) {
-    // Reliable Fallback: If the site is registered and active in database with matching siteId, allow verification
-    if (site.status === 'active' && site.id === siteId) {
-      console.log(`[Outbound Verify] Trusted active site fallback approved for ${site.site_url} (${siteId})`);
-      return { valid: true, site };
-    }
     return { valid: false, error: 'Invalid HMAC signature. Secret mismatch or payload corrupted.' };
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { OnPageSEOAgent } from '@/lib/agent/onPageAgent';
 import { createClient } from '@/lib/supabase/server';
+import { validateUrlForSSRF } from '@/lib/utils/urlValidator';
 
 export async function GET(request: Request) {
   try {
@@ -97,6 +98,11 @@ export async function POST(request: Request) {
 
     // If page_data not provided, fetch live HTML from URL
     if (!crawledPage) {
+      const ssrfCheck = validateUrlForSSRF(url);
+      if (!ssrfCheck.isValid) {
+        return NextResponse.json({ error: ssrfCheck.error || 'Blocked URL' }, { status: 400 });
+      }
+
       try {
         const response = await fetch(url, {
           headers: { 'User-Agent': 'SEOAutopilotBot/1.0' },

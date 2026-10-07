@@ -11,7 +11,14 @@ const IV_LENGTH = 12; // Standard for GCM
 const TAG_LENGTH = 16;
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'default-secret-key-for-development-32chars!';
+  const secret = process.env.ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ENCRYPTION_KEY or SUPABASE_SERVICE_ROLE_KEY must be configured in production.');
+    }
+    // Fallback strictly for local non-production environments
+    return crypto.createHash('sha256').update('local-dev-fallback-secret-key-32chars!').digest();
+  }
   // Derive a 32-byte key using SHA-256
   return crypto.createHash('sha256').update(secret).digest();
 }

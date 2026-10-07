@@ -71,6 +71,8 @@ export async function POST(request: Request) {
       }
     }
 
+    const { data: { user } } = await supabase.auth.getUser();
+
     // 2. Check if outbound site record exists
     let query = supabase.from('wordpress_outbound_sites').select('*').eq('site_url', normalizedUrl);
     if (targetWebsiteId) {
@@ -80,6 +82,30 @@ export async function POST(request: Request) {
 
     let siteId: string;
     if (existingSite) {
+      // Security Check: Verify user owns the website or provided the matching secret before allowing update
+      let isAuthorized = false;
+
+      if (user && existingSite.website_id) {
+        const { data: ownedWeb } = await supabase
+          .from('websites')
+          .select('id')
+          .eq('id', existingSite.website_id)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (ownedWeb) isAuthorized = true;
+      }
+
+      if (existingSite.hmac_secret_hash === secretHash) {
+        isAuthorized = true;
+      }
+
+      if (!isAuthorized) {
+        return NextResponse.json(
+          { success: false, error: 'Site already registered. You must be authenticated as the website owner to update connection credentials.' },
+          { status: 403 }
+        );
+      }
+
       siteId = existingSite.id;
       await supabase
         .from('wordpress_outbound_sites')

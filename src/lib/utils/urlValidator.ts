@@ -81,3 +81,9 @@ export function validateAndNormalizeWordPressUrl(inputUrl: string): URLValidatio
     normalizedUrl,
   };
 }
+
+export function validateUrlForSSRF(inputUrl: string): URLValidationResult {
+  return validateAndNormalizeWordPressUrl(inputUrl);
+}
+
+
