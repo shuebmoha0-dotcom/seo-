@@ -39,10 +39,10 @@ export function PublicFooter() {
       <div className="max-w-7xl mx-auto px-6 py-12 border-t border-neutral-200 grid grid-cols-2 md:grid-cols-5 gap-8 text-sm">
         <div className="col-span-2 space-y-4">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="w-7 h-7 rounded-lg bg-neutral-950 flex items-center justify-center text-white font-bold">
+              <span className="text-xs text-indigo-400 font-black">⚡</span>
             </div>
-            <span className="font-extrabold text-neutral-900 tracking-tight text-base">SEO Autopilot</span>
+            <span className="font-extrabold text-neutral-950 tracking-tight text-base">Outdart<span className="text-indigo-600">.</span></span>
           </Link>
           <p className="text-neutral-500 text-xs leading-relaxed max-w-sm">
             Autonomous enterprise AI SEO engine. Continuously mines search intent, drafts long-form editorial content, resolves technical debt, and accelerates Page 1 rankings.

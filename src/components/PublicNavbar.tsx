@@ -17,11 +17,11 @@ export function PublicNavbar() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-xs group-hover:scale-105 transition-transform">
-            <Sparkles className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-xl bg-neutral-950 flex items-center justify-center text-white font-bold shadow-xs group-hover:scale-105 transition-transform">
+            <span className="text-sm font-black tracking-tighter text-indigo-400">⚡</span>
           </div>
-          <span className="font-extrabold text-base tracking-tight text-neutral-900">
-            SEO Autopilot
+          <span className="font-extrabold text-base tracking-tight text-neutral-950">
+            Outdart<span className="text-indigo-600">.</span>
           </span>
         </Link>
 

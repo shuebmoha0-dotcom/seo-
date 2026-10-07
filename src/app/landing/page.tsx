@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
   ArrowRight,
@@ -194,26 +195,46 @@ export default function LandingPage() {
           {/* Main Hero Header */}
           <div className="text-center max-w-4xl mx-auto space-y-6 mb-12">
             {/* Top Quality Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-100/90 border border-neutral-200 text-neutral-800 text-xs font-semibold tracking-tight shadow-2xs">
+            <motion.div
+              initial={{ opacity: 0, y: -12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-100/90 border border-neutral-200 text-neutral-800 text-xs font-semibold tracking-tight shadow-2xs"
+            >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>Semrush-Grade Search Intelligence · 100% Autonomous Execution</span>
-            </div>
+            </motion.div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-black tracking-tight text-neutral-950 leading-[1.07]">
+            <motion.h1
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
+              className="text-4xl sm:text-5xl md:text-6xl lg:text-[66px] font-black tracking-tight text-neutral-950 leading-[1.07]"
+            >
               Rank #1 on Google. <br />
               <span className="text-neutral-950 underline decoration-indigo-500 decoration-wavy decoration-from-font underline-offset-8">
-                Put Your Entire SEO on Autopilot.
+                Outdart Your Competition on Autopilot.
               </span>
-            </h1>
+            </motion.h1>
 
             {/* Subheadline */}
-            <p className="text-neutral-600 text-base md:text-xl leading-relaxed max-w-3xl mx-auto font-normal">
-              Stop paying <strong className="font-semibold text-neutral-900">$500+/mo for Semrush</strong> and slow copywriters. Our autonomous operator monitors your search footprint 24/7, reverse-engineers competitor keyword gaps, writes 1,500-word cornerstone articles with Claude Sonnet 5, and publishes directly to WordPress &amp; GitHub with 1-click approvals.
-            </p>
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
+              className="text-neutral-600 text-base md:text-xl leading-relaxed max-w-3xl mx-auto font-normal"
+            >
+              Stop paying <strong className="font-semibold text-neutral-900">$500+/mo for Semrush</strong> and slow copywriters. Outdart monitors your search footprint 24/7, reverse-engineers competitor keyword gaps, writes 1,500-word cornerstone articles with Claude Sonnet 5, and publishes directly to WordPress &amp; GitHub with 1-click approvals.
+            </motion.p>
 
             {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3, ease: "easeOut" }}
+              className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2"
+            >
               <Link
                 href="/login"
                 className="w-full sm:w-auto bg-neutral-950 hover:bg-neutral-800 text-white font-bold text-sm md:text-base px-8 py-4 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5 group"
@@ -228,10 +249,15 @@ export default function LandingPage() {
                 <Activity className="w-4 h-4 text-indigo-600" />
                 <span>Explore Live Cockpit</span>
               </a>
-            </div>
+            </motion.div>
 
             {/* Sales Guarantee Trust Strip */}
-            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 pt-3 text-xs font-semibold text-neutral-500">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 pt-3 text-xs font-semibold text-neutral-500"
+            >
               <span className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" /> No credit card required
               </span>
@@ -241,13 +267,19 @@ export default function LandingPage() {
               <span className="flex items-center gap-1.5">
                 <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" /> 1-Click WordPress &amp; GitHub sync
               </span>
-            </div>
+            </motion.div>
           </div>
 
           {/* ─────────────────────────────────────────────────────────────────────────────
               3. PRODUCT COCKPIT SHOWCASE (INTERACTIVE TELEMETRY & WORKFLOW)
           ───────────────────────────────────────────────────────────────────────────── */}
-          <div id="live-cockpit" className="max-w-5xl mx-auto rounded-2xl border border-neutral-300 bg-white shadow-xl overflow-hidden relative">
+          <motion.div
+            id="live-cockpit"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.35, ease: "easeOut" }}
+            className="max-w-5xl mx-auto rounded-2xl border border-neutral-300 bg-white shadow-xl overflow-hidden relative"
+          >
             {/* Top Browser / App Chrome */}
             <div className="bg-neutral-100/90 border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
@@ -723,7 +755,7 @@ export default function LandingPage() {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -746,7 +778,14 @@ export default function LandingPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Step 1 */}
-            <div className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative"
+            >
               <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
                 01
               </div>
@@ -754,16 +793,23 @@ export default function LandingPage() {
                 Continuous SERP &amp; Competitor Recon
               </h3>
               <p className="text-xs md:text-sm text-neutral-600 leading-relaxed">
-                Connect your domain in 60 seconds. The engine ingests your Google Search Console telemetry, monitors rival domain movements across a 540M+ keyword index, and pinpoints untapped low-KD terms.
+                Connect your domain in 60 seconds. Outdart ingests your Google Search Console telemetry, monitors rival domain movements across a 540M+ keyword index, and pinpoints untapped low-KD terms.
               </p>
               <div className="pt-2 border-t border-neutral-100 text-xs font-semibold text-indigo-700 flex items-center gap-1">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Zero keyword cannibalization</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Step 2 */}
-            <div className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative"
+            >
               <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
                 02
               </div>
@@ -777,10 +823,17 @@ export default function LandingPage() {
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Zero fluffy TOC blocks</span>
               </div>
-            </div>
+            </motion.div>
 
             {/* Step 3 */}
-            <div className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
+              whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              className="p-8 rounded-2xl border border-neutral-200 bg-white space-y-4 shadow-xs relative"
+            >
               <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-sm">
                 03
               </div>
@@ -794,7 +847,7 @@ export default function LandingPage() {
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                 <span>100% human-controlled</span>
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </section>
