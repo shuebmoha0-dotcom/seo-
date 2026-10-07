@@ -124,7 +124,7 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Semrush-Grade Keyword Discovery (540M+ db)</span>
+                  <span>Semrush-Powered Keyword Discovery (540M+ db)</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -132,7 +132,7 @@ export default function PricingPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Claude Sonnet 5 Article Drafting</span>
+                  <span>Enterprise Editorial AI Article Drafting</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-neutral-700">
                   <Check className="w-4 h-4 text-emerald-600 shrink-0" />

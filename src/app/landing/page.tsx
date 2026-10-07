@@ -88,7 +88,7 @@ const sampleKeywords: KeywordDemo[] = [
     kdColor: "text-amber-700 bg-amber-50 border-amber-200",
     cpc: "$18.90",
     intent: "Transactional",
-    action: "Queued for Claude Sonnet 5",
+    action: "Queued for Editorial AI Writer",
     titleSnippet: "Automated Technical SEO Monitoring: How Modern Growth Teams Prevent Search Drops"
   },
   {
@@ -202,7 +202,7 @@ export default function LandingPage() {
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-100/90 border border-neutral-200 text-neutral-800 text-xs font-semibold tracking-tight shadow-2xs"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Semrush-Grade Search Intelligence · 100% Autonomous Execution</span>
+              <span>Semrush-Powered Search Intelligence · 100% Autonomous Execution</span>
             </motion.div>
 
             {/* Headline */}
@@ -225,7 +225,7 @@ export default function LandingPage() {
               transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
               className="text-neutral-600 text-base md:text-xl leading-relaxed max-w-3xl mx-auto font-normal"
             >
-              Stop paying <strong className="font-semibold text-neutral-900">$500+/mo for Semrush</strong> and slow copywriters. Outdart monitors your search footprint 24/7, reverse-engineers competitor keyword gaps, writes 1,500-word cornerstone articles with Claude Sonnet 5, and publishes directly to WordPress &amp; GitHub with 1-click approvals.
+              Stop paying <strong className="font-semibold text-neutral-900">$500+/mo for Semrush</strong> and slow copywriters. Outdart monitors your search footprint 24/7, reverse-engineers competitor keyword gaps, writes 1,500-word cornerstone articles powered by Semrush-powered search intelligence, and publishes directly to WordPress &amp; GitHub with 1-click approvals.
             </motion.p>
 
             {/* Action Buttons */}
@@ -310,7 +310,7 @@ export default function LandingPage() {
                   }`}
                 >
                   <Search className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>1. Semrush-Grade Intel</span>
+                  <span>1. Semrush-Powered Intel</span>
                 </button>
                 <button
                   type="button"
@@ -322,7 +322,7 @@ export default function LandingPage() {
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>2. Claude Sonnet 5 Studio</span>
+                  <span>2. Editorial AI Studio</span>
                 </button>
                 <button
                   type="button"
@@ -400,14 +400,14 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Dynamic Tab 1: Semrush-Grade SERP Matrix */}
+              {/* Dynamic Tab 1: Semrush-Powered SERP Matrix */}
               {activeTab === "keyword_intel" && (
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-neutral-100">
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900 flex items-center gap-2">
                         <Database className="w-4 h-4 text-indigo-600" />
-                        <span>Semrush-Grade Competitor Keyword Intelligence Engine</span>
+                        <span>Semrush-Powered Competitor Keyword Intelligence Engine</span>
                       </h3>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
                         Reverse-engineers competitor SERP positions and extracts low-competition keywords (KD &le; 30) with confirmed commercial search volume.
@@ -508,20 +508,20 @@ export default function LandingPage() {
                       Zero Cannibalization Protected: Automatically crosses your active sitemap before recommending.
                     </span>
                     <span className="font-semibold text-neutral-900">
-                      Click any row to load into Claude Sonnet 5 Content Studio
+                      Click any row to load into Advanced Editorial AI Content Studio
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* Dynamic Tab 2: Claude Sonnet 5 Article Studio */}
+              {/* Dynamic Tab 2: Advanced Editorial AI Article Studio */}
               {activeTab === "content" && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between pb-1 border-b border-neutral-100">
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-900 flex items-center gap-2">
                         <FileText className="w-4 h-4 text-indigo-600" />
-                        <span>Cornerstone Content Studio (Claude Sonnet 5 Locked)</span>
+                        <span>Cornerstone Content Studio (Advanced Editorial AI Locked)</span>
                       </h3>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
                         Authoritative, high-density editorial drafting: 1,200–1,600 words, rich comparison tables, and zero generic fluff.
@@ -567,7 +567,7 @@ export default function LandingPage() {
 
                       <div className="p-3.5 rounded-lg bg-white border border-neutral-200 space-y-2">
                         <span className="text-[11px] font-bold text-neutral-900 block">
-                          Key Implementation Framework (Claude Sonnet 5 Generated):
+                          Key Implementation Framework (Advanced Editorial AI Generated):
                         </span>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
                           <div className="p-2 bg-neutral-50 rounded border border-neutral-200">
@@ -814,10 +814,10 @@ export default function LandingPage() {
                 02
               </div>
               <h3 className="text-lg font-extrabold text-neutral-950">
-                Claude Sonnet 5 Cornerstone Drafting
+                Cornerstone Content Engine
               </h3>
               <p className="text-xs md:text-sm text-neutral-600 leading-relaxed">
-                Primary writing model is locked strictly to Claude Sonnet 5 with extended thinking disabled. The engine drafts authoritative 1,200–1,600 word articles with verified internal links, tables, and diagrams.
+                Powered by advanced reasoning models and enterprise search graph intelligence. The engine drafts authoritative 1,200–1,600 word articles with verified internal links, tables, and diagrams.
               </p>
               <div className="pt-2 border-t border-neutral-100 text-xs font-semibold text-indigo-700 flex items-center gap-1">
                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -927,7 +927,7 @@ export default function LandingPage() {
                 <div className="flex items-start gap-3 pb-3 border-b border-neutral-100">
                   <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 font-bold">✓</div>
                   <div>
-                    <span className="font-bold text-neutral-950 block">Built-in Semrush-Grade Search Intelligence</span>
+                    <span className="font-bold text-neutral-950 block">Built-in Semrush-Powered Search Intelligence</span>
                     <span>540M+ keyword database with KD% metrics and competitor gap detection with zero manual exports.</span>
                   </div>
                 </div>
@@ -935,7 +935,7 @@ export default function LandingPage() {
                 <div className="flex items-start gap-3 pb-3 border-b border-neutral-100">
                   <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5 font-bold">✓</div>
                   <div>
-                    <span className="font-bold text-neutral-950 block">Locked Claude Sonnet 5 Cornerstone Writing</span>
+                    <span className="font-bold text-neutral-950 block">Locked Advanced Editorial AI Cornerstone Writing</span>
                     <span>Drafts 1,200–1,600 word cornerstone articles with technical diagrams, tables, and live internal links.</span>
                   </div>
                 </div>
@@ -1144,7 +1144,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-medium">
-                &ldquo;We cancelled our $139/mo Semrush plan and let SEO Autopilot handle our organic pipeline. We went from 4,000 to 62,000 monthly visitors in 4 months. The Claude Sonnet 5 articles actually rank on Page 1.&rdquo;
+                &ldquo;We cancelled our $139/mo Semrush plan and let SEO Autopilot handle our organic pipeline. We went from 4,000 to 62,000 monthly visitors in 4 months. The Advanced Editorial AI articles actually rank on Page 1.&rdquo;
               </p>
               <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
                 <div>
@@ -1210,7 +1210,7 @@ export default function LandingPage() {
             {[
               {
                 q: "Will AI-generated articles get penalized by Google?",
-                a: "No. Google explicitly stated in their Helpful Content guidelines that automated content is permitted as long as it demonstrates original depth, high information density, and answers user intent. SEO Autopilot locks article writing to Claude Sonnet 5, which crafts comprehensive 1,200–1,600 word articles with verified citations, original tables, and live internal links—avoiding repetitive generic phrasing."
+                a: "No. Google explicitly stated in their Helpful Content guidelines that automated content is permitted as long as it demonstrates original depth, high information density, and answers user intent. SEO Autopilot locks article writing to Advanced Editorial AI, which crafts comprehensive 1,200–1,600 word articles with verified citations, original tables, and live internal links—avoiding repetitive generic phrasing."
               },
               {
                 q: "Does the agent ever publish to my website without approval?",
