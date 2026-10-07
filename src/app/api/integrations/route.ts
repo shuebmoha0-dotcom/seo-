@@ -70,7 +70,7 @@ export async function GET(request: Request) {
         wpMessage = `Connected to ${outboundSite.site_name || outboundSite.site_url} (Last sync: ${Math.round(minutesSincePing / 60)}h ago)`;
       } else {
         wpStatus = 'disconnected';
-        wpMessage = `Plugin idle for >24 hours. Check Settings > SEO Autopilot in WordPress.`;
+        wpMessage = `Plugin idle for >24 hours. Check Settings > Outdart in WordPress.`;
       }
     }
 

@@ -55,8 +55,8 @@ export async function GET(request: Request) {
     // Fallback simulated properties in development/preview
     return NextResponse.json({
       properties: [
-        { propertyId: '349102941', displayName: 'SEO Autopilot Production', account: 'Acme Corp' },
-        { propertyId: '984712034', displayName: 'SEO Autopilot Marketing Blog', account: 'Acme Corp' },
+        { propertyId: '349102941', displayName: 'Outdart Production', account: 'Acme Corp' },
+        { propertyId: '984712034', displayName: 'Outdart Marketing Blog', account: 'Acme Corp' },
       ],
     });
   } catch (error: any) {

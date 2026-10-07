@@ -212,7 +212,7 @@ export class WordPressClient {
 
         if (response.status === 401) {
           if (this.authMethod === 'agent_connector') {
-            throw new Error(serverMessage || 'Invalid or revoked SEO Autopilot API Key (HTTP 401). Please verify the key generated in WordPress Settings > SEO Autopilot.');
+            throw new Error(serverMessage || 'Invalid or revoked Outdart API Key (HTTP 401). Please verify the key generated in WordPress Settings > Outdart.');
           }
           if (this.authMethod === 'botcreds') {
             throw new Error(serverMessage || 'BotCreds authentication failed (HTTP 401). Please verify the BotCreds agent username and key.');
@@ -408,7 +408,7 @@ export class WordPressClient {
       rankMathDetected: false,
     };
 
-    // ── Flow A: SEO Autopilot Agent Connector Plugin ──
+    // ── Flow A: Outdart Agent Connector Plugin ──
     if (isAgentConnector) {
       const statusUrl = `${this.siteUrl}/wp-json/seo-autopilot/v1/status`;
       let statusRes: Response;
@@ -450,7 +450,7 @@ export class WordPressClient {
           canonicalUrl: this.siteUrl,
           authMethod: this.authMethod,
           stages,
-          message: 'Install the SEO Autopilot Connector plugin on your WordPress site (HTTP 404: /wp-json/seo-autopilot/v1/status not found).',
+          message: 'Install the Outdart Connector plugin on your WordPress site (HTTP 404: /wp-json/seo-autopilot/v1/status not found).',
         };
       }
 
@@ -478,7 +478,7 @@ export class WordPressClient {
           canonicalUrl: this.siteUrl,
           authMethod: this.authMethod,
           stages,
-          message: err.message || 'Agent Connector authentication failed (HTTP 401). Please verify your API Key generated in WordPress Settings > SEO Autopilot.',
+          message: err.message || 'Agent Connector authentication failed (HTTP 401). Please verify your API Key generated in WordPress Settings > Outdart.',
         };
       }
 
@@ -511,7 +511,7 @@ export class WordPressClient {
         ok: true,
         siteName: siteInfo.name,
         canonicalUrl: siteInfo.url || this.siteUrl,
-        username: 'SEO Autopilot Agent',
+        username: 'Outdart Agent',
         authMethod: this.authMethod,
         detectedPlugin: hasRankMath ? 'rankmath' : (siteInfo.seo_plugins?.yoast ? 'yoast' : 'none'),
         rankMathDetected: hasRankMath,

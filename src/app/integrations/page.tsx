@@ -1349,7 +1349,7 @@ export default function IntegrationsPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
                       <div className="font-semibold text-indigo-950 text-xs flex items-center gap-1.5">
-                        <span></span> SEO Autopilot Outbound Connector Plugin (v1.2.0)
+                        <span></span> Outdart Outbound Connector Plugin (v1.2.0)
                       </div>
                       <p className="text-[11px] text-indigo-800 leading-tight">
                         <strong>Outbound Reverse Architecture</strong>: WordPress initiates requests to our SaaS queue. Eliminates all 403 WAF/firewall blocks.
@@ -1357,7 +1357,7 @@ export default function IntegrationsPage() {
                     </div>
                     <a
                       href="/api/integrations/wordpress/plugin"
-                      download="seo-autopilot-connector.zip"
+                      download="outdart-connector.zip"
                       className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-[11px] transition-colors shadow-xs"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -1365,7 +1365,7 @@ export default function IntegrationsPage() {
                     </a>
                   </div>
                   <div className="text-[10px] text-indigo-700 bg-white/70 p-2 rounded-lg border border-indigo-100">
-                    <strong>Quick Setup:</strong> Install in WordPress &rarr; Go to <strong>Settings &gt; SEO Autopilot</strong> &rarr; Click <strong>Connect Outbound to SaaS</strong> (or paste the key below).
+                    <strong>Quick Setup:</strong> Install in WordPress &rarr; Go to <strong>Settings &gt; Outdart</strong> &rarr; Click <strong>Connect Outbound to SaaS</strong> (or paste the key below).
                   </div>
                 </div>
               )}
@@ -1401,7 +1401,7 @@ export default function IntegrationsPage() {
               <div>
                 <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
                   {wpForm.auth_method === 'agent_connector'
-                    ? 'SEO Autopilot API Secret Key'
+                    ? 'Outdart API Secret Key'
                     : (wpForm.auth_method === 'botcreds' ? 'BotCreds Agent Key' : 'Application Password')}
                 </label>
                 <input
@@ -1418,7 +1418,7 @@ export default function IntegrationsPage() {
                 />
                 <p className="text-[10px] text-neutral-400 mt-1">
                   {wpForm.auth_method === 'agent_connector'
-                    ? 'Generated via the SEO Autopilot Connector plugin (WordPress Admin → Settings → SEO Autopilot).'
+                    ? 'Generated via the Outdart Connector plugin (WordPress Admin → Settings → Outdart).'
                     : (wpForm.auth_method === 'botcreds'
                         ? 'Generated via the BotCreds Agent Access plugin (WordPress Admin → Settings → BotCreds).'
                         : 'Generated in WordPress Admin → Users → Profile → Application Passwords.')}

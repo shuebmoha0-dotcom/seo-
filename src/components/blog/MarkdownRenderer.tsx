@@ -44,7 +44,7 @@ export function renderInlineFormatting(text: string): React.ReactNode {
     if (linkMatch) {
       const anchorText = linkMatch[1];
       const href = linkMatch[2];
-      const isInternal = href.startsWith("/") || href.includes("seo-hazel-eight.vercel.app") || href.includes("seautopilot.io");
+      const isInternal = href.startsWith("/") || href.includes("outdart.com") || href.includes("seo-hazel-eight.vercel.app") || href.includes("seautopilot.io");
 
       if (isInternal) {
         return (

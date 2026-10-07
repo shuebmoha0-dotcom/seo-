@@ -290,7 +290,7 @@ export default function LandingPage() {
                 </div>
                 <div className="ml-3 hidden sm:flex items-center gap-1.5 text-neutral-600 font-mono text-[11px] bg-white border border-neutral-200 px-3 py-1 rounded-md shadow-2xs">
                   <Lock className="w-3 h-3 text-emerald-600" />
-                  <span>app.seautopilot.com/cockpit/live-stream</span>
+                  <span>app.outdart.com/cockpit/live-stream</span>
                   <span className="text-neutral-400">·</span>
                   <span className="text-emerald-700 font-semibold flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> 24ms live

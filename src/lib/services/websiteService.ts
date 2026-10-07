@@ -254,7 +254,7 @@ export class WebsiteService {
         const authMethod = payload.wordpress_config.auth_method || 'agent_connector';
         const wpClient = new WordPressClient({
           siteUrl: normalizedUrl,
-          username: payload.wordpress_config.username || (authMethod === 'agent_connector' ? 'SEO Autopilot Agent' : ''),
+          username: payload.wordpress_config.username || (authMethod === 'agent_connector' ? 'Outdart Agent' : ''),
           applicationPassword: payload.wordpress_config.app_password,
           apiKey: payload.wordpress_config.app_password,
           authMethod,
@@ -281,7 +281,7 @@ export class WebsiteService {
               : `Auth check: ${connectionTest.message}`,
             config: {
               site_url: connectionTest.canonicalUrl || normalizedUrl,
-              username: payload.wordpress_config.username || 'SEO Autopilot Agent',
+              username: payload.wordpress_config.username || 'Outdart Agent',
               auth_method: authMethod,
               seo_plugin: payload.wordpress_config.seo_plugin || 'none',
               rank_math_detected: connectionTest.rankMathDetected || false,

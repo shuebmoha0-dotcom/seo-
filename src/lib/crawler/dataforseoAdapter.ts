@@ -247,7 +247,7 @@ export class DataForSEOAdapter implements ICrawlProviderAdapter {
         url: 'https://example.com/',
         status_code: 200,
         meta: {
-          title: 'SEO Autopilot — Autonomous AI SEO SaaS',
+          title: 'Outdart — Autonomous AI SEO SaaS',
           description: 'Autonomous AI agents that optimize, write, and monitor your website ranking 24/7.',
           canonical: 'https://example.com/',
           robots: { noindex: false, nofollow: false },
@@ -310,7 +310,7 @@ export class DataForSEOAdapter implements ICrawlProviderAdapter {
         url: 'https://example.com/features',
         status_code: 200,
         meta: {
-          title: 'SEO Autopilot — Features',
+          title: 'Outdart — Features',
           description: 'Explore all AI SEO features.',
           canonical: '',
           robots: { noindex: false, nofollow: false },

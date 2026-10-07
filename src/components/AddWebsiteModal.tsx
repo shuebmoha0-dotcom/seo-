@@ -44,7 +44,7 @@ export function AddWebsiteModal() {
     if (form.connection_type === "wordpress") {
       if (!form.wp_app_password || (form.wp_auth_method !== 'agent_connector' && !form.wp_username)) {
         let fieldName = 'Application Password';
-        if (form.wp_auth_method === 'agent_connector') fieldName = 'SEO Autopilot API Key';
+        if (form.wp_auth_method === 'agent_connector') fieldName = 'Outdart API Key';
         else if (form.wp_auth_method === 'botcreds') fieldName = 'BotCreds Key';
 
         setError(`Please provide your ${fieldName}.`);
@@ -52,7 +52,7 @@ export function AddWebsiteModal() {
         return;
       }
       payload.wordpress_config = {
-        username: form.wp_username || (form.wp_auth_method === 'agent_connector' ? 'SEO Autopilot Agent' : ''),
+        username: form.wp_username || (form.wp_auth_method === 'agent_connector' ? 'Outdart Agent' : ''),
         app_password: form.wp_app_password,
         auth_method: form.wp_auth_method,
         seo_plugin: form.wp_seo_plugin,
@@ -293,7 +293,7 @@ export function AddWebsiteModal() {
               <div>
                 <label className="block text-[10px] text-neutral-500 mb-1">
                   {form.wp_auth_method === 'agent_connector'
-                    ? 'SEO Autopilot API Key *'
+                    ? 'Outdart API Key *'
                     : (form.wp_auth_method === 'botcreds' ? 'BotCreds Agent Key *' : 'Application Password *')}
                 </label>
                 <input

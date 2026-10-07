@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const primaryTarget = (keyword || topic).trim();
 
     // 1. Generate comprehensive article via LLMProvider (Claude Sonnet 5 under the hood)
-    const systemPrompt = `You are the lead technical author and SEO strategist for SEO Autopilot (an autonomous enterprise AI SEO agent platform).
+    const systemPrompt = `You are the lead technical author and SEO strategist for Outdart (an autonomous enterprise AI SEO agent platform).
 Your task is to write a comprehensive, authoritative, high-density 1,200–1,500 word cornerstone guide for the platform's public blog.
 
 STRICT WRITING RULES:

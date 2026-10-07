@@ -128,7 +128,7 @@ export async function POST(request: Request) {
               content: updatedDraft.content_body,
               excerpt: updatedDraft.meta_description || updatedDraft.working_title,
               category: blogCategory,
-              author_name: 'SEO Autopilot Editorial Team',
+              author_name: 'Outdart Editorial Team',
               author_role: 'Autonomous Content Agent',
               reading_time: readingTime,
               cover_image: featuredImageUrl || undefined,

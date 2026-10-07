@@ -27,14 +27,14 @@ export async function POST(request: Request) {
     const auth_method = body.auth_method === 'agent_connector'
       ? 'agent_connector'
       : (body.auth_method === 'botcreds' ? 'botcreds' : 'application_password');
-    const username = body.username || (auth_method === 'agent_connector' ? 'SEO Autopilot Agent' : '');
+    const username = body.username || (auth_method === 'agent_connector' ? 'Outdart Agent' : '');
     const application_password = body.api_key || body.application_password || body.app_password || body.password || body.applicationPassword || body.botcreds_key || body.botcreds_token;
     const seo_plugin = body.seo_plugin || body.seoPlugin || 'none';
     const { website_id, project_id } = body;
 
     if (!site_url || !application_password || (auth_method !== 'agent_connector' && !username)) {
       let fieldName = 'Application Password';
-      if (auth_method === 'agent_connector') fieldName = 'SEO Autopilot API Key';
+      if (auth_method === 'agent_connector') fieldName = 'Outdart API Key';
       else if (auth_method === 'botcreds') fieldName = 'BotCreds Agent Key';
 
       return NextResponse.json(
