@@ -208,7 +208,7 @@ export default function ProjectMemoryPage() {
   const getExportData = () => {
     return {
       version: "1.0",
-      app: "SEO Autopilot",
+      app: "Outdart",
       website_domain: currentWebsite?.domain || "default",
       exported_at: new Date().toISOString(),
       custom_instructions: instructions,
@@ -748,7 +748,7 @@ The AI agent will continuously read and reference this memory space when draftin
                   <label className="border-2 border-dashed border-neutral-200 hover:border-indigo-400 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer bg-neutral-50/50 hover:bg-indigo-50/30 transition-all text-center">
                     <UploadCloud className="w-6 h-6 text-neutral-400" />
                     <span className="font-semibold text-neutral-700">Click to select .json file or drag &amp; drop</span>
-                    <span className="text-[10px] text-neutral-400">JSON export backup files from SEO Autopilot or raw text</span>
+                    <span className="text-[10px] text-neutral-400">JSON export backup files from Outdart or raw text</span>
                     <input
                       type="file"
                       accept=".json,.txt"

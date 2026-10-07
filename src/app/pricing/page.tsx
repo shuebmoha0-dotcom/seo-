@@ -41,7 +41,7 @@ export default function PricingPage() {
     },
     {
       q: "Which platforms and CMS are supported?",
-      a: "SEO Autopilot supports WordPress (via Application Passwords or connector plugin), Next.js / GitHub repositories, Webflow, Shopify, and custom websites via our secure Content & Execution API.",
+      a: "Outdart supports WordPress (via Application Passwords or connector plugin), Next.js / GitHub repositories, Webflow, Shopify, and custom websites via our secure Content & Execution API.",
     },
     {
       q: "Is there a free trial available?",

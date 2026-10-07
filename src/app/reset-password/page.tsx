@@ -5,6 +5,7 @@ import { resetPassword } from "@/lib/auth/actions";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { Bot, Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -105,11 +106,8 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-screen flex flex-col justify-center items-center px-4 bg-white">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2 mb-10 justify-center">
-          <div className="p-2 bg-indigo-600 rounded-xl">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-neutral-900 text-lg">SEO Autopilot</span>
+        <div className="flex items-center mb-8 justify-center">
+          <BrandLogo size="lg" href="/" />
         </div>
 
         <div className="bg-white border border-neutral-200 rounded-2xl shadow-sm p-8">

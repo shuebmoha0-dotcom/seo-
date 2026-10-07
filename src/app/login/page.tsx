@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Bot, Lock, Mail, User, Eye, EyeOff, AlertCircle, CheckCircle2, KeyRound, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 function LoginForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -157,15 +158,9 @@ function LoginForm() {
       {/* Left: Branding Panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-neutral-900 border-r border-neutral-800 flex-col justify-between p-12 relative overflow-hidden">
         <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-2.5 mb-14">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-neutral-900">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 17 9 11 13 15 21 7" />
-                <polyline points="15 7 21 7 21 13" />
-              </svg>
-            </span>
-            <span className="text-white font-semibold text-base tracking-tight">SEO Autopilot</span>
-          </Link>
+          <div className="mb-14">
+            <BrandLogo size="lg" href="/" textColor="text-white" />
+          </div>
 
           <h1 className="text-3xl font-semibold text-white leading-tight mb-4 tracking-tight">
             Autonomous search growth for ambitious teams.
@@ -196,14 +191,8 @@ function LoginForm() {
       {/* Right: Auth Form */}
       <div className="flex-1 flex flex-col justify-center px-8 py-12 sm:px-16 lg:px-20">
         <div className="max-w-sm w-full mx-auto">
-          <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-neutral-900 text-white">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 17 9 11 13 15 21 7" />
-                <polyline points="15 7 21 7 21 13" />
-              </svg>
-            </span>
-            <span className="font-semibold text-neutral-900 tracking-tight">SEO Autopilot</span>
+          <div className="mb-8 lg:hidden">
+            <BrandLogo size="md" href="/" />
           </div>
 
           <h2 className="text-xl font-semibold text-neutral-900 mb-1 tracking-tight">

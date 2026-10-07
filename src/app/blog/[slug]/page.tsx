@@ -31,16 +31,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!post) {
     return {
-      title: "Article Not Found | SEO Autopilot",
+      title: "Article Not Found | Outdart",
       description: "The requested blog article could not be found.",
     };
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://seo-hazel-eight.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://outdart.com";
   const postUrl = `${siteUrl}/blog/${post.slug}`;
 
   return {
-    title: `${post.metaTitle} | SEO Autopilot`,
+    title: `${post.metaTitle} | Outdart`,
     description: post.metaDescription,
     keywords: post.keywords,
     authors: [{ name: post.author.name }],
@@ -82,7 +82,7 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
   }
 
   const relatedPosts = getRelatedPosts(post.slug, post.category, 3);
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://seo-hazel-eight.vercel.app";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://outdart.com";
   const postUrl = `${siteUrl}/blog/${post.slug}`;
 
   // Structured Data (JSON-LD) for Google Rich Snippets
@@ -101,7 +101,7 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
     },
     publisher: {
       "@type": "Organization",
-      name: "SEO Autopilot",
+      name: "Outdart",
       url: siteUrl,
       logo: {
         "@type": "ImageObject",
@@ -277,7 +277,7 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
               Automate this entire search workflow for your own website
             </h3>
             <p className="text-sm text-neutral-600 leading-relaxed">
-              Connect your Google Search Console and CMS in 2 minutes. SEO Autopilot detects unwritten keywords, drafts comprehensive articles, and auto-fixes technical crawl issues 24/7.
+              Connect your Google Search Console and CMS in 2 minutes. Outdart detects unwritten keywords, drafts comprehensive articles, and auto-fixes technical crawl issues 24/7.
             </p>
           </div>
 

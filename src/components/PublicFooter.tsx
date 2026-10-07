@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Sparkles, ArrowRight } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function PublicFooter() {
   return (
@@ -38,21 +39,12 @@ export function PublicFooter() {
       {/* Main Footer Links */}
       <div className="max-w-7xl mx-auto px-6 py-12 border-t border-neutral-200 grid grid-cols-2 md:grid-cols-5 gap-8 text-sm">
         <div className="col-span-2 space-y-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-neutral-950 text-white flex items-center justify-center shadow-xs">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 -rotate-45 translate-x-0.5 -translate-y-0.5">
-                <polygon points="3 3 21 10 13 13 10 21 3 3" fill="currentColor" fillOpacity="0.2" />
-              </svg>
-            </div>
-            <span className="font-extrabold text-neutral-950 tracking-tight text-base flex items-center">
-              Outdart<span className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-1 inline-block" />
-            </span>
-          </Link>
+          <BrandLogo size="md" href="/" />
           <p className="text-neutral-500 text-xs leading-relaxed max-w-sm">
             Autonomous enterprise AI SEO engine. Continuously mines search intent, drafts long-form editorial content, resolves technical debt, and accelerates Page 1 rankings.
           </p>
           <p className="text-xs text-neutral-400">
-            © {new Date().getFullYear()} SEO Autopilot. All rights reserved.
+            © {new Date().getFullYear()} Outdart. All rights reserved.
           </p>
         </div>
 

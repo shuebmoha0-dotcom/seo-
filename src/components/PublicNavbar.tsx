@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Sparkles, ArrowRight, Menu, X } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export function PublicNavbar() {
   const pathname = usePathname();
@@ -16,17 +17,7 @@ export function PublicNavbar() {
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-neutral-200/80">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg bg-neutral-950 flex items-center justify-center group-hover:bg-indigo-600 transition-colors shadow-xs">
-            {/* Precision Flight Dart / Compass Arrow */}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-white -rotate-45 translate-x-0.5 -translate-y-0.5">
-              <polygon points="3 3 21 10 13 13 10 21 3 3" fill="currentColor" fillOpacity="0.2" />
-            </svg>
-          </div>
-          <span className="font-extrabold text-lg tracking-tight text-neutral-950 flex items-center">
-            Outdart<span className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-1 inline-block" />
-          </span>
-        </Link>
+        <BrandLogo size="md" href="/" />
 
         {/* Desktop Navigation Links */}
         <nav className="hidden md:flex items-center gap-7 text-xs font-semibold text-neutral-600">

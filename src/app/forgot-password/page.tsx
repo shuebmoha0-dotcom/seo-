@@ -4,6 +4,7 @@ import { useState } from "react";
 import { forgotPassword } from "@/lib/auth/actions";
 import { Bot, Mail, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
@@ -22,11 +23,8 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen flex flex-col justify-center items-center px-4 bg-white">
       <div className="w-full max-w-md">
-        <div className="flex items-center gap-2 mb-10 justify-center">
-          <div className="p-2 bg-indigo-600 rounded-xl">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-neutral-900 text-lg">SEO Autopilot</span>
+        <div className="flex items-center mb-8 justify-center">
+          <BrandLogo size="lg" href="/" />
         </div>
 
         <div className="bg-white border border-neutral-200 rounded-2xl shadow-sm p-8">

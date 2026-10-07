@@ -147,7 +147,7 @@ export default function LandingPage() {
   const calculatedSavings = useMemo(() => {
     // Current annual cost = monthlyRetainer * 12 + ($139 Semrush * 12)
     const legacyAnnual = (monthlyRetainer + 139) * 12;
-    // SEO Autopilot Growth tier = $79/mo * 12
+    // Outdart Growth tier = $79/mo * 12
     const autopilotAnnual = 79 * 12;
     const annualSavings = Math.max(0, legacyAnnual - autopilotAnnual);
     const hoursSavedPerYear = Math.round(monthlyArticles * 3.5 * 12);
@@ -622,7 +622,7 @@ export default function LandingPage() {
                           <Send className="w-4 h-4" />
                         </div>
                         <div>
-                          <span className="text-xs font-bold text-neutral-950 block">SEO Autopilot Telegram Bot</span>
+                          <span className="text-xs font-bold text-neutral-950 block">Outdart Telegram Bot</span>
                           <span className="text-[10px] text-emerald-600 font-semibold block">Connected · Direct Push Webhook</span>
                         </div>
                       </div>
@@ -726,7 +726,7 @@ export default function LandingPage() {
                         + &lt;link rel=&quot;canonical&quot; href=&quot;https://site.com/products&quot; /&gt;
                       </div>
                       <div className="text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded">
-                        + &lt;script type=&quot;application/ld+json&quot;&gt;&#123;&quot;@type&quot;: &quot;SoftwareApplication&quot;, &quot;name&quot;: &quot;SEO Autopilot&quot;...&#125;&lt;/script&gt;
+                        + &lt;script type=&quot;application/ld+json&quot;&gt;&#123;&quot;@type&quot;: &quot;SoftwareApplication&quot;, &quot;name&quot;: &quot;Outdart&quot;...&#125;&lt;/script&gt;
                       </div>
                     </div>
                   </div>
@@ -772,7 +772,7 @@ export default function LandingPage() {
               The 3-Step Continuous Ranking Loop.
             </h2>
             <p className="text-neutral-600 text-sm md:text-base">
-              Unlike generic AI tools that require constant prompting, SEO Autopilot acts as a full-time autonomous engineering and content department.
+              Unlike generic AI tools that require constant prompting, Outdart acts as a full-time autonomous engineering and content department.
             </p>
           </div>
 
@@ -910,7 +910,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* The SEO Autopilot Way */}
+            {/* The Outdart Way */}
             <div className="p-8 rounded-2xl border-2 border-indigo-600 bg-white space-y-6 shadow-lg relative">
               <div className="absolute -top-3.5 right-6 bg-indigo-600 text-white font-extrabold text-[11px] px-3.5 py-1 rounded-full uppercase tracking-wider shadow-xs">
                 All-in-One Engine
@@ -918,7 +918,7 @@ export default function LandingPage() {
 
               <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded">
-                  The SEO Autopilot Way
+                  The Outdart Way
                 </span>
                 <span className="text-xl font-black text-indigo-700 font-mono">From $29 / mo</span>
               </div>
@@ -970,7 +970,7 @@ export default function LandingPage() {
               See Exactly What You Save Every Month.
             </h2>
             <p className="text-neutral-600 text-xs md:text-sm">
-              Adjust your current agency/copywriter budget to calculate the exact capital and hours saved with SEO Autopilot.
+              Adjust your current agency/copywriter budget to calculate the exact capital and hours saved with Outdart.
             </p>
           </div>
 
@@ -1144,7 +1144,7 @@ export default function LandingPage() {
                 ))}
               </div>
               <p className="text-xs md:text-sm text-neutral-700 leading-relaxed font-medium">
-                &ldquo;We cancelled our $139/mo Semrush plan and let SEO Autopilot handle our organic pipeline. We went from 4,000 to 62,000 monthly visitors in 4 months. The Advanced Editorial AI articles actually rank on Page 1.&rdquo;
+                &ldquo;We cancelled our $139/mo Semrush plan and let Outdart handle our organic pipeline. We went from 4,000 to 62,000 monthly visitors in 4 months. The Advanced Editorial AI articles actually rank on Page 1.&rdquo;
               </p>
               <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
                 <div>
@@ -1210,15 +1210,15 @@ export default function LandingPage() {
             {[
               {
                 q: "Will AI-generated articles get penalized by Google?",
-                a: "No. Google explicitly stated in their Helpful Content guidelines that automated content is permitted as long as it demonstrates original depth, high information density, and answers user intent. SEO Autopilot locks article writing to Advanced Editorial AI, which crafts comprehensive 1,200–1,600 word articles with verified citations, original tables, and live internal links—avoiding repetitive generic phrasing."
+                a: "No. Google explicitly stated in their Helpful Content guidelines that automated content is permitted as long as it demonstrates original depth, high information density, and answers user intent. Outdart locks article writing to Advanced Editorial AI, which crafts comprehensive 1,200–1,600 word articles with verified citations, original tables, and live internal links—avoiding repetitive generic phrasing."
               },
               {
                 q: "Does the agent ever publish to my website without approval?",
                 a: "Never. Safety is our primary architectural pillar. Every article, meta tag update, or canonical fix is queued in an approval inbox. You can approve or reject with 1 click from your dashboard or straight from your Telegram bot on your phone. Nothing touches production without your authorization."
               },
               {
-                q: "How does SEO Autopilot replace Semrush if it costs so much less?",
-                a: "Semrush charges $139+/mo largely for its enterprise brand and manual analytical UI. Under the hood, SEO Autopilot accesses institutional search intelligence databases covering 540M+ keywords directly at API scale—passing the dramatic cost savings directly to you while automating the actual drafting and publishing steps that Semrush cannot perform."
+                q: "How does Outdart replace Semrush if it costs so much less?",
+                a: "Semrush charges $139+/mo largely for its enterprise brand and manual analytical UI. Under the hood, Outdart accesses institutional search intelligence databases covering 540M+ keywords directly at API scale—passing the dramatic cost savings directly to you while automating the actual drafting and publishing steps that Semrush cannot perform."
               },
               {
                 q: "Which CMS platforms and frameworks are supported?",

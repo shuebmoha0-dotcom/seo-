@@ -29,6 +29,7 @@ import {
 import { motion } from "framer-motion";
 import { WebsiteSwitcher } from "@/components/WebsiteSwitcher";
 import { useWebsite } from "@/lib/context/WebsiteContext";
+import { BrandLogo } from "@/components/BrandLogo";
 
 interface NavItem {
   name: string;
@@ -161,16 +162,7 @@ export function Sidebar() {
     <aside className="sticky top-0 z-20 flex h-screen w-60 shrink-0 select-none flex-col self-start border-r border-neutral-200 bg-neutral-50/70">
       {/* Brand */}
       <div className="px-4 pt-4 pb-3">
-        <Link href="/" className="flex items-center gap-2.5 px-1 group">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-950 text-white shadow-xs group-hover:bg-indigo-600 transition-colors">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 -rotate-45 translate-x-0.5 -translate-y-0.5">
-              <polygon points="3 3 21 10 13 13 10 21 3 3" fill="currentColor" fillOpacity="0.2" />
-            </svg>
-          </div>
-          <span className="text-base font-extrabold tracking-tight text-neutral-950 flex items-center">
-            Outdart<span className="w-1.5 h-1.5 rounded-full bg-indigo-600 ml-1 inline-block" />
-          </span>
-        </Link>
+        <BrandLogo size="md" href="/" />
       </div>
 
       {/* Website switcher */}
