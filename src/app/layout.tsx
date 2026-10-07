@@ -9,8 +9,11 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SEO Autopilot — Autonomous AI SEO Growth Platform",
-  description: "Enterprise autonomous SEO platform that continuously tracks rankings, plans high-intent content, creates visual illustrations, and optimizes your site.",
+  title: "Outdart — Autonomous SEO Growth Engine",
+  description: "Autonomous SEO platform powered by Semrush search intelligence. Continuously tracks rankings, reverses competitor keyword gaps, and automates high-ROI organic growth.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 import { Providers } from "@/components/Providers";

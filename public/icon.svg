@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#00102A" />
+  {/* Semrush-Style Rocket Flame Trail */}
+  <path d="M7 25L13 19L11 15L6 19L7 25Z" fill="#FF642D" opacity="0.85" />
+  <path d="M10 26L16 19L14 14L8 21L10 26Z" fill="#FF8A00" />
+  {/* Deep Navy Wing Accents */}
+  <path d="M12 18L15 21L17 17L13 15L12 18Z" fill="#1C3D6E" />
+  <path d="M18 12L21 15L17 17L15 13L18 12Z" fill="#1C3D6E" />
+  {/* Rocket Dart Core Body (Semrush Flame Orange) */}
+  <path d="M14 17L24 7L25 8L17 18L14 17Z" fill="#FF642D" />
+  <path d="M22 6L26 6L26 10L24 7L22 6Z" fill="#FF4500" />
+  {/* Shaded Facet Highlight */}
+  <polygon points="17,14 23,8 20,17 17,14" fill="#FFA143" />
+</svg>
