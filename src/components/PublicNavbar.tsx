@@ -17,22 +17,20 @@ export function PublicNavbar() {
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-8 h-8 rounded-xl bg-[#00102A] border border-[#0A2540] flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
-            <svg viewBox="0 0 32 32" fill="none" className="w-5 h-5">
-              {/* Semrush Fire Flame Speed Tail */}
-              <path d="M7 25L13 19L11 15L6 19L7 25Z" fill="#FF642D" opacity="0.85" />
-              <path d="M10 26L16 19L14 14L8 21L10 26Z" fill="#FF8A00" />
-              {/* Rocket Dart Wings */}
-              <path d="M12 18L15 21L17 17L13 15L12 18Z" fill="#1C3D6E" />
-              <path d="M18 12L21 15L17 17L15 13L18 12Z" fill="#1C3D6E" />
-              {/* Rocket Dart Body & Head (Semrush Fire Orange) */}
-              <path d="M14 17L24 7L25 8L17 18L14 17Z" fill="#FF642D" />
-              <path d="M22 6L26 6L26 10L24 7L22 6Z" fill="#FF4500" />
-              {/* Dart Core Highlight */}
-              <polygon points="17,14 23,8 20,17 17,14" fill="#FFA143" />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FF642D] to-[#FF4500] flex items-center justify-center shadow-sm group-hover:scale-105 group-hover:shadow-md transition-all">
+            {/* Bold High-Contrast White + Navy Vector Dart */}
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5 drop-shadow-xs">
+              {/* Outer Speed Fin */}
+              <path d="M4 19L9 15L6 11L3 14L4 19Z" fill="#FFF" fillOpacity="0.85" />
+              {/* Main Supersonic Dart Body */}
+              <path d="M8 15L19 4L20 5L12 16L8 15Z" fill="#FFFFFF" />
+              {/* Dark Navy Shadow Wing for depth */}
+              <path d="M12 16L15 19L19 19L16 14L12 16Z" fill="#00102A" />
+              {/* Sharp Dart Tip */}
+              <path d="M17 3L21 3L21 7L19 4L17 3Z" fill="#FFFFFF" />
             </svg>
           </div>
-          <span className="font-extrabold text-base tracking-tight text-neutral-950">
+          <span className="font-black text-lg tracking-tight text-neutral-950">
             Outdart<span className="text-[#FF642D]">.</span>
           </span>
         </Link>
