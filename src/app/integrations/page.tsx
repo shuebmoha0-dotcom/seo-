@@ -290,10 +290,11 @@ export default function IntegrationsPage() {
 
   const initiateOAuth = (provider: string) => {
     setOauthError(null);
-    let authUrl = `/api/integrations/${provider}/auth`;
-    if (provider === "google_search_console") authUrl = "/api/integrations/gsc/auth";
-    else if (provider === "google_analytics") authUrl = "/api/integrations/ga4/auth";
-    else if (provider === "github") authUrl = "/api/integrations/github/auth";
+    const siteId = currentWebsite?.id ? `?website_id=${encodeURIComponent(currentWebsite.id)}` : "";
+    let authUrl = `/api/integrations/${provider}/auth${siteId}`;
+    if (provider === "google_search_console") authUrl = `/api/integrations/gsc/auth${siteId}`;
+    else if (provider === "google_analytics") authUrl = `/api/integrations/ga4/auth${siteId}`;
+    else if (provider === "github") authUrl = `/api/integrations/github/auth${siteId}`;
 
     // Direct browser navigation for OAuth redirect (avoids browser fetch CORS blocks on Google OAuth)
     window.location.href = authUrl;
