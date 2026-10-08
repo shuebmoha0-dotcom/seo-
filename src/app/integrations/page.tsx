@@ -1101,18 +1101,76 @@ export default function IntegrationsPage() {
               </div>
             ) : (
               <div className="space-y-4 text-xs">
-                <p className="text-neutral-600 leading-relaxed">
-                  Authorize direct read-only access to your Google Search Console performance data via official Google OAuth.
-                </p>
+                {gscProperties.length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-neutral-600 leading-relaxed font-medium">
+                      Select the Search Console property to track for your website:
+                    </p>
+                    {gscLoading ? (
+                      <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-neutral-500">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                        <span>Loading verified Search Console properties...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {gscProperties.map(p => (
+                          <label
+                            key={p.siteUrl}
+                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-colors ${
+                              selectedGscProp === p.siteUrl ? "border-indigo-600 bg-indigo-50/50" : "border-neutral-200 hover:bg-neutral-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="gsc_prop"
+                                checked={selectedGscProp === p.siteUrl}
+                                onChange={() => setSelectedGscProp(p.siteUrl)}
+                                className="accent-indigo-600"
+                              />
+                              <div>
+                                <p className="font-semibold text-neutral-900 font-mono text-[11px]">{p.siteUrl}</p>
+                                <p className="text-[10px] text-neutral-400 capitalize">Permission: {p.permissionLevel || 'Verified'}</p>
+                              </div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-2 border-t border-neutral-100">
+                      <button
+                        onClick={handleFinalizeGsc}
+                        disabled={!selectedGscProp || gscLoading}
+                        className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        {gscLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        Connect Selected Search Console Property
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowGscModal(false)}
+                        className="bg-neutral-100 hover:bg-neutral-200 text-neutral-600 px-4 py-2.5 rounded-xl font-medium text-xs"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-neutral-600 leading-relaxed">
+                      Connect via official Google OAuth with 1 click. Your customers or team members can grant read-only access to their verified Search Console properties without generating JSON keys.
+                    </p>
 
-                <button
-                  type="button"
-                  onClick={() => initiateOAuth("google_search_console")}
-                  className="w-full py-3 bg-neutral-900 hover:bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2.5 shadow-xs transition-colors text-xs"
-                >
-                  <PlatformLogo provider="google_search_console" className="w-4 h-4" size={16} />
-                  <span>Sign in with Google OAuth</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => initiateOAuth("google_search_console")}
+                      className="w-full py-3 bg-neutral-900 hover:bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2.5 shadow-xs transition-colors text-xs"
+                    >
+                      <PlatformLogo provider="google_search_console" className="w-4 h-4" size={16} />
+                      <span>Sign in with Google OAuth</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
