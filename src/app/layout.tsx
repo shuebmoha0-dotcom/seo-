@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   icons: {
     icon: "/icon.svg",
   },
+  verification: {
+    google: "6ZJvr1JSEEJ8eX9ew3NEnOMKJoi5sZrO9oLhyZbnNIc",
+  },
 };
 
 import { Providers } from "@/components/Providers";
