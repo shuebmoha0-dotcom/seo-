@@ -4,9 +4,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const website_id = searchParams.get('website_id') || 'default';
-    const host = request.headers.get('host') || 'seo-hazel-eight.vercel.app';
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'outdart.com';
     const protocol = host.includes('localhost') ? 'http' : 'https';
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`;
+    const siteUrl = host ? `${protocol}://${host}` : (process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com');
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
 

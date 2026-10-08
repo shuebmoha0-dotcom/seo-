@@ -29,6 +29,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/webhooks/',
   '/api/integrations/wordpress/plugin',
   '/api/integrations/wordpress/outbound/',
+  '/api/integrations/gsc/callback',
 ];
 
 function isPublicPage(pathname: string): boolean {
