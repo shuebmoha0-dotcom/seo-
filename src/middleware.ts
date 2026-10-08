@@ -16,6 +16,8 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/login',
   '/forgot-password',
   '/reset-password',
+  '/privacy',
+  '/terms',
 ]);
 
 const PUBLIC_PAGE_PREFIXES = [
