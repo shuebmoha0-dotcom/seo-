@@ -38,6 +38,11 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# secrets & keys
+*service-account*.json
+*credentials*.json
+gcp-*.json
 next-env.d.ts
 
 .vercel
