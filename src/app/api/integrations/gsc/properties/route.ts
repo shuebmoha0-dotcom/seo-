@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { decryptCredential } from '@/lib/utils/encryption';
+import { decryptCredential, encryptCredential } from '@/lib/utils/encryption';
 
 export async function GET(request: Request) {
   try {
@@ -24,15 +24,50 @@ export async function GET(request: Request) {
       .single();
 
     let accessToken = '';
+    let refreshToken = '';
     if (creds?.encrypted_value) {
       const parts = creds.encrypted_value.split(':::');
       accessToken = decryptCredential(parts[0]);
+      if (parts[1]) refreshToken = decryptCredential(parts[1]);
     }
 
     if (accessToken && !accessToken.includes('simulated')) {
-      const res = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
+      let res = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
+
+      // If token expired (401), automatically refresh using the refresh token
+      if (res.status === 401 && refreshToken && !refreshToken.includes('simulated')) {
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        if (clientId && clientSecret) {
+          const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              client_id: clientId,
+              client_secret: clientSecret,
+              refresh_token: refreshToken,
+              grant_type: 'refresh_token',
+            }),
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            accessToken = tokenData.access_token;
+            const encryptedAccess = encryptCredential(accessToken);
+            const encryptedRefresh = encryptCredential(refreshToken);
+            await supabase.from('integration_credentials').update({
+              encrypted_value: `${encryptedAccess}:::${encryptedRefresh}`,
+              updated_at: new Date().toISOString(),
+            }).eq('integration_id', integration.id);
+
+            // Retry with refreshed access token
+            res = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
+              headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+          }
+        }
+      }
 
       if (res.ok) {
         const data = await res.json();
