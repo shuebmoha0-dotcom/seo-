@@ -97,13 +97,18 @@ export async function GET(request: Request) {
       const encryptedRefresh = encryptCredential(refreshToken);
       const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-      await supabase.from('integration_credentials').upsert({
+      const { error: credErr } = await supabase.from('integration_credentials').upsert({
         integration_id: integrationId,
         credential_type: 'oauth_tokens',
         encrypted_value: `${encryptedAccess}:::${encryptedRefresh}`,
         expires_at: expiresAt,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'integration_id,credential_type' });
+
+      if (credErr) {
+        console.error('[GSC OAuth Callback] Credential upsert error:', credErr);
+        throw credErr;
+      }
     }
 
     return NextResponse.redirect(new URL(`/integrations?gsc_select=true&integration_id=${integrationId}`, request.url));
