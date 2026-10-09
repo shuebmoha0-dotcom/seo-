@@ -1,13 +1,15 @@
-﻿# Render Blueprint Configuration for Autonomous SEO Agent Background Worker
+# Render Blueprint Configuration for Autonomous SEO Agent Background Worker
 services:
   - type: worker
     name: seo-agent-worker
     runtime: node
     region: oregon # or ohio, frankfurt, singapore
     plan: starter # Starter plan ($7/mo) for 24/7 always-on persistent worker
-    buildCommand: npm install
+    buildCommand: npm install --include=dev
     startCommand: npm run worker
     envVars:
+      - key: NODE_VERSION
+        value: "20.18.0"
       - key: NODE_ENV
         value: production
       - key: WORKER_CONCURRENCY

@@ -9,6 +9,9 @@
     "lint": "eslint",
     "worker": "tsx src/worker/index.ts"
   },
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.38",
     "@ai-sdk/openai": "^4.0.36",
