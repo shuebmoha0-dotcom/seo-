@@ -342,12 +342,15 @@ export default function IntegrationsPage() {
       if (gscSelect) {
         setGscIntegrationId(intId);
         openGscPropertySelector(intId);
+        window.history.replaceState({}, '', window.location.pathname);
       } else if (ga4Select) {
         setGa4IntegrationId(intId);
         openGa4PropertySelector(intId);
+        window.history.replaceState({}, '', window.location.pathname);
       } else if (githubSelect) {
         setGithubIntegrationId(intId);
         openGithubRepoSelector(intId);
+        window.history.replaceState({}, '', window.location.pathname);
       }
     }
   }, []);
