@@ -45,14 +45,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fallback/simulated properties when in preview mode
-    return NextResponse.json({
-      properties: [
-        { siteUrl: 'https://seautopilot.io/', permissionLevel: 'siteOwner' },
-        { siteUrl: 'https://www.seautopilot.io/', permissionLevel: 'siteFullUser' },
-        { siteUrl: 'sc-domain:seautopilot.io', permissionLevel: 'siteOwner' },
-      ],
-    });
+    return NextResponse.json({ properties: [] });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch GSC properties' }, { status: 500 });
   }
