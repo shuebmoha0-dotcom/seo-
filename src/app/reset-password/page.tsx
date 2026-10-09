@@ -27,12 +27,25 @@ export default function ResetPasswordPage() {
       }
 
       const c = searchParams.get("code");
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
       if (c) {
         setCode(c);
         const supabase = createClient();
         supabase.auth.exchangeCodeForSession(c).then(({ error: exErr }) => {
           if (exErr) {
             console.warn("[ResetPassword] Client code exchange:", exErr.message);
+          }
+        });
+      } else if (accessToken && refreshToken) {
+        const supabase = createClient();
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        }).then(({ error: sErr }) => {
+          if (sErr) {
+            console.warn("[ResetPassword] Set session from hash error:", sErr.message);
           }
         });
       }
