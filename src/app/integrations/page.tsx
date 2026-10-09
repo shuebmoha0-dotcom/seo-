@@ -385,6 +385,7 @@ export default function IntegrationsPage() {
   // 2. Open GSC Property Selector
   const openGscPropertySelector = async (intId: string) => {
     setShowGscModal(true);
+    setGscAuthMode("oauth");
     setGscLoading(true);
     try {
       const res = await fetch(`/api/integrations/gsc/properties?integration_id=${intId}`);
