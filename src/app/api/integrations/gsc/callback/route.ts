@@ -20,9 +20,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/integrations?error=oauth_cancelled', request.url));
     }
 
-    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'outdart.com';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const siteUrl = host ? `${protocol}://${host}` : (process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com');
+    const rawHost = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'outdart.com';
+    const isLocal = rawHost.includes('localhost') || rawHost.includes('127.0.0.1');
+    const siteUrl = isLocal ? `http://${rawHost}` : 'https://outdart.com';
     const redirectUri = `${siteUrl}/api/integrations/gsc/callback`;
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
