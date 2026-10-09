@@ -42,6 +42,16 @@ export async function GET(request: Request) {
           permissionLevel: s.permissionLevel,
         }));
         return NextResponse.json({ properties });
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData?.error?.message || 'Google Search Console API request failed.';
+        const isApiDisabled = errMsg.includes('disabled') || errMsg.includes('has not been used in project');
+        return NextResponse.json({
+          properties: [],
+          error: errMsg,
+          api_disabled: isApiDisabled,
+          activation_url: 'https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=1036462372466',
+        });
       }
     }
 

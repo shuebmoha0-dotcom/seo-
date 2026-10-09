@@ -70,6 +70,9 @@ export async function GET(request: Request) {
     // Fetch user verified properties directly from Google Webmasters API
     let matchedProperty: string | null = null;
     let availableProperties: Array<{ siteUrl: string; permissionLevel: string }> = [];
+    let gscApiError: string | null = null;
+    let isApiDisabled = false;
+    const activationUrl = 'https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=1036462372466';
 
     if (accessToken && !accessToken.includes('simulated')) {
       try {
@@ -83,6 +86,16 @@ export async function GET(request: Request) {
             siteUrl: s.siteUrl,
             permissionLevel: s.permissionLevel,
           }));
+        } else {
+          const errData = await sitesRes.json().catch(() => ({}));
+          const errMsg = errData?.error?.message || '';
+          console.error('[GSC OAuth Callback] Google sites error:', errMsg);
+          if (errMsg.includes('disabled') || errMsg.includes('has not been used in project')) {
+            isApiDisabled = true;
+            gscApiError = 'Google Search Console API is disabled in your Google Cloud Project.';
+          } else {
+            gscApiError = errMsg;
+          }
         }
       } catch (siteErr) {
         console.error('[GSC OAuth Callback] Failed to fetch sites from Google:', siteErr);
@@ -99,19 +112,33 @@ export async function GET(request: Request) {
     }
 
     // Auto-match algorithm:
-    // If a property matches the client website domain or URL, automatically select it!
+    // 1. Direct match with active website domain
     if (availableProperties.length > 0) {
       if (targetDomain) {
+        const cleanTarget = targetDomain.replace(/^www\./, '').toLowerCase();
+        
+        // Exact domain match (e.g. sc-domain:bizaigenius.com or https://bizaigenius.com/ matches bizaigenius.com)
         const directMatch = availableProperties.find(p => {
-          const cleanP = p.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').toLowerCase();
-          return cleanP === targetDomain;
+          const cleanP = p.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '').toLowerCase();
+          return cleanP === cleanTarget;
         });
         if (directMatch) {
           matchedProperty = directMatch.siteUrl;
         }
+
+        // Subdomain / partial match if exact match not found
+        if (!matchedProperty) {
+          const partialMatch = availableProperties.find(p => {
+            const cleanP = p.siteUrl.replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '').toLowerCase();
+            return cleanP.includes(cleanTarget) || cleanTarget.includes(cleanP);
+          });
+          if (partialMatch) {
+            matchedProperty = partialMatch.siteUrl;
+          }
+        }
       }
 
-      // If only 1 property exists in the user's GSC account, auto-pick it
+      // 2. If only 1 property exists in the user's GSC account, auto-pick it
       if (!matchedProperty && availableProperties.length === 1) {
         matchedProperty = availableProperties[0].siteUrl;
       }
@@ -124,11 +151,17 @@ export async function GET(request: Request) {
       status: isConnected ? 'connected' : 'action_required',
       status_message: isConnected
         ? `Connected to ${matchedProperty}. Performance metrics actively synced.`
+        : isApiDisabled
+        ? 'Google Search Console API is disabled in your Google Cloud Project. Please enable it to finish connection.'
         : 'OAuth authorized — select a property to complete connection.',
       has_access_token: true,
       has_refresh_token: true,
       scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
-      config: isConnected ? { property_url: matchedProperty, auto_matched: true } : {},
+      config: isConnected
+        ? { property_url: matchedProperty, auto_matched: true }
+        : isApiDisabled
+        ? { api_disabled: true, activation_url: activationUrl }
+        : {},
       capabilities: ['GET_SEARCH_ANALYTICS', 'READ_ANALYTICS'],
       last_tested_at: new Date().toISOString(),
       last_success_at: isConnected ? new Date().toISOString() : null,
@@ -171,6 +204,10 @@ export async function GET(request: Request) {
 
     if (isConnected) {
       return NextResponse.redirect(new URL(`/integrations?gsc_connected=true&property=${encodeURIComponent(matchedProperty!)}`, request.url));
+    }
+
+    if (isApiDisabled) {
+      return NextResponse.redirect(new URL(`/integrations?gsc_error=api_disabled&integration_id=${integrationId}`, request.url));
     }
 
     return NextResponse.redirect(new URL(`/integrations?gsc_select=true&integration_id=${integrationId}`, request.url));

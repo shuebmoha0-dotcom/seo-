@@ -147,6 +147,8 @@ export default function IntegrationsPage() {
   const [selectedGscProp, setSelectedGscProp] = useState("");
   const [gscLoading, setGscLoading] = useState(false);
   const [gscIntegrationId, setGscIntegrationId] = useState("");
+  const [gscApiDisabled, setGscApiDisabled] = useState(false);
+  const [gscActivationUrl, setGscActivationUrl] = useState("https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=1036462372466");
 
   const handleConnectGscServiceAccount = async () => {
     if (!gscPropertyUrl || !gscServiceAccountJson) return;
@@ -334,12 +336,23 @@ export default function IntegrationsPage() {
     // Check query params for OAuth callbacks
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
+      const gscConnected = urlParams.get("gsc_connected");
+      const gscError = urlParams.get("gsc_error");
       const gscSelect = urlParams.get("gsc_select");
       const ga4Select = urlParams.get("ga4_select");
       const githubSelect = urlParams.get("github_select");
       const intId = urlParams.get("integration_id") || "";
 
-      if (gscSelect) {
+      if (gscConnected) {
+        loadIntegrations();
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (gscError === "api_disabled") {
+        setGscIntegrationId(intId);
+        setGscApiDisabled(true);
+        setShowGscModal(true);
+        setGscAuthMode("oauth");
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (gscSelect) {
         setGscIntegrationId(intId);
         openGscPropertySelector(intId);
         window.history.replaceState({}, '', window.location.pathname);
@@ -390,13 +403,21 @@ export default function IntegrationsPage() {
     setShowGscModal(true);
     setGscAuthMode("oauth");
     setGscLoading(true);
+    setGscApiDisabled(false);
     try {
       const res = await fetch(`/api/integrations/gsc/properties?integration_id=${intId}`);
       if (res.ok) {
         const data = await res.json();
-        setGscProperties(data.properties || []);
-        if (data.properties?.length > 0) {
-          setSelectedGscProp(data.properties[0].siteUrl);
+        if (data.api_disabled) {
+          setGscApiDisabled(true);
+          if (data.activation_url) setGscActivationUrl(data.activation_url);
+        }
+        const props = data.properties || [];
+        setGscProperties(props);
+        if (props.length > 0) {
+          const target = currentWebsite?.domain?.toLowerCase() || '';
+          const match = props.find((p: any) => p.siteUrl.toLowerCase().includes(target));
+          setSelectedGscProp(match ? match.siteUrl : props[0].siteUrl);
         }
       }
     } catch (e) {
@@ -1105,50 +1126,79 @@ export default function IntegrationsPage() {
               </div>
             ) : (
               <div className="space-y-4 text-xs">
-                {gscProperties.length > 0 ? (
+                {gscLoading ? (
+                  <div className="py-8 flex flex-col items-center justify-center gap-3 text-xs text-neutral-600">
+                    <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+                    <span className="font-medium">Loading verified properties from Google Search Console...</span>
+                  </div>
+                ) : gscApiDisabled ? (
+                  <div className="space-y-3.5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-amber-900 text-xs">Google Search Console API Needs Activation (1-Time)</h4>
+                        <p className="text-amber-800 text-[11px] mt-1 leading-relaxed">
+                          Google requires a 1-time activation of the <strong>Google Search Console API</strong> in your Google Cloud Project. Click the button below to enable it in Google Cloud, then click Retry:
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <a
+                        href={gscActivationUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-colors"
+                      >
+                        <span>Enable API in Google Cloud</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => openGscPropertySelector(gscIntegrationId)}
+                        className="bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-300 font-semibold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>I Enabled It — Retry Now</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : gscProperties.length > 0 ? (
                   <div className="space-y-3">
                     <p className="text-neutral-600 leading-relaxed font-medium">
-                      Select the Search Console property to track for your website:
+                      Select the Search Console property to connect for <strong>{currentWebsite?.domain || "your website"}</strong>:
                     </p>
-                    {gscLoading ? (
-                      <div className="py-8 flex flex-col items-center justify-center gap-2 text-xs text-neutral-500">
-                        <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-                        <span>Loading verified Search Console properties...</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {gscProperties.map(p => (
-                          <label
-                            key={p.siteUrl}
-                            className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-colors ${
-                              selectedGscProp === p.siteUrl ? "border-indigo-600 bg-indigo-50/50" : "border-neutral-200 hover:bg-neutral-50"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="gsc_prop"
-                                checked={selectedGscProp === p.siteUrl}
-                                onChange={() => setSelectedGscProp(p.siteUrl)}
-                                className="accent-indigo-600"
-                              />
-                              <div>
-                                <p className="font-semibold text-neutral-900 font-mono text-[11px]">{p.siteUrl}</p>
-                                <p className="text-[10px] text-neutral-400 capitalize">Permission: {p.permissionLevel || 'Verified'}</p>
-                              </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {gscProperties.map(p => (
+                        <label
+                          key={p.siteUrl}
+                          className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer text-xs transition-colors ${
+                            selectedGscProp === p.siteUrl ? "border-indigo-600 bg-indigo-50/50" : "border-neutral-200 hover:bg-neutral-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="gsc_prop"
+                              checked={selectedGscProp === p.siteUrl}
+                              onChange={() => setSelectedGscProp(p.siteUrl)}
+                              className="accent-indigo-600"
+                            />
+                            <div>
+                              <p className="font-semibold text-neutral-900 font-mono text-[11px]">{p.siteUrl}</p>
+                              <p className="text-[10px] text-neutral-400 capitalize">Permission: {p.permissionLevel || 'Verified'}</p>
                             </div>
-                          </label>
-                        ))}
-                      </div>
-                    )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
                     <div className="flex gap-2 pt-2 border-t border-neutral-100">
                       <button
                         onClick={handleFinalizeGsc}
                         disabled={!selectedGscProp || gscLoading}
                         className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
                       >
-                        {gscLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        Connect Selected Search Console Property
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Connect Selected Search Console Property</span>
                       </button>
                       <button
                         type="button"
