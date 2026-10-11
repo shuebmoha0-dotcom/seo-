@@ -32,6 +32,28 @@ function loadLocalEnv() {
 
 loadLocalEnv();
 
+// Ensure globalThis.WebSocket exists for Supabase client across all Node versions
+if (typeof (globalThis as any).WebSocket === 'undefined') {
+  try {
+    (globalThis as any).WebSocket = class WebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+      readonly CONNECTING = 0;
+      readonly OPEN = 1;
+      readonly CLOSING = 2;
+      readonly CLOSED = 3;
+      readyState = 3;
+      constructor() {}
+      addEventListener() {}
+      removeEventListener() {}
+      send() {}
+      close() {}
+    };
+  } catch {}
+}
+
 export const WORKER_CONFIG = {
   // Worker Identity
   WORKER_ID: process.env.RENDER_INSTANCE_ID || `worker_${process.pid}_${Math.random().toString(36).substring(2, 7)}`,
