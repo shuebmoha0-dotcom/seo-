@@ -35,6 +35,13 @@ export async function POST(request: Request) {
       })
       .eq('id', integration.id);
 
+    // Automatically trigger initial search performance sync
+    const targetSiteId = integration.website_id || website_id;
+    if (targetSiteId) {
+      const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
+      await syncSearchConsoleData(targetSiteId).catch(e => console.error('[GSC Connect Sync Error]', e));
+    }
+
     return NextResponse.json({
       success: true,
       property_url,

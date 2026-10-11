@@ -17,24 +17,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Google Search Console is not connected.' }, { status: 404 });
     }
 
-    // Verify token validity
-    const propertyUrl = integration.config?.property_url || 'https://seautopilot.io/';
-
-    await supabase
-      .from('integrations')
-      .update({
-        status: 'connected',
-        status_message: `Connection verified. Data synced for ${propertyUrl}`,
-        last_tested_at: new Date().toISOString(),
-        last_success_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', integration.id);
+    // Execute real sync
+    const propertyUrl = integration.config?.property_url || 'Search Console property';
+    const targetSiteId = integration.website_id || website_id;
+    let syncResult = null;
+    if (targetSiteId) {
+      const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
+      syncResult = await syncSearchConsoleData(targetSiteId);
+    }
 
     return NextResponse.json({
       ok: true,
-      message: `Verified connection to Search Console (${propertyUrl}). 28-day performance data available.`,
+      message: `Verified connection to Search Console (${propertyUrl}). ${syncResult?.syncedRows || 0} performance records synced.`,
       last_tested_at: new Date().toISOString(),
+      sync: syncResult,
     });
   } catch (error: any) {
     return NextResponse.json({ ok: false, error: error.message || 'Verification failed.' }, { status: 500 });

@@ -203,6 +203,10 @@ export async function GET(request: Request) {
     }
 
     if (isConnected) {
+      if (website_id && website_id !== 'default') {
+        const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
+        await syncSearchConsoleData(website_id).catch(e => console.error('[GSC Callback Initial Sync Error]', e));
+      }
       return NextResponse.redirect(new URL(`/integrations?gsc_connected=true&property=${encodeURIComponent(matchedProperty!)}`, request.url));
     }
 

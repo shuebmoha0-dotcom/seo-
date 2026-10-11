@@ -1,7 +1,7 @@
 "use client";
 
 import { Sidebar } from "@/components/Sidebar";
-import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X } from "lucide-react";
+import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X, RefreshCw } from "lucide-react";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
@@ -86,6 +86,9 @@ export default function DashboardPage() {
   const [runState, setRunState] = useState("");
   const [selectedApproval, setSelectedApproval] = useState<any | null>(null);
   const [activeChartTab, setActiveChartTab] = useState<"impressions" | "clicks">("impressions");
+  const [gscConnected, setGscConnected] = useState(false);
+  const [gscProperty, setGscProperty] = useState<string | null>(null);
+  const [isSyncingGsc, setIsSyncingGsc] = useState(false);
 
   const [activityStream, setActivityStream] = useState<ActivityEvent[]>(() => {
     if (typeof window !== "undefined") {
@@ -99,6 +102,25 @@ export default function DashboardPage() {
     }
     return [];
   });
+
+  const handleManualGscSync = async () => {
+    if (!currentWebsite?.id || isSyncingGsc) return;
+    setIsSyncingGsc(true);
+    try {
+      const res = await fetch('/api/integrations/gsc/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ website_id: currentWebsite.id }),
+      });
+      if (res.ok) {
+        await fetchDashboardStats();
+      }
+    } catch (e) {
+      console.error('Failed to sync GSC data:', e);
+    } finally {
+      setIsSyncingGsc(false);
+    }
+  };
 
   const fetchDashboardStats = async () => {
     if (!currentWebsite) {
@@ -129,6 +151,8 @@ export default function DashboardPage() {
         setStats(data.stats);
         setRecentApprovals(data.recent_approvals || []);
         setChartData(data.chart_data || []);
+        setGscConnected(!!data.gsc_connected);
+        setGscProperty(data.gsc_property || null);
 
         if (data.recent_activity && data.recent_activity.length > 0) {
           setActivityStream(data.recent_activity);
@@ -425,16 +449,40 @@ export default function DashboardPage() {
                       </div>
                     ) : (
                       <div className="flex h-60 flex-col items-center justify-center px-6 text-center">
-                        <p className="text-sm font-medium text-neutral-900">No Search Console data yet</p>
-                        <p className="mt-1 max-w-sm text-sm text-neutral-500">
-                          Connect Google Search Console to see queries, impressions, clicks and average position for this site.
-                        </p>
-                        <Link
-                          href="/integrations"
-                          className="mt-4 inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
-                        >
-                          Connect Search Console
-                        </Link>
+                        {gscConnected ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-2 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-xs font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              <span>Connected to {gscProperty || 'Google Search Console'}</span>
+                            </div>
+                            <p className="text-sm font-semibold text-neutral-900">Search Console Connected & Syncing</p>
+                            <p className="mt-1 max-w-sm text-xs text-neutral-500 leading-relaxed">
+                              Performance monitoring is active. If your site has recent Google search traffic, click below to pull the latest 28-day impressions and clicks.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleManualGscSync}
+                              disabled={isSyncingGsc}
+                              className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 text-xs font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                            >
+                              {isSyncingGsc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                              <span>{isSyncingGsc ? "Syncing Search Console..." : "Sync Search Performance Now"}</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm font-medium text-neutral-900">No Search Console data yet</p>
+                            <p className="mt-1 max-w-sm text-sm text-neutral-500">
+                              Connect Google Search Console to see queries, impressions, clicks and average position for this site.
+                            </p>
+                            <Link
+                              href="/integrations"
+                              className="mt-4 inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
+                            >
+                              Connect Search Console
+                            </Link>
+                          </>
+                        )}
                       </div>
                     )}
                   </section>
