@@ -2,7 +2,7 @@
 
 import { Sidebar } from "@/components/Sidebar";
 import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X, RefreshCw } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
@@ -86,6 +86,8 @@ export default function DashboardPage() {
   const [runState, setRunState] = useState("");
   const [selectedApproval, setSelectedApproval] = useState<any | null>(null);
   const [activeChartTab, setActiveChartTab] = useState<"impressions" | "clicks">("impressions");
+  const [chartInterval, setChartInterval] = useState<"daily" | "weekly">("daily");
+  const [chartTimeRange, setChartTimeRange] = useState<"28d" | "3m" | "6m" | "16m">("28d");
   const [gscConnected, setGscConnected] = useState(false);
   const [gscProperty, setGscProperty] = useState<string | null>(null);
   const [isSyncingGsc, setIsSyncingGsc] = useState(false);
@@ -290,6 +292,84 @@ export default function DashboardPage() {
   const openItems = (stats.technical_issues || 0) + recentApprovals.length;
   const chartKey = activeChartTab === "impressions" ? "impressions" : "traffic";
 
+  // Process and aggregate chart data according to selected timeRange and interval
+  const processedChartData = useMemo(() => {
+    if (!chartData || chartData.length === 0) return [];
+
+    // Sort ascending by raw date (YYYY-MM-DD)
+    const sorted = [...chartData].sort((a, b) => (a.date > b.date ? 1 : -1));
+
+    // Calculate cutoff date based on timeRange
+    let daysCutoff = 28;
+    if (chartTimeRange === '28d') daysCutoff = 28;
+    else if (chartTimeRange === '3m') daysCutoff = 90;
+    else if (chartTimeRange === '6m') daysCutoff = 180;
+    else if (chartTimeRange === '16m') daysCutoff = 480;
+
+    const now = new Date();
+    const cutoffDateObj = new Date(now.getTime() - (daysCutoff + 3) * 86400000);
+    const cutoffStr = cutoffDateObj.toISOString().split('T')[0];
+
+    const filtered = sorted.filter((item) => item.date >= cutoffStr);
+    const dataToUse = filtered.length > 0 ? filtered : sorted.slice(-daysCutoff);
+
+    if (chartInterval === 'daily') {
+      return dataToUse.map((item) => {
+        const parts = (item.date || '').split('-');
+        let formatted = item.date;
+        if (parts.length === 3) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) {
+            formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }
+        }
+        return {
+          ...item,
+          displayDate: formatted,
+        };
+      });
+    }
+
+    // Weekly grouping: group dates by week start (Sunday or Monday)
+    const weeklyMap: Record<string, { date: string; displayDate: string; impressions: number; clicks: number; traffic: number }> = {};
+
+    dataToUse.forEach((item) => {
+      const parts = (item.date || '').split('-');
+      if (parts.length !== 3) return;
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      if (isNaN(d.getTime())) return;
+
+      const dayOfWeek = d.getDay(); // 0 is Sunday
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - dayOfWeek);
+      const weekKey = weekStart.toISOString().split('T')[0];
+      const weekLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+      if (!weeklyMap[weekKey]) {
+        weeklyMap[weekKey] = {
+          date: weekKey,
+          displayDate: `Week of ${weekLabel}`,
+          impressions: 0,
+          clicks: 0,
+          traffic: 0,
+        };
+      }
+
+      weeklyMap[weekKey].impressions += (item.impressions || 0);
+      weeklyMap[weekKey].clicks += (item.clicks ?? item.traffic ?? 0);
+      weeklyMap[weekKey].traffic += (item.traffic ?? item.clicks ?? 0);
+    });
+
+    return Object.values(weeklyMap).sort((a, b) => (a.date > b.date ? 1 : -1));
+  }, [chartData, chartTimeRange, chartInterval]);
+
+  const viewTotals = useMemo(() => {
+    const totalImp = processedChartData.reduce((acc, r) => acc + (r.impressions || 0), 0);
+    const totalClk = processedChartData.reduce((acc, r) => acc + (r.clicks ?? r.traffic ?? 0), 0);
+    const avgCtr = totalImp > 0 ? ((totalClk / totalImp) * 100).toFixed(1) + '%' : '0.0%';
+    return { totalImp, totalClk, avgCtr };
+  }, [processedChartData]);
+
   const statCells: { label: string; value: string; caption: string }[] = [
     {
       label: "Health score",
@@ -390,32 +470,93 @@ export default function DashboardPage() {
                 <div className="space-y-6 lg:col-span-2">
                   {/* Performance chart */}
                   <section className="rounded-xl border border-neutral-200 bg-white">
-                    <div className="flex flex-col gap-3 border-b border-neutral-200 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3.5 border-b border-neutral-200 px-5 py-3.5 xl:flex-row xl:items-center xl:justify-between">
                       <div>
-                        <h2 className="text-sm font-semibold text-neutral-900">Search performance</h2>
-                        <p className="text-xs text-neutral-500">From Google Search Console, last 30 days</p>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-sm font-semibold text-neutral-900">Search performance</h2>
+                          {gscConnected && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              GSC Connected
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-neutral-500">
+                          Google Search Console · {chartTimeRange === '28d' ? 'Last 28 days' : chartTimeRange === '3m' ? 'Last 3 months' : chartTimeRange === '6m' ? 'Last 6 months' : 'Full history (16 months)'} ({chartInterval === 'daily' ? 'Daily' : 'Weekly aggregation'})
+                          {" · "}
+                          <span className="font-medium text-neutral-700">
+                            {viewTotals.totalImp.toLocaleString()} impressions · {viewTotals.totalClk.toLocaleString()} clicks
+                          </span>
+                        </p>
                       </div>
-                      <div role="tablist" aria-label="Metric" className="inline-flex rounded-lg bg-neutral-100 p-0.5">
-                        {(["impressions", "clicks"] as const).map((tab) => (
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* 1. Interval toggle: Daily vs Weekly */}
+                        <div role="group" aria-label="Frequency" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
                           <button
-                            key={tab}
-                            role="tab"
-                            aria-selected={activeChartTab === tab}
-                            onClick={() => setActiveChartTab(tab)}
-                            className={`h-7 rounded-md px-3 text-xs font-medium capitalize transition-colors ${
-                              activeChartTab === tab ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"
+                            type="button"
+                            onClick={() => setChartInterval('daily')}
+                            className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                              chartInterval === 'daily' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
                             }`}
                           >
-                            {tab}
+                            Daily
                           </button>
-                        ))}
+                          <button
+                            type="button"
+                            onClick={() => setChartInterval('weekly')}
+                            className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                              chartInterval === 'weekly' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
+                            }`}
+                          >
+                            Weekly
+                          </button>
+                        </div>
+
+                        {/* 2. Date Range selector: 28 Days, 3 Months, 6 Months, 16 Months */}
+                        <div role="group" aria-label="Date Range" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
+                          {[
+                            { id: '28d', label: '28 Days' },
+                            { id: '3m', label: '3 Months' },
+                            { id: '6m', label: '6 Months' },
+                            { id: '16m', label: '16 Months' },
+                          ].map((range) => (
+                            <button
+                              key={range.id}
+                              type="button"
+                              onClick={() => setChartTimeRange(range.id as any)}
+                              className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
+                                chartTimeRange === range.id ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
+                              }`}
+                            >
+                              {range.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* 3. Metric Tab: Impressions vs Clicks */}
+                        <div role="tablist" aria-label="Metric" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
+                          {(["impressions", "clicks"] as const).map((tab) => (
+                            <button
+                              key={tab}
+                              role="tab"
+                              aria-selected={activeChartTab === tab}
+                              onClick={() => setActiveChartTab(tab)}
+                              className={`h-7 rounded-md px-3 text-xs font-medium capitalize transition-colors ${
+                                activeChartTab === tab ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"
+                              }`}
+                            >
+                              {tab}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    {chartData.length > 0 ? (
+                    {processedChartData.length > 0 ? (
                       <div className="h-72 w-full px-2 pb-3 pt-4">
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chartData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+                          <AreaChart data={processedChartData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
                             <defs>
                               <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#2f4db5" stopOpacity={0.14} />
@@ -423,7 +564,7 @@ export default function DashboardPage() {
                               </linearGradient>
                             </defs>
                             <CartesianGrid vertical={false} stroke="#f0f0f0" />
-                            <XAxis dataKey="date" stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} />
+                            <XAxis dataKey="displayDate" stroke="#a1a1aa" fontSize={11} tickLine={false} axisLine={false} tickMargin={8} minTickGap={20} />
                             <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickMargin={4} />
                             <Tooltip
                               cursor={{ stroke: "#d4d4d8", strokeDasharray: "3 3" }}
@@ -434,6 +575,7 @@ export default function DashboardPage() {
                                 fontSize: "12px",
                                 boxShadow: "0 4px 12px rgba(16,24,40,0.08)",
                               }}
+                              formatter={(value: any) => [Number(value).toLocaleString(), activeChartTab === "impressions" ? "Impressions" : "Clicks"]}
                             />
                             <Area
                               type="monotone"

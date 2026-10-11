@@ -68,13 +68,14 @@ export async function GET(request: Request) {
         .select('*', { count: 'exact', head: true })
         .eq('website_id', websiteId),
 
-      // 6. Search Console Performance Data (if any)
+      // 6. Search Console Performance Data (fetch daily totals, up to 500 days)
       supabase
         .from('search_console_data')
         .select('date, clicks, impressions')
         .eq('website_id', websiteId)
+        .is('query', null)
         .order('date', { ascending: true })
-        .limit(30),
+        .limit(500),
 
       // 7. Recent Content Drafts
       supabase
@@ -113,8 +114,9 @@ export async function GET(request: Request) {
           .from('search_console_data')
           .select('date, clicks, impressions')
           .eq('website_id', websiteId)
+          .is('query', null)
           .order('date', { ascending: true })
-          .limit(30);
+          .limit(500);
         if (refreshedRows && refreshedRows.length > 0) {
           finalGscRows = refreshedRows;
         }
@@ -126,6 +128,7 @@ export async function GET(request: Request) {
     const chartData = finalGscRows.map((r: any) => ({
       date: r.date,
       traffic: r.clicks || 0,
+      clicks: r.clicks || 0,
       impressions: r.impressions || 0,
     }));
 

@@ -11,7 +11,7 @@ export interface GSCSyncResult {
   error?: string;
 }
 
-export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncResult> {
+export async function syncSearchConsoleData(websiteId: string, daysBack: number = 480): Promise<GSCSyncResult> {
   const supabase = createAdminClient();
 
   // 1. Fetch connected GSC integration
@@ -136,10 +136,12 @@ export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncR
     return { ok: true, status: res.status, data };
   }
 
-  // 3. Define 28-day window (Search Console data lag is typically 2-3 days)
+  // 3. Define historical window (Search Console data lag is typically 2-3 days)
+  // Pull up to 480 days (16 months - Google's max retention) to support 28d, 3m, 6m, 16m views
+  const days = Math.max(28, Math.min(daysBack, 480));
   const now = new Date();
   const endDateObj = new Date(now.getTime() - 2 * 86400000); // 2 days ago
-  const startDateObj = new Date(endDateObj.getTime() - 28 * 86400000); // 28 days back
+  const startDateObj = new Date(endDateObj.getTime() - days * 86400000);
 
   const endDate = endDateObj.toISOString().split('T')[0];
   const startDate = startDateObj.toISOString().split('T')[0];
@@ -149,7 +151,7 @@ export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncR
     startDate,
     endDate,
     dimensions: ['date'],
-    rowLimit: 30,
+    rowLimit: 1000,
   });
 
   let totalImpressions = 0;
@@ -168,6 +170,7 @@ export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncR
         rowsToUpsert.push({
           website_id: websiteId,
           date: d,
+          query: null,
           clicks,
           impressions,
           ctr: row.ctr || 0,
@@ -185,6 +188,7 @@ export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncR
       rowsToUpsert.push({
         website_id: websiteId,
         date: d,
+        query: null,
         clicks: 0,
         impressions: 0,
         ctr: 0,
@@ -199,7 +203,7 @@ export async function syncSearchConsoleData(websiteId: string): Promise<GSCSyncR
     startDate,
     endDate,
     dimensions: ['query'],
-    rowLimit: 50,
+    rowLimit: 100,
   });
 
   if (queryResult.ok && queryResult.data?.rows?.length > 0) {
