@@ -302,36 +302,41 @@ export default function IntegrationsPage() {
     window.location.href = authUrl;
   };
 
-  // 1. Fetch live database integrations & check URL query params on mount
-  useEffect(() => {
-    async function loadIntegrations() {
-      try {
-        const res = await fetch("/api/integrations");
-        if (res.ok) {
-          const data = await res.json();
-          const dbIntegrations: any[] = data.integrations || [];
+  // 1. Fetch live database integrations
+  const loadIntegrations = async () => {
+    try {
+      const siteParam = currentWebsite?.id ? `?website_id=${encodeURIComponent(currentWebsite.id)}` : '';
+      const res = await fetch(`/api/integrations${siteParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        const dbIntegrations: any[] = data.integrations || [];
 
-          setIntegrations(prev => prev.map(item => {
-            const match = dbIntegrations.find(d => d.provider === item.provider);
-            if (match) {
-              return {
-                ...item,
-                id: match.id || item.id,
-                status: match.status || "disconnected",
-                status_message: match.status_message || (match.status === "connected" ? "Connected and active" : "Not connected"),
-                capabilities: match.capabilities || item.capabilities,
-                config: match.config || {},
-                last_tested: match.last_tested_at ? new Date(match.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
-              };
-            }
-            return item;
-          }));
-        }
-      } catch (err) {
-        console.error("Failed to load integrations:", err);
+        setIntegrations(prev => prev.map(item => {
+          const match = dbIntegrations.find(d => d.provider === item.provider);
+          if (match) {
+            return {
+              ...item,
+              id: match.id || item.id,
+              status: match.status || "disconnected",
+              status_message: match.status_message || (match.status === "connected" ? "Connected and active" : "Not connected"),
+              capabilities: match.capabilities || item.capabilities,
+              config: match.config || {},
+              last_tested: match.last_tested_at ? new Date(match.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
+            };
+          }
+          return item;
+        }));
       }
+    } catch (err) {
+      console.error("Failed to load integrations:", err);
     }
+  };
+
+  useEffect(() => {
     loadIntegrations();
+  }, [currentWebsite?.id]);
+
+  useEffect(() => {
 
     // Check query params for OAuth callbacks
     if (typeof window !== "undefined") {

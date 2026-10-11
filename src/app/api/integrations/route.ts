@@ -13,10 +13,22 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const website_id = searchParams.get('website_id');
+    let website_id = searchParams.get('website_id');
 
     if (!website_id) {
-      return NextResponse.json({ error: 'website_id is required.' }, { status: 400 });
+      const { data: userWeb } = await supabaseUserClient
+        .from('websites')
+        .select('id')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (userWeb?.id) {
+        website_id = userWeb.id;
+      }
+    }
+
+    if (!website_id) {
+      return NextResponse.json({ integrations: [] });
     }
 
     const supabase = createAdminClient();
