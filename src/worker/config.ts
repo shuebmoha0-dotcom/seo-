@@ -1,9 +1,9 @@
-﻿/**
+/**
  * Render Background Worker Configuration & Environment Loader
  */
 
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Automatically load local .env files if running outside Next.js / in local dev
 function loadLocalEnv() {

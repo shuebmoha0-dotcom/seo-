@@ -1,4 +1,4 @@
-import http from 'http';
+import * as http from 'http';
 import { WORKER_CONFIG } from './config';
 import { WorkerLogger } from './logger';
 import { QueueManager, TaskExecutionJob } from './queueManager';
@@ -35,52 +35,70 @@ export class RenderWorker {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    WorkerLogger.info(`[WORKER_START] Starting Render Worker [${this.workerId}]`, {
-      concurrency: WORKER_CONFIG.CONCURRENCY,
-      pollIntervalMs: WORKER_CONFIG.POLL_INTERVAL_MS,
-      leaseDurationSec: WORKER_CONFIG.LEASE_DURATION_SECONDS,
-      nodeVersion: process.version,
-    });
-
-    // 1. Initial scheduler check
-    await this.schedulerEngine.checkAndEnqueueDueTasks();
-
-    // 2. Start Polling Loop for Queue
-    this.scheduleNextPoll(100);
-
-    // 3. Start Recurring Scheduler Loop
-    this.schedulerTimer = setInterval(async () => {
-      if (this.isShuttingDown) return;
-      await this.schedulerEngine.checkAndEnqueueDueTasks();
-    }, WORKER_CONFIG.SCHEDULER_INTERVAL_MS);
-
-    // 4. Start Heartbeat Renewal Loop for Active Jobs
-    this.heartbeatTimer = setInterval(async () => {
-      await this.renewActiveHeartbeats();
-    }, WORKER_CONFIG.HEARTBEAT_INTERVAL_MS);
-
-    // 5. Start lightweight HTTP health server (enables running on Render Free Web Service tier)
+    // 1. Start lightweight HTTP health server IMMEDIATELY (critical for Render Web Service health check)
     const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 10000;
     try {
       this.httpServer = http.createServer((req, res) => {
-        if (req.url === '/health' || req.url === '/' || req.url === '/status') {
+        const url = req.url?.split('?')[0];
+        if (url === '/health' || url === '/' || url === '/status') {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ status: 'ok', worker: this.getHealthStatus() }, null, 2));
         } else {
-          res.writeHead(404);
-          res.end();
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('Not Found');
         }
       });
 
-      this.httpServer.listen(port, () => {
-        WorkerLogger.info(`Worker Health Check HTTP server listening on port ${port}`);
+      this.httpServer.on('error', (err: any) => {
+        WorkerLogger.error(`HTTP server encountered an error on port ${port}`, err);
+      });
+
+      this.httpServer.listen(port, '0.0.0.0', () => {
+        WorkerLogger.info(`Worker Health Check HTTP server listening on 0.0.0.0:${port}`);
       });
     } catch (httpErr: any) {
       WorkerLogger.warn('Could not start HTTP health server', { error: httpErr.message });
     }
 
-    // 6. Register Process Signal Handlers
+    // 2. Register Process Signal Handlers
     this.setupSignalHandlers();
+
+    WorkerLogger.info(`[WORKER_START] Starting Render Worker [${this.workerId}]`, {
+      concurrency: WORKER_CONFIG.CONCURRENCY,
+      pollIntervalMs: WORKER_CONFIG.POLL_INTERVAL_MS,
+      leaseDurationSec: WORKER_CONFIG.LEASE_DURATION_SECONDS,
+      nodeVersion: process.version,
+      port,
+    });
+
+    // 3. Initial scheduler check wrapped in try/catch
+    try {
+      await this.schedulerEngine.checkAndEnqueueDueTasks();
+    } catch (schedErr: any) {
+      WorkerLogger.error('Initial scheduler check encountered an error, continuing loop', schedErr);
+    }
+
+    // 4. Start Polling Loop for Queue
+    this.scheduleNextPoll(100);
+
+    // 5. Start Recurring Scheduler Loop
+    this.schedulerTimer = setInterval(async () => {
+      if (this.isShuttingDown) return;
+      try {
+        await this.schedulerEngine.checkAndEnqueueDueTasks();
+      } catch (err: any) {
+        WorkerLogger.error('Recurring scheduler error', err);
+      }
+    }, WORKER_CONFIG.SCHEDULER_INTERVAL_MS);
+
+    // 6. Start Heartbeat Renewal Loop for Active Jobs
+    this.heartbeatTimer = setInterval(async () => {
+      try {
+        await this.renewActiveHeartbeats();
+      } catch (hbErr: any) {
+        WorkerLogger.error('Heartbeat renewal error', hbErr);
+      }
+    }, WORKER_CONFIG.HEARTBEAT_INTERVAL_MS);
   }
 
   /**
@@ -149,10 +167,15 @@ export class RenderWorker {
       activeJobs: this.activeJobs.size,
     });
 
-    // Clear timers
+    // Clear timers and close health check server
     if (this.pollTimer) clearTimeout(this.pollTimer);
     if (this.schedulerTimer) clearInterval(this.schedulerTimer);
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.httpServer) {
+      try {
+        this.httpServer.close();
+      } catch {}
+    }
 
     // Wait for in-flight active jobs to complete (up to timeout)
     if (this.activeJobs.size > 0) {
