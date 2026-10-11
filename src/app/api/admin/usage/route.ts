@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
       {
         p_start_date: startDate,
         p_limit: limit,
+        p_admin_user_id: user.id,
       }
     );
 
@@ -99,6 +100,7 @@ export async function GET(req: NextRequest) {
         {
           p_start_date: null,
           p_limit: limit,
+          p_admin_user_id: user.id,
         }
       );
       if (Array.isArray(fallbackEvents) && fallbackEvents.length > 0) {
