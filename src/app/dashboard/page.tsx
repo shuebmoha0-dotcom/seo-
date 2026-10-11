@@ -1,11 +1,11 @@
 "use client";
 
 import { Sidebar } from "@/components/Sidebar";
-import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X, RefreshCw } from "lucide-react";
+import { Play, FileText, Globe, Key, Activity, Plus, Loader2, Check, ArrowUpRight, X, RefreshCw, HelpCircle, ChevronDown, Download, RotateCcw } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 import { useWebsite } from "@/lib/context/WebsiteContext";
 import { DashboardHeader } from "@/components/DashboardHeader";
@@ -85,11 +85,25 @@ export default function DashboardPage() {
   const [isAgentRunning, setIsAgentRunning] = useState(false);
   const [runState, setRunState] = useState("");
   const [selectedApproval, setSelectedApproval] = useState<any | null>(null);
-  const [activeChartTab, setActiveChartTab] = useState<"impressions" | "clicks">("impressions");
+  const [selectedMetrics, setSelectedMetrics] = useState<{
+    clicks: boolean;
+    impressions: boolean;
+    ctr: boolean;
+    position: boolean;
+  }>({
+    clicks: false,
+    impressions: true, // Selected by default (purple card), exactly like user's GSC screenshot
+    ctr: false,
+    position: false,
+  });
+
   const [chartInterval, setChartInterval] = useState<"daily" | "weekly">("daily");
-  const [chartTimeRange, setChartTimeRange] = useState<"28d" | "3m" | "6m" | "16m">("28d");
+  const [chartTimeRange, setChartTimeRange] = useState<"24h" | "7d" | "28d" | "3m" | "6m" | "16m">("28d");
+  const [moreRangesOpen, setMoreRangesOpen] = useState(false);
+  const [intervalDropdownOpen, setIntervalDropdownOpen] = useState(false);
   const [gscConnected, setGscConnected] = useState(false);
   const [gscProperty, setGscProperty] = useState<string | null>(null);
+  const [gscLastSynced, setGscLastSynced] = useState<string | null>(null);
   const [isSyncingGsc, setIsSyncingGsc] = useState(false);
 
   const [activityStream, setActivityStream] = useState<ActivityEvent[]>(() => {
@@ -155,6 +169,7 @@ export default function DashboardPage() {
         setChartData(data.chart_data || []);
         setGscConnected(!!data.gsc_connected);
         setGscProperty(data.gsc_property || null);
+        setGscLastSynced(data.gsc_last_synced || null);
 
         if (data.recent_activity && data.recent_activity.length > 0) {
           setActivityStream(data.recent_activity);
@@ -290,31 +305,72 @@ export default function DashboardPage() {
   // not available yet, show a dash instead of inventing a number.
   const healthScoreDisplay: number | null = stats.health_score ?? null;
   const openItems = (stats.technical_issues || 0) + recentApprovals.length;
-  const chartKey = activeChartTab === "impressions" ? "impressions" : "traffic";
+  const toggleMetric = (key: 'clicks' | 'impressions' | 'ctr' | 'position') => {
+    setSelectedMetrics((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      // Keep at least one metric selected
+      if (!next.clicks && !next.impressions && !next.ctr && !next.position) {
+        return prev;
+      }
+      return next;
+    });
+  };
+
+  const formatTimeAgo = (dateStr: string | null) => {
+    if (!dateStr) return "recently";
+    const diff = Date.now() - new Date(dateStr).getTime();
+    if (diff <= 0) return "just now";
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 1) {
+      const mins = Math.max(1, Math.floor(diff / (1000 * 60)));
+      return `${mins}m ago`;
+    }
+    if (hours < 24) return `${hours} hours ago`;
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return `${days}d ${remHours}h ago`;
+  };
 
   // Process and aggregate chart data according to selected timeRange and interval
-  const processedChartData = useMemo(() => {
-    if (!chartData || chartData.length === 0) return [];
+  const { processedChartData, cardTotals } = useMemo(() => {
+    if (!chartData || chartData.length === 0) {
+      return {
+        processedChartData: [],
+        cardTotals: { totalClicks: 0, totalImpressions: 0, avgCtr: "0.0%", avgPos: "0.0" },
+      };
+    }
 
     // Sort ascending by raw date (YYYY-MM-DD)
     const sorted = [...chartData].sort((a, b) => (a.date > b.date ? 1 : -1));
 
     // Calculate cutoff date based on timeRange
     let daysCutoff = 28;
-    if (chartTimeRange === '28d') daysCutoff = 28;
+    if (chartTimeRange === '24h') daysCutoff = 1;
+    else if (chartTimeRange === '7d') daysCutoff = 7;
+    else if (chartTimeRange === '28d') daysCutoff = 28;
     else if (chartTimeRange === '3m') daysCutoff = 90;
     else if (chartTimeRange === '6m') daysCutoff = 180;
     else if (chartTimeRange === '16m') daysCutoff = 480;
 
     const now = new Date();
-    const cutoffDateObj = new Date(now.getTime() - (daysCutoff + 3) * 86400000);
+    const cutoffDateObj = new Date(now.getTime() - (daysCutoff + 2) * 86400000);
     const cutoffStr = cutoffDateObj.toISOString().split('T')[0];
 
     const filtered = sorted.filter((item) => item.date >= cutoffStr);
     const dataToUse = filtered.length > 0 ? filtered : sorted.slice(-daysCutoff);
 
+    // Empirical metrics matching Google Search Console calculation formulas
+    const totalClicks = dataToUse.reduce((acc, r) => acc + (r.clicks || r.traffic || 0), 0);
+    const totalImpressions = dataToUse.reduce((acc, r) => acc + (r.impressions || 0), 0);
+    const avgCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) + '%' : '0.0%';
+    const avgPos = totalImpressions > 0
+      ? (dataToUse.reduce((acc, r) => acc + (r.position || 0) * (r.impressions || 0), 0) / totalImpressions).toFixed(1)
+      : (dataToUse.length > 0 ? (dataToUse.reduce((acc, r) => acc + (r.position || 0), 0) / dataToUse.length).toFixed(1) : '0.0');
+
+    let processed: any[] = [];
+
     if (chartInterval === 'daily') {
-      return dataToUse.map((item) => {
+      processed = dataToUse.map((item) => {
         const parts = (item.date || '').split('-');
         let formatted = item.date;
         if (parts.length === 3) {
@@ -325,50 +381,78 @@ export default function DashboardPage() {
         }
         return {
           ...item,
+          clicks: item.clicks ?? item.traffic ?? 0,
+          impressions: item.impressions ?? 0,
+          ctr: item.ctr ?? (item.impressions > 0 ? Number(((item.clicks / item.impressions) * 100).toFixed(2)) : 0),
+          position: item.position ?? 0,
           displayDate: formatted,
         };
       });
+    } else {
+      // Weekly grouping
+      const weeklyMap: Record<string, any> = {};
+
+      dataToUse.forEach((item) => {
+        const parts = (item.date || '').split('-');
+        if (parts.length !== 3) return;
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        if (!isNaN(d.getTime())) {
+          const dayOfWeek = d.getDay(); // 0 is Sunday
+          const weekStart = new Date(d);
+          weekStart.setDate(d.getDate() - dayOfWeek);
+          const weekKey = weekStart.toISOString().split('T')[0];
+          const weekLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          if (!weeklyMap[weekKey]) {
+            weeklyMap[weekKey] = {
+              date: weekKey,
+              displayDate: `${weekLabel}`,
+              impressions: 0,
+              clicks: 0,
+              traffic: 0,
+              weightedPos: 0,
+            };
+          }
+
+          const clk = item.clicks ?? item.traffic ?? 0;
+          const imp = item.impressions ?? 0;
+          const pos = item.position ?? 0;
+
+          weeklyMap[weekKey].impressions += imp;
+          weeklyMap[weekKey].clicks += clk;
+          weeklyMap[weekKey].traffic += clk;
+          weeklyMap[weekKey].weightedPos += pos * imp;
+        }
+      });
+
+      processed = Object.values(weeklyMap).map((w: any) => ({
+        ...w,
+        ctr: w.impressions > 0 ? Number(((w.clicks / w.impressions) * 100).toFixed(2)) : 0,
+        position: w.impressions > 0 ? Number((w.weightedPos / w.impressions).toFixed(1)) : 0,
+      })).sort((a, b) => (a.date > b.date ? 1 : -1));
     }
 
-    // Weekly grouping: group dates by week start (Sunday or Monday)
-    const weeklyMap: Record<string, { date: string; displayDate: string; impressions: number; clicks: number; traffic: number }> = {};
-
-    dataToUse.forEach((item) => {
-      const parts = (item.date || '').split('-');
-      if (parts.length !== 3) return;
-      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-      if (isNaN(d.getTime())) return;
-
-      const dayOfWeek = d.getDay(); // 0 is Sunday
-      const weekStart = new Date(d);
-      weekStart.setDate(d.getDate() - dayOfWeek);
-      const weekKey = weekStart.toISOString().split('T')[0];
-      const weekLabel = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-      if (!weeklyMap[weekKey]) {
-        weeklyMap[weekKey] = {
-          date: weekKey,
-          displayDate: `Week of ${weekLabel}`,
-          impressions: 0,
-          clicks: 0,
-          traffic: 0,
-        };
-      }
-
-      weeklyMap[weekKey].impressions += (item.impressions || 0);
-      weeklyMap[weekKey].clicks += (item.clicks ?? item.traffic ?? 0);
-      weeklyMap[weekKey].traffic += (item.traffic ?? item.clicks ?? 0);
-    });
-
-    return Object.values(weeklyMap).sort((a, b) => (a.date > b.date ? 1 : -1));
+    return {
+      processedChartData: processed,
+      cardTotals: { totalClicks, totalImpressions, avgCtr, avgPos },
+    };
   }, [chartData, chartTimeRange, chartInterval]);
 
-  const viewTotals = useMemo(() => {
-    const totalImp = processedChartData.reduce((acc, r) => acc + (r.impressions || 0), 0);
-    const totalClk = processedChartData.reduce((acc, r) => acc + (r.clicks ?? r.traffic ?? 0), 0);
-    const avgCtr = totalImp > 0 ? ((totalClk / totalImp) * 100).toFixed(1) + '%' : '0.0%';
-    return { totalImp, totalClk, avgCtr };
-  }, [processedChartData]);
+  const handleExportCsv = () => {
+    if (!processedChartData || processedChartData.length === 0) return;
+    const header = "Date,Clicks,Impressions,CTR(%),Position\n";
+    const rows = processedChartData
+      .map((r) => `${r.date},${r.clicks},${r.impressions},${r.ctr},${r.position}`)
+      .join("\n");
+    const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `gsc-performance-${currentWebsite?.domain || 'site'}-${chartTimeRange}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const statCells: { label: string; value: string; caption: string }[] = [
     {
@@ -468,126 +552,428 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
                 {/* LEFT COLUMN */}
                 <div className="space-y-6 lg:col-span-2">
-                  {/* Performance chart */}
-                  <section className="rounded-xl border border-neutral-200 bg-white">
-                    <div className="flex flex-col gap-3.5 border-b border-neutral-200 px-5 py-3.5 xl:flex-row xl:items-center xl:justify-between">
+                  {/* Google Search Console Performance Dashboard Section */}
+                  <section className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-2xs">
+                    {/* Header */}
+                    <div className="flex flex-col gap-3 border-b border-neutral-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h2 className="text-sm font-semibold text-neutral-900">Search performance</h2>
+                          <h2 className="text-base font-semibold text-neutral-900">Performance</h2>
                           {gscConnected && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              GSC Connected
+                              {gscProperty ? gscProperty.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Connected'}
                             </span>
                           )}
                         </div>
                         <p className="mt-0.5 text-xs text-neutral-500">
-                          Google Search Console · {chartTimeRange === '28d' ? 'Last 28 days' : chartTimeRange === '3m' ? 'Last 3 months' : chartTimeRange === '6m' ? 'Last 6 months' : 'Full history (16 months)'} ({chartInterval === 'daily' ? 'Daily' : 'Weekly aggregation'})
-                          {" · "}
-                          <span className="font-medium text-neutral-700">
-                            {viewTotals.totalImp.toLocaleString()} impressions · {viewTotals.totalClk.toLocaleString()} clicks
-                          </span>
+                          Search results performance from Google Search Console
                         </p>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* 1. Interval toggle: Daily vs Weekly */}
-                        <div role="group" aria-label="Frequency" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportCsv}
+                          disabled={processedChartData.length === 0}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-3 text-xs font-semibold uppercase tracking-wider text-neutral-700 shadow-2xs hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+                        >
+                          <Download className="h-3.5 w-3.5 text-neutral-500" />
+                          <span>Export</span>
+                        </button>
+                        {gscConnected && (
                           <button
                             type="button"
-                            onClick={() => setChartInterval('daily')}
-                            className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                              chartInterval === 'daily' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
-                            }`}
+                            onClick={handleManualGscSync}
+                            disabled={isSyncingGsc}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50 disabled:opacity-40 transition-colors"
+                            title="Sync latest performance from Google"
                           >
-                            Daily
+                            <RefreshCw className={`h-3.5 w-3.5 text-neutral-500 ${isSyncingGsc ? 'animate-spin text-[#1a73e8]' : ''}`} />
+                            <span className="hidden sm:inline">{isSyncingGsc ? "Syncing…" : "Sync"}</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setChartInterval('weekly')}
-                            className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                              chartInterval === 'weekly' ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
-                            }`}
-                          >
-                            Weekly
-                          </button>
-                        </div>
-
-                        {/* 2. Date Range selector: 28 Days, 3 Months, 6 Months, 16 Months */}
-                        <div role="group" aria-label="Date Range" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
-                          {[
-                            { id: '28d', label: '28 Days' },
-                            { id: '3m', label: '3 Months' },
-                            { id: '6m', label: '6 Months' },
-                            { id: '16m', label: '16 Months' },
-                          ].map((range) => (
-                            <button
-                              key={range.id}
-                              type="button"
-                              onClick={() => setChartTimeRange(range.id as any)}
-                              className={`h-7 rounded-md px-2.5 text-xs font-medium transition-colors ${
-                                chartTimeRange === range.id ? 'bg-white text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800'
-                              }`}
-                            >
-                              {range.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* 3. Metric Tab: Impressions vs Clicks */}
-                        <div role="tablist" aria-label="Metric" className="inline-flex rounded-lg bg-neutral-100 p-0.5 text-xs">
-                          {(["impressions", "clicks"] as const).map((tab) => (
-                            <button
-                              key={tab}
-                              role="tab"
-                              aria-selected={activeChartTab === tab}
-                              onClick={() => setActiveChartTab(tab)}
-                              className={`h-7 rounded-md px-3 text-xs font-medium capitalize transition-colors ${
-                                activeChartTab === tab ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"
-                              }`}
-                            >
-                              {tab}
-                            </button>
-                          ))}
-                        </div>
+                        )}
                       </div>
                     </div>
 
+                    {/* Filter Bar (Matching GSC UI) */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50/70 px-5 py-2.5 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Segmented Time Range Pills */}
+                        <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
+                          {[
+                            { id: '24h', label: '24 hours' },
+                            { id: '7d', label: '7 days' },
+                            { id: '28d', label: '28 days' },
+                            { id: '3m', label: '3 months' },
+                          ].map((r, i) => (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => setChartTimeRange(r.id as any)}
+                              className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
+                                i > 0 ? 'border-l border-neutral-300' : ''
+                              } ${
+                                chartTimeRange === r.id
+                                  ? 'bg-[#e8f0fe] text-[#1967d2] font-semibold'
+                                  : 'text-neutral-700 hover:bg-neutral-50'
+                              }`}
+                            >
+                              {chartTimeRange === r.id && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
+                              <span>{r.label}</span>
+                            </button>
+                          ))}
+
+                          {/* More dropdown */}
+                          <div className="relative border-l border-neutral-300">
+                            <button
+                              type="button"
+                              onClick={() => setMoreRangesOpen(!moreRangesOpen)}
+                              className={`flex items-center gap-1 px-3 py-1.5 font-medium transition-colors ${
+                                ['6m', '16m'].includes(chartTimeRange)
+                                  ? 'bg-[#e8f0fe] text-[#1967d2] font-semibold'
+                                  : 'text-neutral-700 hover:bg-neutral-50'
+                              }`}
+                            >
+                              <span>{chartTimeRange === '6m' ? '6 months' : chartTimeRange === '16m' ? '16 months' : 'More'}</span>
+                              <ChevronDown className="h-3 w-3 text-neutral-500" />
+                            </button>
+                            {moreRangesOpen && (
+                              <div className="absolute left-0 mt-1 w-36 rounded-md border border-neutral-200 bg-white py-1 shadow-lg z-20">
+                                <button
+                                  type="button"
+                                  onClick={() => { setChartTimeRange('6m'); setMoreRangesOpen(false); }}
+                                  className={`w-full px-3 py-1.5 text-left text-xs ${chartTimeRange === '6m' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`}
+                                >
+                                  6 months
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setChartTimeRange('16m'); setMoreRangesOpen(false); }}
+                                  className={`w-full px-3 py-1.5 text-left text-xs ${chartTimeRange === '16m' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`}
+                                >
+                                  16 months
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Search type pill */}
+                        <div className="hidden sm:inline-flex items-center rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-neutral-700 shadow-2xs gap-1">
+                          <span>Search type: Web</span>
+                          <ChevronDown className="h-3 w-3 text-neutral-400" />
+                        </div>
+
+                        {/* Reset filters */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setChartTimeRange('28d');
+                            setChartInterval('daily');
+                            setSelectedMetrics({ clicks: false, impressions: true, ctr: false, position: false });
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-neutral-600 hover:text-neutral-900 transition-colors"
+                          title="Reset to default (28 days, daily, impressions)"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          <span className="hidden md:inline">Reset filters</span>
+                        </button>
+                      </div>
+
+                      {/* Last update */}
+                      <div className="text-[11px] text-neutral-500">
+                        Last update: {formatTimeAgo(gscLastSynced)}
+                      </div>
+                    </div>
+
+                    {/* Metric Cards Bar (4 Toggle Cards matching GSC) */}
+                    <div className="grid grid-cols-2 divide-x divide-neutral-200 border-b border-neutral-200 lg:grid-cols-4">
+                      {/* 1. Total clicks */}
+                      <button
+                        type="button"
+                        onClick={() => toggleMetric('clicks')}
+                        className={`p-4 text-left transition-all relative ${
+                          selectedMetrics.clicks
+                            ? 'bg-[#1a73e8] text-white shadow-inner'
+                            : 'bg-white hover:bg-neutral-50/80 text-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-xs font-medium">
+                          <div className={`h-3.5 w-3.5 rounded-xs border flex items-center justify-center transition-colors ${
+                            selectedMetrics.clicks ? 'border-white bg-white text-[#1a73e8]' : 'border-neutral-400 bg-white'
+                          }`}>
+                            {selectedMetrics.clicks && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                          <span className={selectedMetrics.clicks ? 'text-white' : 'text-neutral-600'}>Total clicks</span>
+                        </div>
+                        <div className={`mt-2 text-2xl font-semibold tracking-tight ${selectedMetrics.clicks ? 'text-white' : 'text-neutral-900'}`}>
+                          {cardTotals.totalClicks.toLocaleString()}
+                        </div>
+                        <HelpCircle className={`absolute bottom-3 right-3 h-3.5 w-3.5 ${selectedMetrics.clicks ? 'text-white/60' : 'text-neutral-300'}`} />
+                      </button>
+
+                      {/* 2. Total impressions */}
+                      <button
+                        type="button"
+                        onClick={() => toggleMetric('impressions')}
+                        className={`p-4 text-left transition-all relative ${
+                          selectedMetrics.impressions
+                            ? 'bg-[#5e35b1] text-white shadow-inner'
+                            : 'bg-white hover:bg-neutral-50/80 text-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-xs font-medium">
+                          <div className={`h-3.5 w-3.5 rounded-xs border flex items-center justify-center transition-colors ${
+                            selectedMetrics.impressions ? 'border-white bg-white text-[#5e35b1]' : 'border-neutral-400 bg-white'
+                          }`}>
+                            {selectedMetrics.impressions && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                          <span className={selectedMetrics.impressions ? 'text-white' : 'text-neutral-600'}>Total impressions</span>
+                        </div>
+                        <div className={`mt-2 text-2xl font-semibold tracking-tight ${selectedMetrics.impressions ? 'text-white' : 'text-neutral-900'}`}>
+                          {cardTotals.totalImpressions.toLocaleString()}
+                        </div>
+                        <HelpCircle className={`absolute bottom-3 right-3 h-3.5 w-3.5 ${selectedMetrics.impressions ? 'text-white/60' : 'text-neutral-300'}`} />
+                      </button>
+
+                      {/* 3. Average CTR */}
+                      <button
+                        type="button"
+                        onClick={() => toggleMetric('ctr')}
+                        className={`p-4 text-left transition-all relative ${
+                          selectedMetrics.ctr
+                            ? 'bg-[#00897b] text-white shadow-inner'
+                            : 'bg-white hover:bg-neutral-50/80 text-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-xs font-medium">
+                          <div className={`h-3.5 w-3.5 rounded-xs border flex items-center justify-center transition-colors ${
+                            selectedMetrics.ctr ? 'border-white bg-white text-[#00897b]' : 'border-neutral-400 bg-white'
+                          }`}>
+                            {selectedMetrics.ctr && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                          <span className={selectedMetrics.ctr ? 'text-white' : 'text-neutral-600'}>Average CTR</span>
+                        </div>
+                        <div className={`mt-2 text-2xl font-semibold tracking-tight ${selectedMetrics.ctr ? 'text-white' : 'text-neutral-900'}`}>
+                          {cardTotals.avgCtr}
+                        </div>
+                        <HelpCircle className={`absolute bottom-3 right-3 h-3.5 w-3.5 ${selectedMetrics.ctr ? 'text-white/60' : 'text-neutral-300'}`} />
+                      </button>
+
+                      {/* 4. Average position */}
+                      <button
+                        type="button"
+                        onClick={() => toggleMetric('position')}
+                        className={`p-4 text-left transition-all relative ${
+                          selectedMetrics.position
+                            ? 'bg-[#e8710a] text-white shadow-inner'
+                            : 'bg-white hover:bg-neutral-50/80 text-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-xs font-medium">
+                          <div className={`h-3.5 w-3.5 rounded-xs border flex items-center justify-center transition-colors ${
+                            selectedMetrics.position ? 'border-white bg-white text-[#e8710a]' : 'border-neutral-400 bg-white'
+                          }`}>
+                            {selectedMetrics.position && <Check className="h-3 w-3 stroke-[3]" />}
+                          </div>
+                          <span className={selectedMetrics.position ? 'text-white' : 'text-neutral-600'}>Average position</span>
+                        </div>
+                        <div className={`mt-2 text-2xl font-semibold tracking-tight ${selectedMetrics.position ? 'text-white' : 'text-neutral-900'}`}>
+                          {cardTotals.avgPos}
+                        </div>
+                        <HelpCircle className={`absolute bottom-3 right-3 h-3.5 w-3.5 ${selectedMetrics.position ? 'text-white/60' : 'text-neutral-300'}`} />
+                      </button>
+                    </div>
+
+                    {/* Chart Area */}
                     {processedChartData.length > 0 ? (
-                      <div className="h-72 w-full px-2 pb-3 pt-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={processedChartData} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#2f4db5" stopOpacity={0.14} />
-                                <stop offset="100%" stopColor="#2f4db5" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid vertical={false} stroke="#f0f0f0" />
-                            <XAxis dataKey="displayDate" stroke="#a1a1aa" fontSize={11} tickLine={false} axisLine={false} tickMargin={8} minTickGap={20} />
-                            <YAxis stroke="#a1a1aa" fontSize={12} tickLine={false} axisLine={false} tickMargin={4} />
-                            <Tooltip
-                              cursor={{ stroke: "#d4d4d8", strokeDasharray: "3 3" }}
-                              contentStyle={{
-                                backgroundColor: "#ffffff",
-                                border: "1px solid #e5e5e5",
-                                borderRadius: "8px",
-                                fontSize: "12px",
-                                boxShadow: "0 4px 12px rgba(16,24,40,0.08)",
-                              }}
-                              formatter={(value: any) => [Number(value).toLocaleString(), activeChartTab === "impressions" ? "Impressions" : "Clicks"]}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey={chartKey}
-                              name={activeChartTab === "impressions" ? "Impressions" : "Clicks"}
-                              stroke="#2f4db5"
-                              strokeWidth={1.75}
-                              fill="url(#chartFill)"
-                              activeDot={{ r: 3.5, strokeWidth: 0 }}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
+                      <div className="p-4 sm:p-5">
+                        {/* Top-right aggregation dropdown (Daily / Weekly) */}
+                        <div className="flex items-center justify-end mb-2">
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setIntervalDropdownOpen(!intervalDropdownOpen)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50"
+                            >
+                              <span>{chartInterval === 'daily' ? 'Daily' : 'Weekly'}</span>
+                              <ChevronDown className="h-3 w-3 text-neutral-400" />
+                            </button>
+                            {intervalDropdownOpen && (
+                              <div className="absolute right-0 mt-1 w-28 rounded-md border border-neutral-200 bg-white py-1 shadow-lg z-20 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={() => { setChartInterval('daily'); setIntervalDropdownOpen(false); }}
+                                  className={`w-full px-3 py-1.5 text-left ${chartInterval === 'daily' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`}
+                                >
+                                  Daily
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setChartInterval('weekly'); setIntervalDropdownOpen(false); }}
+                                  className={`w-full px-3 py-1.5 text-left ${chartInterval === 'weekly' ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`}
+                                >
+                                  Weekly
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Chart Component */}
+                        <div className="h-72 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={processedChartData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                              <CartesianGrid vertical={false} stroke="#ebebeb" />
+                              <XAxis
+                                dataKey="displayDate"
+                                stroke="#70757a"
+                                fontSize={11}
+                                tickLine={false}
+                                axisLine={{ stroke: '#dadce0' }}
+                                tickMargin={8}
+                                minTickGap={24}
+                              />
+
+                              {/* YAxis for Clicks (Left) */}
+                              {selectedMetrics.clicks && (
+                                <YAxis
+                                  yAxisId="left"
+                                  stroke="#1a73e8"
+                                  fontSize={11}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickMargin={4}
+                                />
+                              )}
+
+                              {/* YAxis for Impressions (Right or Left if clicks off) */}
+                              {selectedMetrics.impressions && (
+                                <YAxis
+                                  yAxisId={selectedMetrics.clicks ? "right" : "left"}
+                                  orientation={selectedMetrics.clicks ? "right" : "left"}
+                                  stroke="#5e35b1"
+                                  fontSize={11}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickMargin={4}
+                                />
+                              )}
+
+                              {/* YAxis for CTR */}
+                              {selectedMetrics.ctr && (
+                                <YAxis
+                                  yAxisId="ctr"
+                                  orientation="right"
+                                  stroke="#00897b"
+                                  fontSize={11}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickFormatter={(v) => `${v}%`}
+                                  hide={selectedMetrics.clicks && selectedMetrics.impressions}
+                                />
+                              )}
+
+                              {/* YAxis for Position (reversed) */}
+                              {selectedMetrics.position && (
+                                <YAxis
+                                  yAxisId="pos"
+                                  reversed
+                                  orientation="right"
+                                  stroke="#e8710a"
+                                  fontSize={11}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  hide={selectedMetrics.impressions || selectedMetrics.clicks}
+                                />
+                              )}
+
+                              <Tooltip
+                                content={({ active, payload, label }: any) => {
+                                  if (!active || !payload || !payload.length) return null;
+                                  return (
+                                    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-md text-xs">
+                                      <div className="font-semibold text-neutral-800 mb-1.5">{label}</div>
+                                      <div className="space-y-1">
+                                        {payload.map((entry: any) => {
+                                          let val = entry.value;
+                                          if (entry.dataKey === 'ctr') val = `${val}%`;
+                                          else if (typeof val === 'number') val = val.toLocaleString();
+                                          return (
+                                            <div key={entry.dataKey} className="flex items-center justify-between gap-4">
+                                              <span className="flex items-center gap-1.5" style={{ color: entry.stroke }}>
+                                                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.stroke }} />
+                                                <span>{entry.name}:</span>
+                                              </span>
+                                              <span className="font-semibold text-neutral-900">{val}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                }}
+                              />
+
+                              {/* Line for Impressions (Purple) */}
+                              {selectedMetrics.impressions && (
+                                <Line
+                                  yAxisId={selectedMetrics.clicks ? "right" : "left"}
+                                  type="monotone"
+                                  dataKey="impressions"
+                                  name="Total impressions"
+                                  stroke="#5e35b1"
+                                  strokeWidth={2}
+                                  dot={false}
+                                  activeDot={{ r: 4, stroke: '#5e35b1', strokeWidth: 2, fill: '#fff' }}
+                                />
+                              )}
+
+                              {/* Line for Clicks (Blue) */}
+                              {selectedMetrics.clicks && (
+                                <Line
+                                  yAxisId="left"
+                                  type="monotone"
+                                  dataKey="clicks"
+                                  name="Total clicks"
+                                  stroke="#1a73e8"
+                                  strokeWidth={2}
+                                  dot={false}
+                                  activeDot={{ r: 4, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff' }}
+                                />
+                              )}
+
+                              {/* Line for CTR (Teal) */}
+                              {selectedMetrics.ctr && (
+                                <Line
+                                  yAxisId={selectedMetrics.clicks && selectedMetrics.impressions ? "left" : "ctr"}
+                                  type="monotone"
+                                  dataKey="ctr"
+                                  name="Average CTR"
+                                  stroke="#00897b"
+                                  strokeWidth={2}
+                                  dot={false}
+                                  activeDot={{ r: 4, stroke: '#00897b', strokeWidth: 2, fill: '#fff' }}
+                                />
+                              )}
+
+                              {/* Line for Position (Orange) */}
+                              {selectedMetrics.position && (
+                                <Line
+                                  yAxisId={selectedMetrics.clicks || selectedMetrics.impressions ? "left" : "pos"}
+                                  type="monotone"
+                                  dataKey="position"
+                                  name="Average position"
+                                  stroke="#e8710a"
+                                  strokeWidth={2}
+                                  dot={false}
+                                  activeDot={{ r: 4, stroke: '#e8710a', strokeWidth: 2, fill: '#fff' }}
+                                />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex h-60 flex-col items-center justify-center px-6 text-center">
@@ -599,13 +985,13 @@ export default function DashboardPage() {
                             </div>
                             <p className="text-sm font-semibold text-neutral-900">Search Console Connected & Syncing</p>
                             <p className="mt-1 max-w-sm text-xs text-neutral-500 leading-relaxed">
-                              Performance monitoring is active. If your site has recent Google search traffic, click below to pull the latest 28-day impressions and clicks.
+                              Performance monitoring is active. Click below to fetch the latest search impressions and clicks.
                             </p>
                             <button
                               type="button"
                               onClick={handleManualGscSync}
                               disabled={isSyncingGsc}
-                              className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 text-xs font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50 disabled:opacity-50"
+                              className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3.5 text-xs font-medium text-neutral-800 shadow-2xs transition-colors hover:bg-neutral-50 disabled:opacity-50"
                             >
                               {isSyncingGsc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                               <span>{isSyncingGsc ? "Syncing Search Console..." : "Sync Search Performance Now"}</span>
@@ -619,7 +1005,7 @@ export default function DashboardPage() {
                             </p>
                             <Link
                               href="/integrations"
-                              className="mt-4 inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-xs transition-colors hover:bg-neutral-50"
+                              className="mt-4 inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-800 shadow-2xs transition-colors hover:bg-neutral-50"
                             >
                               Connect Search Console
                             </Link>

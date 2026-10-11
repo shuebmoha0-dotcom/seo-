@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       // 6. Search Console Performance Data (fetch daily totals, up to 500 days)
       supabase
         .from('search_console_data')
-        .select('date, clicks, impressions')
+        .select('date, clicks, impressions, ctr, position')
         .eq('website_id', websiteId)
         .is('query', null)
         .order('date', { ascending: true })
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
         await syncSearchConsoleData(websiteId);
         const { data: refreshedRows } = await supabase
           .from('search_console_data')
-          .select('date, clicks, impressions')
+          .select('date, clicks, impressions, ctr, position')
           .eq('website_id', websiteId)
           .is('query', null)
           .order('date', { ascending: true })
@@ -130,6 +130,8 @@ export async function GET(request: Request) {
       traffic: r.clicks || 0,
       clicks: r.clicks || 0,
       impressions: r.impressions || 0,
+      ctr: r.ctr !== null && r.ctr !== undefined ? Number(r.ctr) : 0,
+      position: r.position !== null && r.position !== undefined ? Number(r.position) : 0,
     }));
 
     const activityList: any[] = [];
