@@ -136,21 +136,22 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     return { ok: true, status: res.status, data };
   }
 
-  // 3. Define historical window (Search Console data lag is typically 2-3 days)
+  // 3. Define historical window
   // Pull up to 480 days (16 months - Google's max retention) to support 28d, 3m, 6m, 16m views
   const days = Math.max(28, Math.min(daysBack, 480));
   const now = new Date();
-  const endDateObj = new Date(now.getTime() - 2 * 86400000); // 2 days ago
-  const startDateObj = new Date(endDateObj.getTime() - days * 86400000);
+  const endDateObj = now; // Query up to current date with dataState: 'all' to include fresh 24h data
+  const startDateObj = new Date(now.getTime() - days * 86400000);
 
   const endDate = endDateObj.toISOString().split('T')[0];
   const startDate = startDateObj.toISOString().split('T')[0];
 
-  // 4. Query daily performance (dimension: 'date')
+  // 4. Query daily performance (dimension: 'date') with dataState: 'all' to capture fresh real-time data
   const dateResult = await queryGoogleAnalytics({
     startDate,
     endDate,
     dimensions: ['date'],
+    dataState: 'all',
     rowLimit: 1000,
   });
 
@@ -203,6 +204,7 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     startDate,
     endDate,
     dimensions: ['query'],
+    dataState: 'all',
     rowLimit: 100,
   });
 
