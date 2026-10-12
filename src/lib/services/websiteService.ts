@@ -193,19 +193,18 @@ export class WebsiteService {
 
     const supabase = await createClient();
 
-    // C. Resolve or create default Project
+    // C. Resolve or create dedicated Project per website domain (strict workspace isolation)
     let projectId = payload.project_id;
     if (!projectId) {
-      const { data: defaultProject } = await supabase
+      const { data: existingDomainProject } = await supabase
         .from('projects')
         .select('id')
         .eq('user_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(1)
+        .eq('name', `${domain} SEO`)
         .maybeSingle();
 
-      if (defaultProject) {
-        projectId = defaultProject.id;
+      if (existingDomainProject) {
+        projectId = existingDomainProject.id;
       } else {
         const { data: newProj } = await supabase
           .from('projects')

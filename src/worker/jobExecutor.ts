@@ -425,14 +425,8 @@ export class JobExecutor {
       if (site) websiteId = site.id;
     }
 
-    if (!websiteId) {
-      const { data: firstSite } = await this.supabase
-        .from('websites')
-        .select('id')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (firstSite) websiteId = firstSite.id;
+    if (!websiteId && (job as any).website_id) {
+      websiteId = (job as any).website_id;
     }
 
     if (!websiteId) {

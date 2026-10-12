@@ -51,7 +51,7 @@ export class SchedulerEngine {
 
             // Check if task is Zero-Touch Full Autopilot
             const isFullAutopilot = task.name === 'Zero-Touch Full Autopilot' || task.schedule_config?.full_autopilot === true;
-            let websiteId = task.schedule_config?.website_id;
+            let websiteId = task.website_id || task.schedule_config?.website_id;
             if (!websiteId && task.project_id) {
               const { data: site } = await this.supabase
                 .from('websites')
@@ -68,6 +68,7 @@ export class SchedulerEngine {
               .insert({
                 task_id: task.id,
                 project_id: task.project_id,
+                website_id: websiteId,
                 status: 'queued',
                 execution_payload: {
                   type: isFullAutopilot ? 'full_autopilot' : 'orchestrator_goal',

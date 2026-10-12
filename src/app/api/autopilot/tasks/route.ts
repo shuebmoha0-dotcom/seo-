@@ -39,11 +39,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ tasks: [], executions: [] });
     }
 
-    // 2. Fetch tasks for this project
+    // 2. Fetch tasks for this website (strict tenant isolation)
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('project_id', website.project_id)
+      .or(`website_id.eq.${website.id},and(website_id.is.null,project_id.eq.${website.project_id})`)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -51,11 +51,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ tasks: [], executions: [] });
     }
 
-    // 3. Fetch recent executions
+    // 3. Fetch recent executions for this website
     const { data: executions } = await supabase
       .from('task_executions')
       .select('id, task_id, status, result_summary, started_at, completed_at')
-      .eq('project_id', website.project_id)
+      .or(`website_id.eq.${website.id},and(website_id.is.null,project_id.eq.${website.project_id})`)
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -88,6 +88,7 @@ export async function GET(request: Request) {
               .insert({
                 task_id: t.id,
                 project_id: website.project_id,
+                website_id: website.id,
                 status: 'running',
                 started_at: startTime.toISOString(),
               })
@@ -210,6 +211,7 @@ export async function POST(request: Request) {
       try {
         await supabase.from('task_executions').insert({
           project_id: website.project_id,
+          website_id: website.id,
           status: execResult.success ? 'completed' : 'failed',
           result_summary: execResult.summary,
           started_at: new Date().toISOString(),
@@ -243,6 +245,7 @@ export async function POST(request: Request) {
       .from('tasks')
       .insert({
         project_id: website.project_id,
+        website_id: website.id,
         user_id: userId,
         name: parsed.goal,
         natural_language_instruction: prompt.trim(),
@@ -286,6 +289,7 @@ export async function POST(request: Request) {
           .insert({
             task_id: newTask.id,
             project_id: website.project_id,
+            website_id: website.id,
             status: 'running',
             started_at: startTime.toISOString(),
           })

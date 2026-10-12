@@ -159,7 +159,7 @@ export class DataForSEOAdapter implements ICrawlProviderAdapter {
    */
   async fetchCrawledPages(taskId: string, limit = 100, offset = 0): Promise<any[]> {
     if (!this.isConfigured || taskId.startsWith('dfs_task_')) {
-      return this.generateSimulatedPages();
+      return [];
     }
 
     const payload = [{

@@ -98,12 +98,12 @@ export class FullAutopilotEngine {
       }
     }
 
-    // 2. Query dedicated full autopilot task
+    // 2. Query dedicated full autopilot task (strictly scoped to websiteId)
     const { data: task } = await supabase
       .from('tasks')
       .select('*')
-      .eq('project_id', projectId || '37e402e1-ab72-4b81-8397-a4b81a0009c6')
       .eq('name', 'Zero-Touch Full Autopilot')
+      .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -193,18 +193,20 @@ export class FullAutopilotEngine {
           })
           .select('id')
           .single();
-        projectId = newProj?.id || '37e402e1-ab72-4b81-8397-a4b81a0009c6';
+        projectId = newProj?.id;
       }
 
-      await supabase.from('websites').update({ project_id: projectId }).eq('id', website.id);
+      if (projectId) {
+        await supabase.from('websites').update({ project_id: projectId }).eq('id', website.id);
+      }
     }
 
-    // Fetch existing task to preserve cumulative stats
+    // Fetch existing task to preserve cumulative stats (strictly scoped to website_id)
     const { data: existingTask } = await supabase
       .from('tasks')
       .select('*')
-      .eq('project_id', projectId)
       .eq('name', 'Zero-Touch Full Autopilot')
+      .or(`website_id.eq.${params.website_id},and(website_id.is.null,project_id.eq.${projectId})`)
       .maybeSingle();
 
     const existingConfig = existingTask?.schedule_config || {};
@@ -231,6 +233,7 @@ export class FullAutopilotEngine {
           status: 'active',
           schedule_type: dbScheduleType,
           schedule_config: updatedConfig,
+          website_id: params.website_id,
           next_run_at: nextRunAt,
           updated_at: new Date().toISOString(),
         })
@@ -239,6 +242,7 @@ export class FullAutopilotEngine {
     } else {
       const { data: insertedTask, error: insertErr } = await supabase.from('tasks').insert({
         project_id: projectId,
+        website_id: params.website_id,
         user_id: website.user_id || '0a035c76-db28-4071-9294-db59ca23d1a5',
         name: 'Zero-Touch Full Autopilot',
         natural_language_instruction: '24/7 continuous autonomous SEO engine: finding unwritten keywords, drafting comprehensive articles, generating visual assets, publishing to WordPress, and fixing technical SEO.',
@@ -258,6 +262,7 @@ export class FullAutopilotEngine {
         await supabase.from('task_executions').insert({
           task_id: taskId,
           project_id: projectId,
+          website_id: params.website_id,
           status: 'queued',
           execution_payload: {
             type: 'full_autopilot',
@@ -320,16 +325,14 @@ export class FullAutopilotEngine {
       if (userProj) projectId = userProj.id;
     }
 
-    if (projectId) {
-      await supabase
-        .from('tasks')
-        .update({
-          status: 'paused',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('project_id', projectId)
-        .eq('name', 'Zero-Touch Full Autopilot');
-    }
+    await supabase
+      .from('tasks')
+      .update({
+        status: 'paused',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('name', 'Zero-Touch Full Autopilot')
+      .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`);
 
     await supabase
       .from('scheduled_agent_configs')
@@ -412,11 +415,12 @@ export class FullAutopilotEngine {
     const autoPublish = currentStatus.auto_publish;
     const autoFix = currentStatus.auto_fix_technical;
 
-    // 1. Pre-insert execution ticket
+    // 1. Pre-insert execution ticket (strictly scoped to websiteId)
     const { data: execution } = await supabase
       .from('task_executions')
       .insert({
         project_id: projectId,
+        website_id: websiteId,
         status: 'running',
         started_at: startTime.toISOString(),
         result_summary: `Autonomous Autopilot Cycle [${cycleId}] in progress for ${domain}...`,
@@ -763,8 +767,8 @@ export class FullAutopilotEngine {
           },
           updated_at: new Date().toISOString(),
         })
-        .eq('project_id', projectId)
-        .eq('name', 'Zero-Touch Full Autopilot');
+        .eq('name', 'Zero-Touch Full Autopilot')
+        .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`);
 
       // Update execution record
       if (execution?.id) {

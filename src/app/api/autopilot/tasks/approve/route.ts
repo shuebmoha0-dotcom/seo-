@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       .eq('id', website_id)
       .single();
 
-    if (website?.project_id) {
+    if (website_id) {
       await supabase
         .from('task_executions')
         .update({
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
           completed_at: new Date().toISOString(),
           result_summary: 'All proposed SEO action items approved and queued for autonomous deployment.',
         })
-        .eq('project_id', website.project_id)
+        .or(`website_id.eq.${website_id},and(website_id.is.null,project_id.eq.${website?.project_id})`)
         .eq('status', 'waiting_for_approval');
     }
 

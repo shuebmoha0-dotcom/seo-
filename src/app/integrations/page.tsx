@@ -302,16 +302,26 @@ export default function IntegrationsPage() {
     window.location.href = authUrl;
   };
 
-  // 1. Fetch live database integrations
+  // 1. Fetch live database integrations (strictly scoped to currentWebsite)
   const loadIntegrations = async () => {
     try {
-      const siteParam = currentWebsite?.id ? `?website_id=${encodeURIComponent(currentWebsite.id)}` : '';
+      if (!currentWebsite?.id) {
+        setIntegrations(DEFAULT_INTEGRATIONS.map(item => ({
+          ...item,
+          status: "disconnected",
+          status_message: "Not connected",
+          config: {},
+        })));
+        return;
+      }
+      const siteParam = `?website_id=${encodeURIComponent(currentWebsite.id)}`;
       const res = await fetch(`/api/integrations${siteParam}`);
       if (res.ok) {
         const data = await res.json();
         const dbIntegrations: any[] = data.integrations || [];
 
-        setIntegrations(prev => prev.map(item => {
+        // Always map from clean DEFAULT_INTEGRATIONS to eliminate cross-website leakage
+        setIntegrations(DEFAULT_INTEGRATIONS.map(item => {
           const match = dbIntegrations.find(d => d.provider === item.provider);
           if (match) {
             return {
@@ -324,7 +334,12 @@ export default function IntegrationsPage() {
               last_tested: match.last_tested_at ? new Date(match.last_tested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
             };
           }
-          return item;
+          return {
+            ...item,
+            status: "disconnected",
+            status_message: "Not connected",
+            config: {},
+          };
         }));
       }
     } catch (err) {
@@ -334,7 +349,12 @@ export default function IntegrationsPage() {
 
   useEffect(() => {
     loadIntegrations();
-  }, [currentWebsite?.id]);
+    if (currentWebsite) {
+      const siteUrl = currentWebsite.url || (currentWebsite.domain ? `https://${currentWebsite.domain}` : "");
+      setWpForm(f => ({ ...f, site_url: siteUrl }));
+      setGscPropertyUrl(siteUrl);
+    }
+  }, [currentWebsite?.id, currentWebsite?.url, currentWebsite?.domain]);
 
   useEffect(() => {
 

@@ -613,8 +613,8 @@ export default function ContentPlannerPage() {
     const target = draftToindex || selectedDraft;
     if (!target) return;
 
-    const domainBase = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "https://bizaigenius.com");
-    const liveUrl = target.wordpress_post_url || `${domainBase.replace(/\/$/, '')}/${target.url_slug}/`;
+    const domainBase = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "");
+    const liveUrl = target.wordpress_post_url || (domainBase ? `${domainBase.replace(/\/$/, '')}/${target.url_slug}/` : `/${target.url_slug}/`);
 
     setRequestingIndex(target.id);
     try {
