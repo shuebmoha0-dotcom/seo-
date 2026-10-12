@@ -1,5 +1,22 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+function formatRelativeTime(dateString: string): string {
+  try {
+    const diffMs = Date.now() - new Date(dateString).getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h ago`;
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return dateString;
+  }
+}
 
 export async function GET(request: Request) {
   try {
@@ -21,7 +38,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const [
       { count: keywordCount },
@@ -32,7 +49,8 @@ export async function GET(request: Request) {
       { data: gscRows },
       { data: recentDrafts },
       { data: recentIssues },
-      { data: gscIntegration }
+      { data: gscIntegration },
+      { data: latestCrawl },
     ] = await Promise.all([
       // 1. Count Tracked Keywords
       supabase
@@ -83,12 +101,12 @@ export async function GET(request: Request) {
         .select('id, working_title, status, word_count, created_at')
         .eq('website_id', websiteId)
         .order('created_at', { ascending: false })
-        .limit(4),
+        .limit(6),
 
-      // 8. Recent Technical Issues
+      // 8. Recent Technical Issues (uses sample_url, NOT page_url)
       supabase
         .from('technical_issues')
-        .select('id, issue_type, page_url, severity, created_at')
+        .select('id, issue_type, sample_url, severity, created_at')
         .eq('website_id', websiteId)
         .order('created_at', { ascending: false })
         .limit(4),
@@ -99,7 +117,17 @@ export async function GET(request: Request) {
         .select('id, status, config, last_synced_at')
         .eq('website_id', websiteId)
         .eq('provider', 'google_search_console')
-        .maybeSingle()
+        .maybeSingle(),
+
+      // 10. Latest Crawl for authentic technical health score
+      supabase
+        .from('technical_crawls')
+        .select('technical_health_score, total_urls_crawled')
+        .eq('website_id', websiteId)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     let finalGscRows = gscRows || [];
@@ -141,7 +169,8 @@ export async function GET(request: Request) {
         type: 'draft',
         title: d.working_title || 'Content Draft',
         detail: `${d.word_count ? d.word_count + ' words · ' : ''}Status: ${d.status}`,
-        timestamp: d.created_at,
+        timestamp: formatRelativeTime(d.created_at),
+        raw_timestamp: d.created_at,
         status: d.status === 'published' ? 'completed' : 'active',
       });
     });
@@ -151,13 +180,17 @@ export async function GET(request: Request) {
         id: `issue-${iss.id}`,
         type: 'audit',
         title: `Audit: ${iss.issue_type?.replace(/_/g, ' ')}`,
-        detail: iss.page_url || `Severity: ${iss.severity}`,
-        timestamp: iss.created_at,
+        detail: iss.sample_url || `Severity: ${iss.severity}`,
+        timestamp: formatRelativeTime(iss.created_at),
+        raw_timestamp: iss.created_at,
         status: iss.status === 'resolved' ? 'completed' : 'queued',
       });
     });
 
-    activityList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    activityList.sort((a, b) => new Date(b.raw_timestamp || 0).getTime() - new Date(a.raw_timestamp || 0).getTime());
+
+    const authenticHealthScore = latestCrawl?.technical_health_score 
+      ?? (issuesCount !== null && issuesCount !== undefined ? Math.max(30, 100 - (issuesCount || 0) * 2) : 80);
 
     return NextResponse.json({
       stats: {
@@ -166,10 +199,10 @@ export async function GET(request: Request) {
         technical_issues: issuesCount || 0,
         pending_approvals: approvals?.length || 0,
         tracked_competitors: competitorsCount || 0,
-        health_score: issuesCount !== null && issuesCount !== undefined ? Math.max(20, 100 - (issuesCount || 0) * 5) : null,
+        health_score: authenticHealthScore,
       },
       recent_approvals: approvals || [],
-      recent_activity: activityList.slice(0, 5),
+      recent_activity: activityList.slice(0, 6),
       chart_data: chartData,
       gsc_connected: isGscConnected,
       gsc_property: gscIntegration?.config?.property_url || null,

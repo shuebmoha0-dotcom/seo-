@@ -1125,9 +1125,11 @@ export default function DashboardPage() {
                               <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
                             </span>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-baseline justify-between gap-3">
-                                <span className="truncate text-[13px] font-medium text-neutral-900">{item.title}</span>
-                                <span className="shrink-0 text-xs text-neutral-400">{item.timestamp}</span>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate text-[13px] font-medium text-neutral-900" title={item.title}>{item.title}</span>
+                                <span className="shrink-0 text-xs text-neutral-400 whitespace-nowrap">
+                                  {item.timestamp?.includes('T') ? new Date(item.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : item.timestamp}
+                                </span>
                               </div>
                               <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">{item.detail}</p>
                             </div>
