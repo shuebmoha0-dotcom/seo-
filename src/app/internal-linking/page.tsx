@@ -95,180 +95,139 @@ export default function InternalLinkingPage() {
   const pages = data?.pages || [];
 
   return (
-    <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">On-Page Architecture</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">Internal Link Control Hub</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Content</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Internal Links</span>
+              </div>
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
                 Internal Link Control Hub
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <LinkIcon className="w-3 h-3 text-indigo-600" />
-                PageRank Equity Router
-              </span>
-            </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Live link architecture, crawl depth analysis, and contextual link bridges for ${currentWebsite.domain}.`
-                : "Connect your website to map internal link equity."}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2.5 self-start md:self-auto">
-            {currentWebsite && (
-              <div className="hidden lg:flex items-center gap-2 bg-white border border-neutral-200 pl-2 pr-3 py-1.5 rounded-lg shadow-2xs">
-                <WebsiteFavicon domain={currentWebsite.domain} className="w-4 h-4 rounded" size={24} />
-                <span className="text-xs font-semibold text-neutral-800">{currentWebsite.domain}</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
-              </div>
-            )}
-
-            <button
-              onClick={handleRunAnalysis}
-              disabled={analyzing || !currentWebsite}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-xs flex items-center gap-2 active:scale-[0.98]"
-            >
-              {analyzing ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Crawling Link Graph...</span>
-                </>
-              ) : (
-                <>
-                  <Search className="w-3.5 h-3.5" />
-                  <span>Run Link Analysis</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Feedback Banner */}
-        {feedback && (
-          <div
-            className={`p-3.5 rounded-xl text-xs flex items-center justify-between border transition-all animate-in fade-in duration-200 shadow-2xs ${
-              feedback.ok
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-rose-50 text-rose-800 border-rose-200"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {feedback.ok ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              )}
-              <span className="font-medium">{feedback.message}</span>
-            </div>
-            <button
-              onClick={() => setFeedback(null)}
-              className="text-neutral-400 hover:text-neutral-600 p-1 rounded transition-colors ml-4"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
-        {!currentWebsite ? (
-          <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
-            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
-              <Globe className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
-              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                The Internal Linking Agent scans your live website to detect crawl depth, internal link counts, and orphan pages.
+              <p className="text-neutral-500 text-sm mt-1">
+                {currentWebsite
+                  ? `Live link architecture, crawl depth analysis, and contextual link bridges for ${currentWebsite.domain}`
+                  : "Connect a website to map internal link equity and orphan pages."}
               </p>
             </div>
-            <button
-              onClick={openAddModal}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all inline-flex items-center gap-1.5 shadow-xs"
+
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              {currentWebsite && (
+                <button
+                  onClick={handleRunAnalysis}
+                  disabled={analyzing}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Crawling Link Graph…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Run link analysis</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </header>
+
+          {/* Feedback Banner */}
+          {feedback && (
+            <div
+              className={`p-3.5 rounded-xl text-xs flex items-center justify-between border transition-all animate-in fade-in duration-200 shadow-2xs ${
+                feedback.ok
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border-rose-200"
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>Connect Website</span>
-            </button>
-          </div>
-        ) : loading ? (
-          <div className="py-24 flex flex-col items-center justify-center gap-3 text-neutral-500">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-            <p className="text-xs font-medium">Scanning live internal link graph for {currentWebsite.domain}...</p>
-          </div>
-        ) : (
-          <>
-            {/* KPI STATS */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
-                  Total Internal Links
-                </span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
+              <div className="flex items-center gap-2">
+                {feedback.ok ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span className="font-medium">{feedback.message}</span>
+              </div>
+              <button
+                onClick={() => setFeedback(null)}
+                className="text-neutral-400 hover:text-neutral-600 p-1 rounded transition-colors ml-4"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
+          {!currentWebsite ? (
+            <div className="mx-auto mt-10 max-w-md rounded-xl border border-neutral-200 bg-white p-10 text-center shadow-2xs">
+              <Globe className="mx-auto h-6 w-6 text-neutral-400" strokeWidth={1.5} />
+              <h3 className="mt-4 text-base font-semibold text-neutral-900">Connect a website to begin</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">
+                The Internal Linking Agent scans your live website to detect crawl depth, internal link counts, and orphan pages.
+              </p>
+              <button
+                onClick={openAddModal}
+                className="mt-5 inline-flex h-9 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-4 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add website</span>
+              </button>
+            </div>
+          ) : loading ? (
+            <div className="py-24 flex flex-col items-center justify-center gap-3 text-neutral-500">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+              <p className="text-xs font-medium">Scanning live internal link graph for {currentWebsite.domain}…</p>
+            </div>
+          ) : (
+            <>
+              {/* Stat strip */}
+              <section aria-label="Key metrics" className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4 shadow-2xs">
+                <div className="p-5">
+                  <div className="text-[13px] text-neutral-500">Total internal links</div>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
                     {stats.totalInternalLinks.toLocaleString()}
-                  </span>
-                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Live Crawled
-                  </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Discovered across DOM</div>
                 </div>
-              </div>
 
-              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
-                  Analyzed Pages
-                </span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
+                <div className="p-5 border-l border-neutral-200">
+                  <div className="text-[13px] text-neutral-500">Analyzed pages</div>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
                     {stats.totalPages}
-                  </span>
-                  <span className="text-[11px] font-medium text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded">
-                    Reachable
-                  </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Reachable indexed URLs</div>
                 </div>
-              </div>
 
-              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
-                  Avg Links / Page
-                </span>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
+                <div className="p-5 border-t border-neutral-200 lg:border-t-0 lg:border-l">
+                  <div className="text-[13px] text-neutral-500">Avg links / page</div>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
                     {stats.avgLinksPerPage}
-                  </span>
-                  <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                    Link Density
-                  </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Internal link density</div>
                 </div>
-              </div>
 
-              <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
-                <span className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider block mb-1">
-                  Orphan Pages
-                </span>
-                <div className="flex items-baseline justify-between">
-                  <span className={`text-2xl font-bold font-mono tabular-nums ${
+                <div className="p-5 border-l border-t border-neutral-200 lg:border-t-0">
+                  <div className="text-[13px] text-neutral-500">Orphan pages</div>
+                  <div className={`mt-1.5 text-[28px] font-semibold leading-8 tabular-nums ${
                     stats.orphanCount > 0 ? "text-amber-600" : "text-neutral-900"
                   }`}>
                     {stats.orphanCount}
-                  </span>
-                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded border ${
-                    stats.orphanCount > 0
-                      ? "text-amber-700 bg-amber-50 border-amber-200"
-                      : "text-emerald-700 bg-emerald-50 border-emerald-200"
-                  }`}>
-                    {stats.orphanCount === 0 ? "All Linked" : "Need Links"}
-                  </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">
+                    {stats.orphanCount === 0 ? "All pages linked" : "Pages lacking internal links"}
+                  </div>
                 </div>
-              </div>
-            </div>
+              </section>
 
             {/* ORPHAN PAGES DETECTION */}
             {orphans.length > 0 && (
@@ -508,6 +467,7 @@ export default function InternalLinkingPage() {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

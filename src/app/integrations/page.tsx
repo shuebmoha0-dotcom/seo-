@@ -753,62 +753,106 @@ export default function IntegrationsPage() {
     <div className="flex min-h-screen bg-white text-neutral-900">
       <Sidebar />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="border-b border-neutral-200 px-8 pt-6 pb-0 bg-white">
-          <div className="flex items-center gap-2 text-xs text-neutral-400 mb-1">
-            <span>Settings</span><span className="text-neutral-300">/</span>
-            <span className="text-neutral-700 font-medium">Integrations & Connectors</span>
-          </div>
-          <div className="flex items-center justify-between mb-4">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-neutral-900 tracking-tight flex items-center gap-2">
-                Integrations & Platform Connectors
-              </h1>
-              <p className="text-neutral-500 text-xs mt-0.5">
-                Connect your search performance platforms and execution layers (WordPress, GitHub, or Custom Website API).
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                <span>Settings</span>
+                <span>/</span>
+                <span className="text-neutral-600">Integrations & Connectors</span>
+              </div>
+              <div className="flex items-center gap-2.5 mt-1">
+                <h1 className="text-[22px] font-semibold leading-7 text-neutral-900">
+                  Integrations & Platform Connectors
+                </h1>
+                {currentWebsite?.domain && (
+                  <span className="inline-flex items-center rounded-md border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs font-mono font-medium text-neutral-700">
+                    {currentWebsite.domain}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-neutral-500 mt-1">
+                Connect your search performance data sources and execution layers (WordPress, GitHub, or Custom Website API).
               </p>
             </div>
+
             <div className="flex items-center gap-2">
-              <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-3 py-1.5 rounded-full border border-emerald-200 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 {integrations.filter(i => i.status === "connected").length} Active Connectors
               </span>
             </div>
           </div>
 
-          {/* Stepper overview */}
-          <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-3 mb-4 flex items-center justify-between text-xs">
-            <span className="font-semibold text-neutral-700">Setup Flow:</span>
-            <div className="flex items-center gap-2">
-              {["1. Search Console", "2. Google Analytics", "3. Execution Layer (WordPress/GitHub/Custom API)", "4. Ready"].map((step, i) => (
-                <div key={step} className="flex items-center gap-1.5">
-                  <span className={`px-2 py-0.5 rounded-md font-semibold text-[10px] ${i < 2 ? "bg-emerald-100 text-emerald-700" : i === 2 ? "bg-indigo-100 text-indigo-700" : "bg-neutral-200 text-neutral-500"}`}>
-                    {step}
-                  </span>
-                  {i < 3 && <span className="text-neutral-300">→</span>}
-                </div>
-              ))}
+          {/* 4-cell stat strip */}
+          <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4 shadow-2xs">
+            <div className="p-5">
+              <span className="text-[13px] text-neutral-500">Available Connectors</span>
+              <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                {integrations.length}
+              </div>
+              <div className="mt-1.5 text-xs text-neutral-500">CMS, analytics & code execution</div>
+            </div>
+
+            <div className="border-l border-neutral-200 p-5">
+              <span className="text-[13px] text-neutral-500">Active Connectors</span>
+              <div className="mt-1.5 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                  {integrations.filter(i => i.status === "connected").length}
+                </span>
+              </div>
+              <div className="mt-1.5 text-xs text-neutral-500">Authenticated & ready</div>
+            </div>
+
+            <div className="border-t border-neutral-200 p-5 lg:border-t-0 lg:border-l">
+              <span className="text-[13px] text-neutral-500">Pending Execution</span>
+              <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                {actions.filter(a => a.status === "pending").length}
+              </div>
+              <div className="mt-1.5 text-xs text-neutral-500">Awaiting human approval</div>
+            </div>
+
+            <div className="border-t border-l border-neutral-200 p-5 lg:border-t-0">
+              <span className="text-[13px] text-neutral-500">Target Property</span>
+              <div className="mt-1.5 truncate text-[22px] font-semibold leading-8 text-neutral-900 font-mono">
+                {currentWebsite?.domain || "Universal"}
+              </div>
+              <div className="mt-1.5 text-xs text-neutral-500">Connected domain</div>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex items-center">
-            {[
-              ["overview", "Integrations", Globe],
-              ["actions", `Execution Queue (${actions.filter(a => a.status === "pending").length})`, CheckSquare],
-            ].map(([id, label, Icon]: any) => (
-              <button key={id} onClick={() => setActiveTab(id)}
-                className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${
-                  activeTab === id ? "border-indigo-600 text-indigo-600" : "border-transparent text-neutral-500 hover:text-neutral-800"
-                }`}>
-                <Icon className="w-3.5 h-3.5" />{label}
+          {/* Segmented Control Filter Tabs */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
+              <button
+                onClick={() => setActiveTab("overview")}
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === "overview"
+                    ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                    : "text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {activeTab === "overview" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
+                <Globe className="h-3.5 w-3.5" />
+                <span>Integrations</span>
               </button>
-            ))}
+              <button
+                onClick={() => setActiveTab("actions")}
+                className={`flex items-center gap-1 border-l border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === "actions"
+                    ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                    : "text-neutral-600 hover:bg-neutral-50"
+                }`}
+              >
+                {activeTab === "actions" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
+                <CheckSquare className="h-3.5 w-3.5" />
+                <span>Execution Queue ({actions.filter(a => a.status === "pending").length})</span>
+              </button>
+            </div>
           </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
 
           {/* ── OVERVIEW TAB ── */}
           {activeTab === "overview" && (
@@ -1052,7 +1096,7 @@ export default function IntegrationsPage() {
           )}
 
         </div>
-      </div>
+      </main>
 
       {/* ── 1. Google Search Console Modal ── */}
       {showGscModal && (

@@ -329,34 +329,29 @@ export default function ImageAgentPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">Content Studio</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">Visual SEO &amp; Diagram Agent</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Content</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Images</span>
+              </div>
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
                 Visual SEO &amp; Diagram Studio
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <ImageIcon className="w-3 h-3 text-indigo-600" />
-                Featured Visuals Engine
-              </span>
+              <p className="text-neutral-500 text-sm mt-1">
+                {currentWebsite
+                  ? `Plans, scripts, and generates visual diagram and hero assets for ${currentWebsite.domain}`
+                  : "Connect a website to plan and generate visual assets."}
+              </p>
             </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Plans, scripts, and generates empirical diagram and hero visual assets for ${currentWebsite.domain}.`
-                : "Connect your website to plan and generate visual assets."}
-            </p>
-          </div>
-        </div>
+          </header>
 
         {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
         {!currentWebsite ? (
@@ -432,31 +427,73 @@ export default function ImageAgentPage() {
               </div>
             </form>
 
-            {/* Navigation Tabs */}
-            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 shadow-2xs flex items-center gap-1.5">
-              <button
-                onClick={() => setActiveTab("images")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === "images"
-                    ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
-                }`}
-              >
-                <Layout className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Image Assets ({images.length})</span>
-              </button>
+            {/* 4-cell stat strip */}
+            <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4 shadow-2xs">
+              <div className="p-5">
+                <span className="text-[13px] text-neutral-500">Planned Assets</span>
+                <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                  {images.length}
+                </div>
+                <div className="mt-1.5 text-xs text-neutral-500">Visual blueprints</div>
+              </div>
 
-              <button
-                onClick={() => setActiveTab("manifest")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  activeTab === "manifest"
-                    ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
-                }`}
-              >
-                <ClipboardList className="w-3.5 h-3.5 text-neutral-600" />
-                <span>Asset Manifest</span>
-              </button>
+              <div className="border-l border-neutral-200 p-5">
+                <span className="text-[13px] text-neutral-500">Passed QA</span>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                    {images.filter(i => i.status === "qa_passed" || i.status === "approved").length}
+                  </span>
+                </div>
+                <div className="mt-1.5 text-xs text-neutral-500">Editorial approved</div>
+              </div>
+
+              <div className="border-t border-neutral-200 p-5 lg:border-t-0 lg:border-l">
+                <span className="text-[13px] text-neutral-500">Pending Review</span>
+                <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                  {images.filter(i => i.status === "pending_approval" || i.status === "generated").length}
+                </div>
+                <div className="mt-1.5 text-xs text-neutral-500">Awaiting action</div>
+              </div>
+
+              <div className="border-t border-l border-neutral-200 p-5 lg:border-t-0">
+                <span className="text-[13px] text-neutral-500">Target Property</span>
+                <div className="mt-1.5 truncate text-[22px] font-semibold leading-8 text-neutral-900 font-mono">
+                  {currentWebsite?.domain || "Universal"}
+                </div>
+                <div className="mt-1.5 text-xs text-neutral-500">Isolated workspace</div>
+              </div>
+            </div>
+
+            {/* Navigation Tabs - Google Segmented Control */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
+                <button
+                  onClick={() => setActiveTab("images")}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activeTab === "images"
+                      ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                      : "text-neutral-600 hover:bg-neutral-50"
+                  }`}
+                >
+                  {activeTab === "images" && <CheckCircle2 className="h-3 w-3 text-[#1967d2]" />}
+                  <Layout className="w-3.5 h-3.5" />
+                  <span>Image Assets ({images.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("manifest")}
+                  className={`flex items-center gap-1 border-l border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors ${
+                    activeTab === "manifest"
+                      ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                      : "text-neutral-600 hover:bg-neutral-50"
+                  }`}
+                >
+                  {activeTab === "manifest" && <CheckCircle2 className="h-3 w-3 text-[#1967d2]" />}
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Asset Manifest</span>
+                </button>
+              </div>
             </div>
 
             {/* IMAGES TAB */}
@@ -522,6 +559,7 @@ export default function ImageAgentPage() {
             )}
           </div>
         )}
+        </div>
       </main>
     </div>
   );

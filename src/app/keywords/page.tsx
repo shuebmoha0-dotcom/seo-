@@ -272,81 +272,74 @@ export default function KeywordsPage() {
   }, [rawKeywords]);
 
   return (
-    <div className="flex min-h-screen bg-neutral-50/50 text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Breadcrumb & Status Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200/80">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">Autonomous SEO</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">Keyword Research &amp; Clustering</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Research</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Keywords</span>
+              </div>
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
                 Keyword Explorer
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-                <Sparkles className="w-3 h-3 text-indigo-600" />
-                Semrush-Grade Keyword Engine (540M+ Index)
-              </span>
-            </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Reverse-engineering high-intent search queries, KD% difficulty, and pillar clusters tailored for ${currentWebsite.domain}.`
-                : "Connect your website to generate keyword clusters and content briefs."}
-            </p>
-          </div>
-
-          {/* Seed Input & Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -tranneutral-y-1/2 text-neutral-400" />
-              <input
-                type="text"
-                value={seedTopic}
-                onChange={(e) => setSeedTopic(e.target.value)}
-                placeholder="Seed topic or niche keyword..."
-                className="bg-white border border-neutral-200 text-neutral-900 placeholder-neutral-400 text-xs rounded-lg pl-8 pr-3 py-2 w-60 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs"
-              />
+              <p className="text-neutral-500 text-sm mt-1">
+                {currentWebsite
+                  ? `Reverse-engineering high-intent search queries, difficulty scores, and topical clusters for ${currentWebsite.domain}`
+                  : "Connect a website to discover keyword clusters and content briefs."}
+              </p>
             </div>
 
-            {/* Mode Switcher */}
-            <div className="inline-flex p-0.5 bg-neutral-100 border border-neutral-200/80 rounded-lg text-xs font-medium">
-              {(["new", "established"] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setSiteMode(mode)}
-                  className="relative px-3 py-1.5 text-xs font-medium transition-colors"
-                >
-                  {siteMode === mode && (
-                    <motion.div
-                      layoutId="keywordModePill"
-                      className="absolute inset-0 bg-white rounded-md shadow-xs"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
-                  <span className={`relative z-10 ${siteMode === mode ? "text-neutral-900 font-semibold" : "text-neutral-600 hover:text-neutral-900"}`}>
-                    {mode === "new" ? "Low KD Focus" : "Authority Scale"}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {/* Seed Input & Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+                <input
+                  type="text"
+                  value={seedTopic}
+                  onChange={(e) => setSeedTopic(e.target.value)}
+                  placeholder="Seed topic or niche…"
+                  className="bg-white border border-neutral-300 text-neutral-900 placeholder-neutral-400 text-xs rounded-md pl-8 pr-3 py-1.5 w-48 sm:w-56 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                />
+              </div>
 
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => handleDiscover()}
-              disabled={discovering || !currentWebsite}
-              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-colors flex items-center gap-2 shadow-xs"
-            >
-              {discovering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-              <span>{discovering ? "Clustering..." : "Discover Clusters"}</span>
-            </motion.button>
-          </div>
-        </div>
+              {/* Mode Switcher */}
+              <div className="inline-flex p-0.5 bg-neutral-100 border border-neutral-200 rounded-md text-xs font-medium">
+                {(["new", "established"] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setSiteMode(mode)}
+                    className="relative px-2.5 py-1 text-xs font-medium transition-colors"
+                  >
+                    {siteMode === mode && (
+                      <motion.div
+                        layoutId="keywordModePill"
+                        className="absolute inset-0 bg-white rounded shadow-2xs"
+                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      />
+                    )}
+                    <span className={`relative z-10 ${siteMode === mode ? "text-neutral-900 font-semibold" : "text-neutral-600 hover:text-neutral-900"}`}>
+                      {mode === "new" ? "Low KD" : "Scale"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handleDiscover()}
+                disabled={discovering || !currentWebsite}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+              >
+                {discovering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                <span>{discovering ? "Clustering…" : "Discover clusters"}</span>
+              </button>
+            </div>
+          </header>
 
         {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
         {!currentWebsite ? (
@@ -817,6 +810,7 @@ export default function KeywordsPage() {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

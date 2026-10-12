@@ -324,69 +324,64 @@ export default function UsagePage() {
     <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="max-w-7xl w-full mx-auto p-6 md:p-8 space-y-8">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
 
           {/* Top Admin Telemetry Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-200 pb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-400">
                 <span>Settings</span>
                 <span>/</span>
-                <span className="text-neutral-800">Usage & Token Governance</span>
+                <span className="text-neutral-600">Usage & Token Governance</span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-indigo-600 rounded-xl shadow-sm text-white">
-                  <Cpu className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-                      {isAdmin && viewMode === "admin" ? "Token & Usage Control Center" : "Usage & Monthly Credits"}
-                    </h1>
-                    {isAdmin && (
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
-                        Admin Access
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-neutral-500 text-xs mt-0.5">
-                    {isAdmin && viewMode === "admin"
-                      ? "Platform-wide LLM token tracking, autonomous agent telemetry & budget governance."
-                      : "Monthly execution quotas and credit consumption for connected properties."}
-                  </p>
-                </div>
+              <div className="flex items-center gap-2.5 mt-1">
+                <h1 className="text-[22px] font-semibold leading-7 text-neutral-900">
+                  {isAdmin && viewMode === "admin" ? "Token & Usage Control Center" : "Usage & Monthly Credits"}
+                </h1>
+                {isAdmin && (
+                  <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    Admin Access
+                  </span>
+                )}
               </div>
+              <p className="text-sm text-neutral-500 mt-1">
+                {isAdmin && viewMode === "admin"
+                  ? "Platform-wide LLM token tracking, autonomous agent telemetry & budget governance."
+                  : "Monthly execution quotas and credit consumption for connected properties."}
+              </p>
             </div>
 
             {/* Admin View Mode Toggles & Refresh */}
             <div className="flex items-center gap-3">
               {isAdmin && (
-                <div className="flex bg-neutral-100 p-1 rounded-xl text-xs font-semibold border border-neutral-200">
+                <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
                   <button
                     onClick={() => setViewMode("admin")}
-                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
                       viewMode === "admin"
-                        ? "bg-white text-indigo-700 shadow-sm border border-neutral-200/80 font-bold"
-                        : "text-neutral-500 hover:text-neutral-900"
+                        ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                        : "text-neutral-600 hover:bg-neutral-50"
                     }`}
                   >
-                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                    Admin Cockpit
+                    {viewMode === "admin" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Admin Cockpit</span>
                   </button>
                   <button
                     onClick={() => {
                       setViewMode("client");
                       loadTenantUsage(selectedWebsite, selectedPeriod);
                     }}
-                    className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+                    className={`flex items-center gap-1 border-l border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors ${
                       viewMode === "client"
-                        ? "bg-white text-indigo-700 shadow-sm border border-neutral-200/80 font-bold"
-                        : "text-neutral-500 hover:text-neutral-900"
+                        ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                        : "text-neutral-600 hover:bg-neutral-50"
                     }`}
                   >
-                    <Bot className="w-3.5 h-3.5 text-neutral-500" />
-                    Tenant View
+                    {viewMode === "client" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Tenant View</span>
                   </button>
                 </div>
               )}
@@ -397,10 +392,11 @@ export default function UsagePage() {
                   else loadTenantUsage(selectedWebsite, selectedPeriod);
                 }}
                 disabled={loading}
-                className="p-2 border border-neutral-200 rounded-xl bg-white hover:bg-neutral-50 transition-colors text-neutral-600 shadow-xs"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50 transition-colors"
                 title="Refresh Telemetry"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`} />
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-indigo-600" : "text-neutral-500"}`} />
+                <span>Refresh</span>
               </button>
             </div>
           </div>

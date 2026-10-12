@@ -208,47 +208,42 @@ export default function OnPageSEOPage() {
   const qaPassed = qaItems.filter(([, v]) => v === true).length;
 
   return (
-    <div className="flex min-h-screen bg-white text-neutral-900 selection:bg-indigo-500/20 font-sans">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">Content Studio</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">On-Page Diagnostics</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-                On-Page SEO Diagnostics &amp; Audit
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Content</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">On-Page SEO</span>
+              </div>
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
+                On-Page SEO Diagnostics
               </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <Target className="w-3 h-3 text-indigo-600" />
-                SERP Intent Engine
-              </span>
+              <p className="text-neutral-500 text-sm mt-1">
+                {currentWebsite
+                  ? `Analyzes live pages on ${currentWebsite.domain} for search intent, content depth, and heading hierarchy`
+                  : "Connect a website to analyze on-page SEO signals."}
+              </p>
             </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Analyzes live pages on ${currentWebsite.domain} for search intent, content depth, and heading hierarchy.`
-                : "Connect your website to analyze on-page SEO signals."}
-            </p>
-          </div>
 
-          {result && (
-            <div className={`flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-lg border ${
-              result.status === "pass"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-amber-50 text-amber-800 border-amber-200"
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${
-                result.status === "pass" ? "bg-emerald-500" : "bg-amber-500"
-              }`} />
-              <span>{result.status === "pass" ? "PASS — Ready for Approval" : "NEEDS REVISION"}</span>
-            </div>
-          )}
-        </div>
+            {result && (
+              <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border self-start md:self-auto ${
+                result.status === "pass"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-amber-50 text-amber-800 border-amber-200"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  result.status === "pass" ? "bg-emerald-500" : "bg-amber-500"
+                }`} />
+                <span>{result.status === "pass" ? "Passed — Ready for Approval" : "Needs Revision"}</span>
+              </div>
+            )}
+          </header>
 
         {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
         {!currentWebsite ? (
@@ -487,6 +482,7 @@ export default function OnPageSEOPage() {
             )}
           </div>
         )}
+        </div>
       </main>
     </div>
   );

@@ -599,169 +599,168 @@ export default function TechnicalSEOPage() {
   const r = result;
 
   return (
-    <div className="flex min-h-screen bg-neutral-50/50 text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200/80">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">Autonomous SEO</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">Technical Diagnostics &amp; Crawl Engine</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-                Technical SEO &amp; Crawl Auditor
-              </h1>
-              {r && (
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                  r.technical_health_score >= 75
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : r.technical_health_score >= 50
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-rose-50 text-rose-700 border-rose-200"
-                }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    r.technical_health_score >= 75 ? "bg-emerald-500" : "bg-amber-500"
-                  }`} />
-                  Health: {r.technical_health_score}/100
-                </span>
-              )}
-            </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Autonomous DOM crawler auditing status codes, canonicals, robots directives, and sitemap health for ${currentWebsite.domain}.`
-                : "Connect your website to launch an autonomous technical crawl."}
-            </p>
-          </div>
-        </div>
-
-        {/* Crawl Control Command Bar */}
-        <form onSubmit={handleCrawl} className="bg-white border border-neutral-200/80 rounded-xl p-4 shadow-xs space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
-            <div className="sm:col-span-5">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                Target URL
-              </label>
-              <input
-                value={form.start_url}
-                onChange={(e) => setForm((f) => ({ ...f, start_url: e.target.value }))}
-                required
-                placeholder="https://example.com"
-                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-              />
-            </div>
-
-            <div className="sm:col-span-3">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                Site Architecture
-              </label>
-              <select
-                value={form.site_tech}
-                onChange={(e) => setForm((f) => ({ ...f, site_tech: e.target.value }))}
-                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500"
-              >
-                {[
-                  ["nextjs", "Next.js App Router"],
-                  ["react", "React SPA"],
-                  ["astro", "Astro SSG"],
-                  ["wordpress", "WordPress CMS"],
-                  ["shopify", "Shopify"],
-                  ["webflow", "Webflow"],
-                  ["unknown", "Auto-Detect Framework"],
-                ].map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
-                Max URLs
-              </label>
-              <select
-                value={form.max_urls}
-                onChange={(e) => setForm((f) => ({ ...f, max_urls: e.target.value }))}
-                className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500"
-              >
-                {["50", "100", "250", "500"].map((n) => (
-                  <option key={n} value={n}>{n} URLs</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="sm:col-span-2">
-              <button
-                type="submit"
-                disabled={crawling || !form.start_url.trim()}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.98]"
-              >
-                {crawling ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Crawling...</span>
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-3.5 h-3.5" />
-                    <span>Start Audit</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </form>
-
-        {/* Tab Navigation */}
-        <div className="bg-white border border-neutral-200/80 rounded-xl p-2 shadow-xs flex items-center gap-1.5 overflow-x-auto">
-          {[
-            { id: "overview", label: "Diagnostic Overview", icon: BarChart2, count: null },
-            { id: "issues", label: "Discovered Issues", icon: AlertTriangle, count: openCount },
-            { id: "urls", label: "Crawl URL Map", icon: Globe, count: r?.total_urls_crawled || 0 },
-            { id: "recommendations", label: "Remediation Queue", icon: GitPullRequest, count: null },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                  activeTab === tab.id
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{tab.label}</span>
-                {tab.count !== null && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                      activeTab === tab.id ? "bg-white/20 text-white" : "bg-neutral-100 text-neutral-700"
-                    }`}
-                  >
-                    {tab.count}
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Technical</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Diagnostics</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
+                  Technical SEO &amp; Diagnostics
+                </h1>
+                {r && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                    r.technical_health_score >= 75
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : r.technical_health_score >= 50
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      r.technical_health_score >= 75 ? "bg-emerald-500" : "bg-amber-500"
+                    }`} />
+                    Health: {r.technical_health_score}/100
                   </span>
                 )}
-              </button>
-            );
-          })}
-        </div>
-
-        {!r && !crawling && (
-          <div className="p-12 text-center bg-white border border-neutral-200/80 rounded-2xl space-y-4 max-w-lg mx-auto shadow-xs">
-            <div className="w-12 h-12 bg-neutral-100 border border-neutral-200 rounded-xl flex items-center justify-center mx-auto text-indigo-600">
-              <Wrench className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-neutral-900">No Technical Crawl Data Yet</h3>
-              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                Enter your website URL above and click &ldquo;Start Audit&rdquo; to analyze crawlability, status codes, canonicals, and indexability issues.
+              </div>
+              <p className="text-neutral-500 text-sm mt-1">
+                {currentWebsite
+                  ? `Autonomous DOM crawler auditing status codes, canonicals, robots directives, and sitemap health for ${currentWebsite.domain}`
+                  : "Launch an autonomous technical crawl to audit search health."}
               </p>
             </div>
+          </header>
+
+          {/* Crawl Control Command Bar */}
+          <form onSubmit={handleCrawl} className="bg-white border border-neutral-200 rounded-xl p-4 shadow-2xs space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+              <div className="sm:col-span-5">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+                  Target URL
+                </label>
+                <input
+                  value={form.start_url}
+                  onChange={(e) => setForm((f) => ({ ...f, start_url: e.target.value }))}
+                  required
+                  placeholder="https://example.com"
+                  className="w-full bg-neutral-50/70 border border-neutral-300 rounded-lg px-3 py-2 text-xs text-neutral-900 font-mono focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+                />
+              </div>
+
+              <div className="sm:col-span-3">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+                  Site Architecture
+                </label>
+                <select
+                  value={form.site_tech}
+                  onChange={(e) => setForm((f) => ({ ...f, site_tech: e.target.value }))}
+                  className="w-full bg-neutral-50/70 border border-neutral-300 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                >
+                  {[
+                    ["nextjs", "Next.js App Router"],
+                    ["react", "React SPA"],
+                    ["astro", "Astro SSG"],
+                    ["wordpress", "WordPress CMS"],
+                    ["shopify", "Shopify"],
+                    ["webflow", "Webflow"],
+                    ["unknown", "Auto-Detect Framework"],
+                  ].map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-[11px] font-semibold uppercase tracking-wider text-neutral-500 mb-1">
+                  Max URLs
+                </label>
+                <select
+                  value={form.max_urls}
+                  onChange={(e) => setForm((f) => ({ ...f, max_urls: e.target.value }))}
+                  className="w-full bg-neutral-50/70 border border-neutral-300 rounded-lg px-2.5 py-2 text-xs text-neutral-700 focus:outline-none focus:border-indigo-500 shadow-2xs"
+                >
+                  {["50", "100", "250", "500"].map((n) => (
+                    <option key={n} value={n}>{n} URLs</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <button
+                  type="submit"
+                  disabled={crawling || !form.start_url.trim()}
+                  className="w-full inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {crawling ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Crawling…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-3.5 h-3.5" />
+                      <span>Start audit</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Tab Navigation */}
+          <div className="flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs self-start">
+            {[
+              { id: "overview", label: "Diagnostic Overview", icon: BarChart2, count: null },
+              { id: "issues", label: "Discovered Issues", icon: AlertTriangle, count: openCount },
+              { id: "urls", label: "Crawl URL Map", icon: Globe, count: r?.total_urls_crawled || 0 },
+              { id: "recommendations", label: "Remediation Queue", icon: GitPullRequest, count: null },
+            ].map((tab, i) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as Tab)}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    i > 0 ? "border-l border-neutral-300" : ""
+                  } ${
+                    activeTab === tab.id
+                      ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                      : "text-neutral-700 hover:bg-neutral-50"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{tab.label}</span>
+                  {tab.count !== null && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
+                        activeTab === tab.id ? "bg-[#1967d2]/15 text-[#1967d2]" : "bg-neutral-100 text-neutral-700"
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-        )}
+
+          {!r && !crawling && (
+            <div className="mx-auto mt-6 max-w-md rounded-xl border border-neutral-200 bg-white p-10 text-center shadow-2xs">
+              <Wrench className="mx-auto h-6 w-6 text-neutral-400" strokeWidth={1.5} />
+              <h3 className="mt-4 text-base font-semibold text-neutral-900">No technical crawl data yet</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-neutral-500">
+                Enter your website URL above and click &ldquo;Start audit&rdquo; to analyze crawlability, status codes, canonicals, and indexability issues.
+              </p>
+            </div>
+          )}
 
         {r && (
           <>
@@ -1106,6 +1105,7 @@ export default function TechnicalSEOPage() {
             )}
           </>
         )}
+        </div>
       </main>
     </div>
   );

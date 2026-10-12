@@ -336,35 +336,35 @@ export default function AutopilotPage() {
     <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="max-w-[1400px] w-full mx-auto p-8 space-y-8">
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
           
           {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-                <span>Autonomous Operations</span>
-                <span>&gt;</span>
-                <span className="text-neutral-700 font-medium">Autopilot Scheduler</span>
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Automation</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Autopilot</span>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900 flex items-center gap-2.5">
-                Continuous Autonomous Operations
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
+                Continuous Autonomous Autopilot
               </h1>
-              <p className="text-xs text-neutral-500 mt-0.5">
+              <p className="text-neutral-500 text-sm mt-1">
                 {currentWebsite
-                  ? `Autonomous agent scheduler running 24/7 SEO optimizations for ${currentWebsite.domain}.`
-                  : "Connect your website to schedule autonomous tasks."}
+                  ? `Autonomous agent scheduler running 24/7 SEO optimizations for ${currentWebsite.domain}`
+                  : "Connect a website to schedule autonomous SEO tasks."}
               </p>
             </div>
 
             {currentWebsite && (
-              <div className="flex items-center gap-2 bg-neutral-50 border border-neutral-200/90 pl-2 pr-3 py-1.5 rounded-xl self-start md:self-auto shadow-2xs">
-                <WebsiteFavicon domain={currentWebsite.domain} className="w-5 h-5 rounded-md" size={32} />
-                <span className="text-xs font-bold text-neutral-900">{currentWebsite.domain}</span>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-1" />
+              <div className="inline-flex items-center gap-2 bg-white border border-neutral-200/90 pl-2 pr-3 py-1.5 rounded-lg self-start md:self-auto shadow-2xs">
+                <WebsiteFavicon domain={currentWebsite.domain} className="w-4 h-4 rounded" size={24} />
+                <span className="text-xs font-semibold text-neutral-800">{currentWebsite.domain}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-0.5" />
               </div>
             )}
-          </div>
+          </header>
 
           {/* Feedback Banner */}
           {statusFeedback && (

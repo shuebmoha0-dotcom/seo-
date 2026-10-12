@@ -53,16 +53,22 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900 font-sans">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
       
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-10 md:px-10 lg:px-12">
-          
-          <div className="mb-8 border-b border-neutral-200 pb-8">
-            <h1 className="text-3xl font-semibold tracking-tight text-neutral-900">Settings</h1>
-            <p className="text-sm text-neutral-500 mt-2">Manage your workspace settings and preferences.</p>
-          </div>
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Workspace</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Settings</span>
+              </div>
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">Settings</h1>
+              <p className="text-neutral-500 text-sm mt-1">Manage your workspace configuration, domain preferences, and credentials.</p>
+            </div>
+          </header>
 
           <div className="flex flex-col md:flex-row gap-8 lg:gap-12 items-start">
             

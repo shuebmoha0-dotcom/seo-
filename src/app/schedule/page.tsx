@@ -196,134 +196,164 @@ export default function SchedulePage() {
     <div className="flex min-h-screen bg-white text-neutral-900 font-sans selection:bg-indigo-500/20">
       <Sidebar />
 
-      <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto space-y-6">
-        {/* Top Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-200">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-neutral-500 mb-1">
-              <span className="font-medium text-neutral-400">Autonomous Operations</span>
-              <span className="text-neutral-300">/</span>
-              <span className="font-semibold text-neutral-700">Scheduled Agent Engine</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-                Scheduled Autonomous Agent
-              </h1>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
-                <Clock className="w-3 h-3 text-indigo-600" />
-                Background Engine
-              </span>
-            </div>
-            <p className="text-neutral-500 text-xs mt-1">
-              {currentWebsite
-                ? `Runs continuous background checks for ${currentWebsite.domain}, prioritizing opportunities and preparing actions.`
-                : "Connect your website to configure autonomous background execution schedules."}
-            </p>
-          </div>
-
-          {currentWebsite && (
-            <div className="flex items-center gap-2.5 self-start md:self-auto">
-              <button
-                onClick={togglePauseResume}
-                className={`text-xs font-semibold px-3 py-2 rounded-lg border flex items-center gap-1.5 transition-all shadow-2xs ${
-                  status === "active"
-                    ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
-                    : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                }`}
-              >
-                {status === "active" ? (
-                  <>
-                    <Pause className="w-3.5 h-3.5" />
-                    <span>Pause Schedule</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5" />
-                    <span>Resume Schedule</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={handleRunNow}
-                disabled={runningNow}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center gap-2 transition-all shadow-xs active:scale-[0.98]"
-              >
-                {runningNow ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Running Cycle...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5" />
-                    <span>Run Immediate Cycle</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
-        {!currentWebsite ? (
-          <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto mt-12 shadow-xs">
-            <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
-              <Globe className="w-6 h-6" />
-            </div>
+      <main className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-6 py-8 md:px-10 space-y-6">
+          {/* Top Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
-              <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                Background execution agents require a verified website domain to coordinate daily audits and content cycles.
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                <span>Autonomous Operations</span>
+                <span>/</span>
+                <span className="text-neutral-600">Scheduled Engine</span>
+              </div>
+              <div className="flex items-center gap-2.5 mt-1">
+                <h1 className="text-[22px] font-semibold leading-7 text-neutral-900">
+                  Scheduled Autonomous Agent
+                </h1>
+                {currentWebsite?.domain && (
+                  <span className="inline-flex items-center rounded-md border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs font-mono font-medium text-neutral-700">
+                    {currentWebsite.domain}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-neutral-500 mt-1">
+                {currentWebsite
+                  ? `Runs continuous background audits and content preparation cycles for ${currentWebsite.domain}.`
+                  : "Connect your website to configure autonomous background execution schedules."}
               </p>
             </div>
-            <button
-              onClick={openAddModal}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all inline-flex items-center gap-1.5 shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Connect Website</span>
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Status Strip */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 bg-neutral-50 border border-neutral-200 rounded-xl text-xs">
-              <div className="flex items-center gap-2.5">
-                <span className={`w-2 h-2 rounded-full ${status === "active" ? "bg-emerald-500" : "bg-neutral-400"}`} />
-                <span className="font-semibold text-neutral-800">
-                  {status === "active" ? "Continuous Engine Active (Daily Schedule)" : "Agent Schedule Paused"}
-                </span>
-                <span className="text-neutral-400">·</span>
-                <span className="text-neutral-500">Scheduled: {config.frequency} at {config.schedule_time} ({config.timezone})</span>
-              </div>
-              <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 rounded-md">
-                Next run: {status === "active" ? `Daily at ${config.schedule_time}` : "Paused"}
-              </span>
-            </div>
 
-            {/* Navigation Tabs */}
-            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 shadow-2xs flex items-center gap-1.5 overflow-x-auto">
-              {[
-                { id: "history", label: `Execution History (${runs.length})`, icon: Clock },
-                { id: "intelligence", label: "Cycle Overview", icon: TrendingUp },
-                { id: "pipeline", label: "Multi-Phase Pipeline", icon: Layers },
-                { id: "settings", label: "Schedule & Budget Controls", icon: Sliders },
-              ].map(({ id, label, icon: Icon }) => (
+            {currentWebsite && (
+              <div className="flex items-center gap-2">
                 <button
-                  key={id}
-                  onClick={() => setActiveTab(id as Tab)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-all ${
-                    activeTab === id
-                      ? "bg-white text-neutral-900 shadow-xs border border-neutral-200"
-                      : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60"
+                  onClick={togglePauseResume}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium shadow-2xs transition-colors ${
+                    status === "active"
+                      ? "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>{label}</span>
+                  {status === "active" ? (
+                    <>
+                      <Pause className="w-3.5 h-3.5" />
+                      <span>Pause Schedule</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Resume Schedule</span>
+                    </>
+                  )}
                 </button>
-              ))}
+
+                <button
+                  onClick={handleRunNow}
+                  disabled={runningNow}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  {runningNow ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Running Cycle...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                      <span>Run Immediate Cycle</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── STATE 1: NO WEBSITE CONNECTED ── */}
+          {!currentWebsite ? (
+            <div className="rounded-xl border border-neutral-200 bg-white p-12 text-center shadow-2xs max-w-lg mx-auto space-y-4">
+              <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-lg flex items-center justify-center mx-auto text-indigo-600">
+                <Globe className="w-6 h-6 stroke-[1.5]" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-neutral-900">Connect a Website to Begin</h3>
+                <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
+                  Background execution agents require a verified website domain to coordinate daily audits and content cycles.
+                </p>
+              </div>
+              <button
+                onClick={openAddModal}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs hover:bg-indigo-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Connect Website</span>
+              </button>
             </div>
+          ) : (
+            <div className="space-y-6">
+              {/* 4-cell stat strip */}
+              <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4 shadow-2xs">
+                <div className="p-5">
+                  <span className="text-[13px] text-neutral-500">Engine Status</span>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${status === "active" ? "bg-emerald-500" : "bg-neutral-400"}`} />
+                    <span className="text-[28px] font-semibold leading-8 text-neutral-900">
+                      {status === "active" ? "Active" : "Paused"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Autonomous loop</div>
+                </div>
+
+                <div className="border-l border-neutral-200 p-5">
+                  <span className="text-[13px] text-neutral-500">Schedule</span>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 capitalize text-neutral-900">
+                    {config.frequency}
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">{config.schedule_time} ({config.timezone})</div>
+                </div>
+
+                <div className="border-t border-neutral-200 p-5 lg:border-t-0 lg:border-l">
+                  <span className="text-[13px] text-neutral-500">Recorded Cycles</span>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                    {runs.length}
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Executed runs</div>
+                </div>
+
+                <div className="border-t border-l border-neutral-200 p-5 lg:border-t-0">
+                  <span className="text-[13px] text-neutral-500">Daily Cap</span>
+                  <div className="mt-1.5 text-[28px] font-semibold leading-8 tabular-nums text-neutral-900">
+                    ${config.daily_budget_usd.toFixed(2)}
+                  </div>
+                  <div className="mt-1.5 text-xs text-neutral-500">Max LLM budget</div>
+                </div>
+              </div>
+
+              {/* Navigation Tabs - Google Segmented Pills */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
+                  {[
+                    { id: "history", label: `Execution History (${runs.length})`, icon: Clock },
+                    { id: "intelligence", label: "Cycle Overview", icon: TrendingUp },
+                    { id: "pipeline", label: "Multi-Phase Pipeline", icon: Layers },
+                    { id: "settings", label: "Schedule Controls", icon: Sliders },
+                  ].map(({ id, label, icon: Icon }, idx) => (
+                    <button
+                      key={id}
+                      onClick={() => setActiveTab(id as Tab)}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
+                        idx > 0 ? "border-l border-neutral-200" : ""
+                      } ${
+                        activeTab === id
+                          ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                          : "text-neutral-600 hover:bg-neutral-50"
+                      }`}
+                    >
+                      {activeTab === id && <CheckCircle2 className="h-3 w-3 text-[#1967d2]" />}
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
             {/* ── TAB 1: RUN HISTORY ── */}
             {activeTab === "history" && (
@@ -620,6 +650,7 @@ export default function SchedulePage() {
             )}
           </div>
         )}
+        </div>
       </main>
     </div>
   );

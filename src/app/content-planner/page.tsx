@@ -716,39 +716,40 @@ export default function ContentPlannerPage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-[#f8fafc] text-neutral-900 font-sans selection:bg-indigo-500/20">
+    <div className="flex min-h-screen bg-white text-neutral-900 font-sans">
       <Sidebar />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <div className="max-w-[1600px] w-full mx-auto p-6 md:p-8 space-y-8">
+        <div className="max-w-[1600px] w-full mx-auto p-6 md:p-8 space-y-6">
           
           {/* ── TOP HEADER / BREADCRUMBS ── */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-1">
-                <span>Autonomous Studio</span>
-                <span>/</span>
-                <span className="text-neutral-800">Content AI &amp; Editorial</span>
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Content</span>
+                <span className="text-neutral-300">/</span>
+                <span className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">Planner</span>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-neutral-900">
-                Content AI &amp; Article Studio
+              <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
+                Content Planner &amp; Studio
               </h1>
-              <p className="text-xs text-neutral-500 mt-0.5">
+              <p className="text-neutral-500 text-sm mt-1">
                 {currentWebsite
-                  ? `Intent-matched, brand-aligned SEO content generation for ${currentWebsite.domain}.`
+                  ? `Intent-matched, brand-aligned SEO content generation for ${currentWebsite.domain}`
                   : "High-precision SEO article drafting, 16:9 visual generation, and 1-click publishing."}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center overflow-hidden rounded-md border border-neutral-300 bg-white shadow-2xs">
               <button
                 onClick={() => setActiveTab("queue")}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === "queue"
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs"
+                    ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                    : "text-neutral-600 hover:bg-neutral-50"
                 }`}
               >
+                {activeTab === "queue" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
                 <Layers className="w-3.5 h-3.5" />
                 <span>All Articles ({drafts.length})</span>
               </button>
@@ -761,12 +762,13 @@ export default function ContentPlannerPage() {
                   setActiveTab("studio");
                 }}
                 disabled={drafts.length === 0}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                className={`flex items-center gap-1 border-l border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === "studio"
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs disabled:opacity-40"
+                    ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                    : "text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
                 }`}
               >
+                {activeTab === "studio" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
                 <PenLine className="w-3.5 h-3.5" />
                 <span>
                   {selectedDraft ? `Studio (${selectedDraft.working_title.slice(0, 18)}...)` : "Article Studio"}
@@ -775,17 +777,18 @@ export default function ContentPlannerPage() {
 
               <button
                 onClick={() => setActiveTab("rules")}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                className={`flex items-center gap-1 border-l border-neutral-200 px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === "rules"
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-neutral-700 border-neutral-200/80 hover:bg-neutral-50 shadow-xs"
+                    ? "bg-[#e8f0fe] text-[#1967d2] font-semibold"
+                    : "text-neutral-600 hover:bg-neutral-50"
                 }`}
               >
+                {activeTab === "rules" && <Check className="h-3 w-3 text-[#1967d2] stroke-[3]" />}
                 <Settings className="w-3.5 h-3.5" />
                 <span>Publishing Rules</span>
               </button>
             </div>
-          </div>
+          </header>
 
           {/* ── 1-CLICK INSTANT GENERATOR BAR ── */}
           <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
