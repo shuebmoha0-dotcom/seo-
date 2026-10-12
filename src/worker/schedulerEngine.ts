@@ -30,7 +30,8 @@ export class SchedulerEngine {
       } else if (dueTasks && dueTasks.length > 0) {
         for (const task of dueTasks) {
           try {
-            const nextRun = this.computeNextRunTime(task.schedule_type, task.schedule_config, task.timezone);
+            const effectiveFrequency = task.schedule_config?.cadence || task.schedule_type || 'daily';
+            const nextRun = this.computeNextRunTime(effectiveFrequency, task.schedule_config, task.timezone);
 
             // Atomically update task next_run_at and last_run_at
             const { error: updateErr } = await this.supabase
@@ -170,21 +171,28 @@ export class SchedulerEngine {
     const next = new Date();
     const freq = (frequency || 'daily').toLowerCase();
 
-    if (freq === 'every_12_hours') {
+    if (freq === 'continuous' || freq === 'hourly') {
+      next.setHours(next.getHours() + 1);
+    } else if (freq === 'every_2_hours') {
+      next.setHours(next.getHours() + 2);
+    } else if (freq === 'every_6_hours') {
+      next.setHours(next.getHours() + 6);
+    } else if (freq === 'every_12_hours') {
       next.setHours(next.getHours() + 12);
+    } else if (freq === 'twice_weekly') {
+      next.setHours(next.getHours() + 84);
     } else if (freq === 'weekly') {
       next.setDate(next.getDate() + 7);
     } else if (freq === 'monthly') {
       next.setMonth(next.getMonth() + 1);
-    } else if (freq === 'hourly') {
-      next.setHours(next.getHours() + 1);
     } else {
       // Default: daily
       next.setDate(next.getDate() + 1);
     }
 
-    // If a specific time is configured (e.g. "09:00")
-    if (scheduleConfig?.time && typeof scheduleConfig.time === 'string') {
+    // Only apply fixed time-of-day (e.g. "09:00") for daily or longer frequencies
+    const isSubDaily = ['continuous', 'hourly', 'every_2_hours', 'every_6_hours', 'every_12_hours'].includes(freq);
+    if (!isSubDaily && scheduleConfig?.time && typeof scheduleConfig.time === 'string') {
       const [hours, minutes] = scheduleConfig.time.split(':').map((s: string) => parseInt(s, 10));
       if (!isNaN(hours) && !isNaN(minutes)) {
         next.setHours(hours, minutes, 0, 0);

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { hashSecret } from '@/lib/connectors/wordpressOutbound';
 import { encryptCredential } from '@/lib/utils/encryption';
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const normalizedUrl = site_url.replace(/\/+$/, '').toLowerCase();
     const secretHash = hashSecret(secret_key);
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // 1. Resolve website_id or auto-create website for seamless onboarding
     let targetWebsiteId = website_id;

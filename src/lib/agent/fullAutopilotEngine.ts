@@ -7,7 +7,7 @@ import { TelegramService } from '@/lib/telegram/telegramService';
 import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
 import { createWordPressJob } from '@/lib/connectors/wordpressOutbound';
 
-export type AutopilotCadence = 'daily' | 'twice_weekly' | 'weekly';
+export type AutopilotCadence = 'continuous' | 'every_2_hours' | 'every_6_hours' | 'daily' | 'twice_weekly' | 'weekly';
 
 export interface FullAutopilotConfig {
   website_id: string;
@@ -51,6 +51,12 @@ export interface AutonomousCycleResult {
 export class FullAutopilotEngine {
   private static getCadenceIntervalMs(cadence: AutopilotCadence): number {
     switch (cadence) {
+      case 'continuous':
+        return 60 * 60 * 1000; // 1 hour (continuous posting throughout the day)
+      case 'every_2_hours':
+        return 2 * 60 * 60 * 1000; // 2 hours
+      case 'every_6_hours':
+        return 6 * 60 * 60 * 1000; // 6 hours
       case 'daily':
         return 24 * 60 * 60 * 1000; // 24 hours
       case 'twice_weekly':

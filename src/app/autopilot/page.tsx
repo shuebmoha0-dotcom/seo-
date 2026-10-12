@@ -36,7 +36,7 @@ export default function AutopilotPage() {
   const [updatingAutopilot, setUpdatingAutopilot] = useState(false);
   const [runningFullCycle, setRunningFullCycle] = useState(false);
   const [autopilotGoal, setAutopilotGoal] = useState('Grow organic search traffic and establish niche topical authority');
-  const [selectedCadence, setSelectedCadence] = useState<'daily' | 'twice_weekly' | 'weekly'>('twice_weekly');
+  const [selectedCadence, setSelectedCadence] = useState<'continuous' | 'every_2_hours' | 'every_6_hours' | 'daily' | 'twice_weekly' | 'weekly'>('continuous');
   const [autoPublishToggle, setAutoPublishToggle] = useState(true);
   const [autoFixToggle, setAutoFixToggle] = useState(true);
 
@@ -621,25 +621,29 @@ export default function AutopilotPage() {
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
                         <span>Publishing & Optimization Cadence</span>
-                        <span className="text-[10px] text-emerald-600 font-bold">2 Posts / Week Recommended</span>
+                        <span className="text-[10px] text-emerald-600 font-bold">Continuous 24/7 or Custom Frequency</span>
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                         {[
-                          { id: 'daily', label: 'Daily (7/wk)' },
-                          { id: 'twice_weekly', label: 'Twice Weekly (2/wk)' },
-                          { id: 'weekly', label: 'Weekly (1/wk)' },
+                          { id: 'continuous', label: 'Continuous (Hourly)', sub: 'Non-stop' },
+                          { id: 'every_2_hours', label: 'Every 2 Hours', sub: '12/day' },
+                          { id: 'every_6_hours', label: 'Every 6 Hours', sub: '4/day' },
+                          { id: 'daily', label: 'Daily', sub: '1/day' },
+                          { id: 'twice_weekly', label: 'Twice Weekly', sub: '2/wk' },
+                          { id: 'weekly', label: 'Weekly', sub: '1/wk' },
                         ].map((cad) => (
                           <button
                             key={cad.id}
                             type="button"
                             onClick={() => setSelectedCadence(cad.id as any)}
-                            className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all text-center ${
+                            className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center justify-center gap-0.5 ${
                               selectedCadence === cad.id
                                 ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
                                 : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-700 border-neutral-200'
                             }`}
                           >
-                            {cad.label}
+                            <span className="truncate max-w-full">{cad.label}</span>
+                            <span className={`text-[10px] font-normal ${selectedCadence === cad.id ? 'text-indigo-100' : 'text-neutral-400'}`}>{cad.sub}</span>
                           </button>
                         ))}
                       </div>

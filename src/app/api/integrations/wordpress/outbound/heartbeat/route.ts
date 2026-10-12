@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { verifyOutboundRequest } from '@/lib/connectors/wordpressOutbound';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     }
 
     const site = verification.site;
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     let bodyData: any = {};
     try {
