@@ -331,36 +331,8 @@ export default function DashboardPage() {
     return `${days}d ${remHours}h ago`;
   };
 
-  // Process and aggregate chart data according to selected timeRange and interval
+  // Process and aggregate chart data according to selected timeRange and interval (100% empirical live data)
   const { processedChartData, cardTotals } = useMemo(() => {
-    // If 24 hours is selected, use authentic 24-hour hourly dataset matching Google Search Console
-    if (chartTimeRange === '24h') {
-      const hourlyData = [
-        { displayDate: "11 PM\n10/7/26", date: "2026-10-07 23:00", impressions: 28, clicks: 0, ctr: 0, position: 27.2 },
-        { displayDate: "1 AM", date: "2026-10-08 01:00", impressions: 7, clicks: 0, ctr: 0, position: 28.5 },
-        { displayDate: "3 AM", date: "2026-10-08 03:00", impressions: 23, clicks: 0, ctr: 0, position: 27.0 },
-        { displayDate: "5 AM", date: "2026-10-08 05:00", impressions: 11, clicks: 0, ctr: 0, position: 26.5 },
-        { displayDate: "7 AM", date: "2026-10-08 07:00", impressions: 31, clicks: 0, ctr: 0, position: 24.0 },
-        { displayDate: "9 AM", date: "2026-10-08 09:00", impressions: 15, clicks: 0, ctr: 0, position: 25.5 },
-        { displayDate: "11 AM", date: "2026-10-08 11:00", impressions: 15, clicks: 0, ctr: 0, position: 25.5 },
-        { displayDate: "1 PM", date: "2026-10-08 13:00", impressions: 23, clicks: 0, ctr: 0, position: 25.0 },
-        { displayDate: "3 PM", date: "2026-10-08 15:00", impressions: 23, clicks: 0, ctr: 0, position: 25.0 },
-        { displayDate: "5 PM", date: "2026-10-08 17:00", impressions: 10, clicks: 0, ctr: 0, position: 28.0 },
-        { displayDate: "7 PM", date: "2026-10-08 19:00", impressions: 92, clicks: 1, ctr: 1.09, position: 22.0 },
-        { displayDate: "9 PM", date: "2026-10-08 21:00", impressions: 13, clicks: 0, ctr: 0, position: 27.5 },
-      ];
-
-      return {
-        processedChartData: hourlyData,
-        cardTotals: {
-          totalClicks: 1,
-          totalImpressions: 291,
-          avgCtr: "0.3%",
-          avgPos: "26",
-        },
-      };
-    }
-
     if (!chartData || chartData.length === 0) {
       return {
         processedChartData: [],
@@ -373,15 +345,31 @@ export default function DashboardPage() {
 
     // Calculate exact slice based on timeRange from the latest date in the dataset
     let dataToUse: any[] = sorted;
-    if (chartTimeRange === '7d') dataToUse = sorted.slice(-7);
-    else if (chartTimeRange === '28d') dataToUse = sorted.slice(-28);
-    else if (chartTimeRange === '3m') dataToUse = sorted.slice(-90);
-    else if (chartTimeRange === '6m') dataToUse = sorted.slice(-180);
-    else if (chartTimeRange === '16m') dataToUse = sorted.slice(-480);
+    let cardSlice: any[] = sorted;
+
+    if (chartTimeRange === '24h') {
+      cardSlice = sorted.slice(-1); // Most recent 24-hour recorded day in Search Console
+      dataToUse = sorted.slice(-2);  // Plot recent 2-day progression on the chart
+    } else if (chartTimeRange === '7d') {
+      dataToUse = sorted.slice(-7);
+      cardSlice = dataToUse;
+    } else if (chartTimeRange === '28d') {
+      dataToUse = sorted.slice(-28);
+      cardSlice = dataToUse;
+    } else if (chartTimeRange === '3m') {
+      dataToUse = sorted.slice(-90);
+      cardSlice = dataToUse;
+    } else if (chartTimeRange === '6m') {
+      dataToUse = sorted.slice(-180);
+      cardSlice = dataToUse;
+    } else if (chartTimeRange === '16m') {
+      dataToUse = sorted.slice(-480);
+      cardSlice = dataToUse;
+    }
 
     // Empirical metrics matching Google Search Console calculation formulas
-    const totalClicks = dataToUse.reduce((acc, r) => acc + (r.clicks || r.traffic || 0), 0);
-    const totalImpressions = dataToUse.reduce((acc, r) => acc + (r.impressions || 0), 0);
+    const totalClicks = cardSlice.reduce((acc, r) => acc + (r.clicks || r.traffic || 0), 0);
+    const totalImpressions = cardSlice.reduce((acc, r) => acc + (r.impressions || 0), 0);
     const avgCtr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(1) + '%' : '0.0%';
     const avgPos = totalImpressions > 0
       ? (dataToUse.reduce((acc, r) => acc + (r.position || 0) * (r.impressions || 0), 0) / totalImpressions).toFixed(1)
@@ -823,10 +811,10 @@ export default function DashboardPage() {
                                 chartTimeRange === '24h' ? 'cursor-default opacity-85' : 'hover:bg-neutral-50'
                               }`}
                             >
-                              <span>{chartTimeRange === '24h' ? 'Hourly' : chartInterval === 'daily' ? 'Daily' : 'Weekly'}</span>
-                              {chartTimeRange !== '24h' && <ChevronDown className="h-3 w-3 text-neutral-400" />}
+                              <span>{chartInterval === 'weekly' ? 'Weekly' : 'Daily'}</span>
+                              <ChevronDown className="h-3 w-3 text-neutral-400" />
                             </button>
-                            {chartTimeRange !== '24h' && intervalDropdownOpen && (
+                            {intervalDropdownOpen && (
                               <div className="absolute right-0 mt-1 w-28 rounded-md border border-neutral-200 bg-white py-1 shadow-lg z-20 text-xs">
                                 <button
                                   type="button"
