@@ -141,8 +141,22 @@ export class ContentAgent {
 
   // 2. Generate Structured Content Brief (Instant High-Precision Formulation — Zero Serverless Delay)
   async generateBrief(input: ContentInput): Promise<ContentBrief> {
-    const title = input.working_title || `${input.primary_keyword.charAt(0).toUpperCase() + input.primary_keyword.slice(1)}: Practical Action Guide`;
+    // Ensure title is NEVER a bare generic keyword or under 4 words
+    let rawTitle = (input.working_title || '').trim();
+    const words = rawTitle.split(/\s+/).filter(Boolean);
     const cleanKw = input.primary_keyword.replace(/^(?:how to|what is|why)\s+/i, '').trim();
+    const capKw = input.primary_keyword.charAt(0).toUpperCase() + input.primary_keyword.slice(1);
+
+    let title = rawTitle;
+    if (!title || words.length <= 3 || title.toLowerCase() === input.primary_keyword.trim().toLowerCase()) {
+      if (/^(how\s+to|guide|steps|tutorial|process)/i.test(input.primary_keyword)) {
+        title = `${capKw}: A Practical Implementation Guide for B2B Teams`;
+      } else if (/vs|comparison|alternative/i.test(input.primary_keyword)) {
+        title = `${capKw}: Key Differences and Which Strategy Wins`;
+      } else {
+        title = `${capKw} Strategies for Lean Teams: A Practical B2B Playbook`;
+      }
+    }
 
     // Context-aware outline tailored to search intent and topic nature
     const isHowTo = /^(how\s+to|guide|steps|tutorial|process|writing|ways)/i.test(input.primary_keyword) || input.search_intent === 'informational';

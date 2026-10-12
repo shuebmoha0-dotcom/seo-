@@ -519,6 +519,22 @@ export class FullAutopilotEngine {
       // Try candidates sequentially. If one is caught as duplicate or blocked, cleanly advance to the next!
       for (let attempt = 0; attempt < Math.min(candidateGaps.length, 3); attempt++) {
         const candidate = candidateGaps[attempt];
+
+        // Ensure candidate.working_title is NEVER a bare generic keyword or under 4 words
+        let candidateTitle = (candidate.working_title || '').trim();
+        const candWords = candidateTitle.split(/\s+/).filter(Boolean);
+        if (!candidateTitle || candWords.length <= 3 || candidateTitle.toLowerCase() === candidate.keyword.trim().toLowerCase()) {
+          const capKw = candidate.keyword.charAt(0).toUpperCase() + candidate.keyword.slice(1);
+          if (/^(how\s+to|guide|steps|tutorial)/i.test(candidate.keyword)) {
+            candidateTitle = `${capKw}: A Practical Implementation Guide for B2B Teams`;
+          } else if (/vs|comparison|alternative/i.test(candidate.keyword)) {
+            candidateTitle = `${capKw}: Key Differences and Which Strategy Wins`;
+          } else {
+            candidateTitle = `${capKw} Strategies for Lean Teams: A Practical B2B Playbook`;
+          }
+          candidate.working_title = candidateTitle;
+        }
+
         console.log(`[FullAutopilotEngine] Attempting draft for candidate [${attempt + 1}/${candidateGaps.length}]: "${candidate.working_title}" (${candidate.keyword})...`);
 
         // Real-time pre-check against database right before reserving draft ID
@@ -546,7 +562,9 @@ export class FullAutopilotEngine {
             target_audience: 'B2B audience',
             current_version: 1,
             status: 'writing',
-            url_slug: candidate.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            url_slug: (candidate.keyword.split(/\s+/).length >= 3
+              ? candidate.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+              : DuplicateArticleChecker.toSlug(candidate.working_title).slice(0, 50).replace(/-+$/, '')),
             created_at: new Date().toISOString(),
           })
           .select('id')

@@ -301,7 +301,7 @@ export class SiteContentGapDetector {
         schema: z.object({
           gaps: z.array(z.object({
             keyword: z.string(),
-            working_title: z.string(),
+            working_title: z.string().describe('Compelling publication-ready editorial article title, 50-65 chars, NEVER bare generic 1-3 word keyword'),
             target_category: z.string(),
             gap_type: z.enum(['missing_pillar', 'under_served_category', 'comparison_gap', 'how_to_guide', 'buyer_intent']),
             search_intent: z.enum(['informational', 'commercial', 'transactional']),
@@ -333,17 +333,32 @@ ${coveredTitlesSample.length > 0 ? coveredTitlesSample.map(t => `- "${t}"`).join
 ${projectMemory ? `CLIENT BRAND MEMORY:\n${projectMemory.slice(0, 400)}\n` : ''}
 ${projectInstructions ? `Instructions: ${projectInstructions.slice(0, 200)}` : ''}
 
-STRICT TOPIC DIVERSITY & ANTI-REPETITION MANDATE:
+STRICT TOPIC DIVERSITY & EDITORIAL TITLE QUALITY MANDATE:
 1. COMPLETE CATEGORY DIVERSITY: Every single proposed gap MUST belong to a DIFFERENT category or content pillar. NEVER return multiple gaps focused on the same subtopic or category.
 2. ROTATE AWAY FROM SATURATED TOPICS: Look at the ALREADY PUBLISHED ARTICLES. If recent articles heavily cover one concept, all proposed gaps MUST explore the OTHER under-represented or thin categories (${inventory.thinCategories.join(', ') || 'categories with fewer posts'}).
 3. DIVERSIFY SEARCH INTENT: Provide a balanced mix across categories (e.g. one tool review/comparison, one strategic framework, one channel execution guide, one troubleshooting/optimization guide).
-4. ZERO DUPLICATION: Never suggest a topic, angle, or keyword that overlaps with any published article above.`,
+4. ZERO DUPLICATION: Never suggest a topic, angle, or keyword that overlaps with any published article above.
+5. ZERO GENERIC HEAD-TERM TITLES: working_title MUST NEVER be a bare 1-3 word keyword (e.g. NEVER "Lead Generation", "Sales", "Cold Email"). It MUST be a complete, engaging, publication-ready article title (50–65 characters) with a clear practitioner angle, framework, or subtitle (e.g. "B2B Lead Generation Strategies: A Practical Pipeline Playbook for Lean Teams").`,
         prompt: `Generate ${limit} distinct, high-impact CONTENT GAP opportunities spanning DIFFERENT categories and pillars for "${profile?.primaryNiche || inventory.domain}" without cannibalizing existing posts.`
       });
 
-      // Filter out any accidental overlaps using DuplicateArticleChecker
+      // Filter out any accidental overlaps and ensure titles are high-quality editorial titles
       const validatedGaps: ContentGapOpportunity[] = [];
       for (const gap of object.gaps) {
+        let title = (gap.working_title || '').trim();
+        const titleWords = title.split(/\s+/).filter(Boolean);
+        if (!title || titleWords.length <= 3 || title.toLowerCase() === gap.keyword.trim().toLowerCase()) {
+          const kw = gap.keyword.charAt(0).toUpperCase() + gap.keyword.slice(1);
+          if (/^how to/i.test(kw)) {
+            title = `${kw}: A Practical Implementation Guide for B2B Teams`;
+          } else if (/vs|comparison/i.test(kw)) {
+            title = `${kw}: Key Differences and Which Strategy Wins`;
+          } else {
+            title = `${kw} Strategies for Lean Teams: A Practical B2B Playbook`;
+          }
+          gap.working_title = title;
+        }
+
         let isOverlapping = false;
         for (const existingTitle of inventory.coveredTitles) {
           const wordsA = DuplicateArticleChecker.extractCoreWords(gap.working_title);
