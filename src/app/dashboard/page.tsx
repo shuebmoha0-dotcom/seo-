@@ -129,7 +129,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ website_id: currentWebsite.id }),
       });
       if (res.ok) {
-        await fetchDashboardStats();
+        await fetchDashboardStats(true);
       }
     } catch (e) {
       console.error('Failed to sync GSC data:', e);
@@ -138,7 +138,7 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = async (forceSync = false) => {
     if (!currentWebsite) {
       if (!websiteLoading) {
         setStats({
@@ -161,7 +161,8 @@ export default function DashboardPage() {
       if (!stats.tracked_keywords && chartData.length === 0) {
         setLoading(true);
       }
-      const res = await fetch(`/api/dashboard/stats?website_id=${currentWebsite.id}`);
+      const url = `/api/dashboard/stats?website_id=${currentWebsite.id}${forceSync ? '&sync=true' : ''}`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setStats(data.stats);
@@ -348,26 +349,9 @@ export default function DashboardPage() {
     let cardSlice: any[] = sorted;
 
     if (chartTimeRange === '24h') {
-      // Rolling 24-hour window from Google Search Console
-      const isLatestPartial = sorted.length >= 2 && sorted[sorted.length - 1].date === new Date().toISOString().split('T')[0];
-      if (isLatestPartial) {
-        const todayRow = sorted[sorted.length - 1];
-        const yesterdayRow = sorted[sorted.length - 2];
-        const rollingImpressions = Math.max(128, Math.round(yesterdayRow.impressions * 0.75 + todayRow.impressions));
-        const rollingClicks = todayRow.clicks + Math.round(yesterdayRow.clicks * 0.75);
-        const rollingPos = Number(((yesterdayRow.position * 0.75 * yesterdayRow.impressions + todayRow.position * todayRow.impressions) / (yesterdayRow.impressions * 0.75 + todayRow.impressions)).toFixed(1));
-        cardSlice = [{
-          date: todayRow.date,
-          clicks: rollingClicks,
-          impressions: rollingImpressions,
-          position: rollingPos || 22.2,
-          ctr: rollingImpressions > 0 ? (rollingClicks / rollingImpressions) : 0,
-        }];
-        dataToUse = sorted.slice(-2);
-      } else {
-        cardSlice = sorted.slice(-1);
-        dataToUse = sorted.slice(-2);
-      }
+      // Most recent date recorded by Google Search Console
+      cardSlice = sorted.slice(-1);
+      dataToUse = sorted.slice(-7);
     } else if (chartTimeRange === '7d') {
       dataToUse = sorted.slice(-7);
       cardSlice = dataToUse;
@@ -395,59 +379,7 @@ export default function DashboardPage() {
 
     let processed: any[] = [];
 
-    if (chartTimeRange === '24h') {
-      // 24-hour Hourly progression matching Google Search Console Hourly distribution
-      const hourlyDistribution = [
-        { hour: '6 PM', impressions: 11, clicks: 0, position: 20.4 },
-        { hour: '8 PM', impressions: 4, clicks: 0, position: 22.1 },
-        { hour: '10 PM', impressions: 9, clicks: 0, position: 21.8 },
-        { hour: '12 AM', impressions: 3, clicks: 0, position: 23.5 },
-        { hour: '2 AM', impressions: 4, clicks: 0, position: 23.0 },
-        { hour: '4 AM', impressions: 12, clicks: 0, position: 19.8 },
-        { hour: '6 AM', impressions: 5, clicks: 0, position: 21.2 },
-        { hour: '8 AM', impressions: 18, clicks: 0, position: 18.6 },
-        { hour: '10 AM', impressions: 14, clicks: 0, position: 20.3 },
-        { hour: '12 PM', impressions: 7, clicks: 0, position: 24.2 },
-        { hour: '2 PM', impressions: 11, clicks: 0, position: 23.1 },
-        { hour: '4 PM', impressions: 8, clicks: 0, position: 25.4 },
-      ];
-      const rawSum = hourlyDistribution.reduce((a, b) => a + b.impressions, 0);
-      const targetTotal = totalImpressions || 128;
-      processed = hourlyDistribution.map((h) => {
-        const scaledImp = Math.round((h.impressions / rawSum) * targetTotal);
-        return {
-          date: h.hour,
-          displayDate: h.hour,
-          clicks: 0,
-          impressions: scaledImp,
-          ctr: 0,
-          position: h.position,
-        };
-      });
-      const currentSum = processed.reduce((a, b) => a + b.impressions, 0);
-      if (processed.length > 0 && currentSum !== targetTotal) {
-        processed[processed.length - 1].impressions += (targetTotal - currentSum);
-      }
-    } else if (chartInterval === 'daily') {
-      processed = dataToUse.map((item) => {
-        const parts = (item.date || '').split('-');
-        let formatted = item.date;
-        if (parts.length === 3) {
-          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          if (!isNaN(d.getTime())) {
-            formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          }
-        }
-        return {
-          ...item,
-          clicks: item.clicks ?? item.traffic ?? 0,
-          impressions: item.impressions ?? 0,
-          ctr: item.ctr ?? (item.impressions > 0 ? Number(((item.clicks / item.impressions) * 100).toFixed(2)) : 0),
-          position: item.position ?? 0,
-          displayDate: formatted,
-        };
-      });
-    } else {
+    if (chartInterval === 'weekly') {
       // Weekly grouping
       const weeklyMap: Record<string, any> = {};
 
@@ -489,6 +421,26 @@ export default function DashboardPage() {
         ctr: w.impressions > 0 ? Number(((w.clicks / w.impressions) * 100).toFixed(2)) : 0,
         position: w.impressions > 0 ? Number((w.weightedPos / w.impressions).toFixed(1)) : 0,
       })).sort((a, b) => (a.date > b.date ? 1 : -1));
+    } else {
+      // Daily empirical data matching Google Search Console exactly
+      processed = dataToUse.map((item) => {
+        const parts = (item.date || '').split('-');
+        let formatted = item.date;
+        if (parts.length === 3) {
+          const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(d.getTime())) {
+            formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          }
+        }
+        return {
+          ...item,
+          clicks: item.clicks ?? item.traffic ?? 0,
+          impressions: item.impressions ?? 0,
+          ctr: item.ctr ?? (item.impressions > 0 ? Number(((item.clicks / item.impressions) * 100).toFixed(2)) : 0),
+          position: item.position ?? 0,
+          displayDate: formatted,
+        };
+      });
     }
 
     return {
@@ -853,16 +805,10 @@ export default function DashboardPage() {
                           <div className="relative">
                             <button
                               type="button"
-                              onClick={() => {
-                                if (chartTimeRange !== '24h') {
-                                  setIntervalDropdownOpen(!intervalDropdownOpen);
-                                }
-                              }}
-                              className={`inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-2xs ${
-                                chartTimeRange === '24h' ? 'cursor-default opacity-85' : 'hover:bg-neutral-50'
-                              }`}
+                              onClick={() => setIntervalDropdownOpen(!intervalDropdownOpen)}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50"
                             >
-                              <span>{chartTimeRange === '24h' ? 'Hourly' : (chartInterval === 'weekly' ? 'Weekly' : 'Daily')}</span>
+                              <span>{chartInterval === 'weekly' ? 'Weekly' : 'Daily'}</span>
                               <ChevronDown className="h-3 w-3 text-neutral-400" />
                             </button>
                             {intervalDropdownOpen && (

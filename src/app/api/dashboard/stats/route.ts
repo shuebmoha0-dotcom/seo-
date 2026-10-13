@@ -133,8 +133,12 @@ export async function GET(request: Request) {
     let finalGscRows = gscRows || [];
     const isGscConnected = gscIntegration?.status === 'connected';
 
-    // If Search Console is connected but table is empty, auto-sync once in background
-    if (isGscConnected && finalGscRows.length === 0) {
+    // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, or explicitly requested
+    const lastSyncTime = gscIntegration?.last_synced_at ? new Date(gscIntegration.last_synced_at).getTime() : 0;
+    const isStale = Date.now() - lastSyncTime > 5 * 60 * 1000;
+    const forceSync = searchParams.get('sync') === 'true';
+
+    if (isGscConnected && (isStale || forceSync || finalGscRows.length === 0)) {
       try {
         const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
         await syncSearchConsoleData(websiteId);
