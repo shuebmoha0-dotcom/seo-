@@ -263,6 +263,36 @@ export async function createWordPressJob(params: {
     if (typeof payload.content === 'string' && payload.content.length > 0) {
       const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(payload.content);
       payload.content = repairedHtml;
+
+      // If featured_image_url not provided, extract the first hero image from content
+      if (!payload.featured_image_url && !payload.featured_media) {
+        const mdImg = payload.content.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+        const htmlImg = payload.content.match(/<img[^>]+src=["']([^"']+)["']/i);
+        if (mdImg) {
+          payload.featured_image_url = mdImg[1];
+        } else if (htmlImg) {
+          payload.featured_image_url = htmlImg[1];
+        }
+      }
+    }
+
+    // Pre-encode remote HTTP featured image as base64 Data URI to eliminate remote cURL failures on WordPress hosts
+    if (
+      payload.featured_image_url &&
+      typeof payload.featured_image_url === 'string' &&
+      payload.featured_image_url.startsWith('http') &&
+      !payload.featured_media
+    ) {
+      try {
+        const imgRes = await fetch(payload.featured_image_url, { signal: AbortSignal.timeout(5000) });
+        if (imgRes.ok) {
+          const contentType = imgRes.headers.get('content-type') || 'image/webp';
+          const buffer = await imgRes.arrayBuffer();
+          payload.featured_image_url = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+        }
+      } catch (imgErr) {
+        // Non-blocking: poll endpoint will retry conversion at worker claim time
+      }
     }
   }
 

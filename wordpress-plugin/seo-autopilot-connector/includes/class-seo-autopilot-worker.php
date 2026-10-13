@@ -171,6 +171,40 @@ class SEO_Autopilot_Worker {
                 set_post_thumbnail($post_id, $attach_id);
                 return $attach_id;
             }
+
+            // Fallback: direct remote GET and wp_upload_bits if media_sideload_image fails
+            $response = wp_remote_get($img_url, array('timeout' => 15, 'sslverify' => false));
+            if (!is_wp_error($response) && wp_remote_retrieve_response_code($response) === 200) {
+                $body = wp_remote_retrieve_body($response);
+                if (!empty($body)) {
+                    $ext = 'webp';
+                    if (preg_match('/\.([a-zA-Z0-9]+)(?:\?|$)/', $img_url, $ext_m)) {
+                        $ext = strtolower($ext_m[1]);
+                    }
+                    $filename = 'featured-' . $post_id . '-' . substr(md5(uniqid()), 0, 6) . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+                    $upload = wp_upload_bits($filename, null, $body);
+                    if (empty($upload['error']) && !empty($upload['file'])) {
+                        $wp_filetype = wp_check_filetype($filename, null);
+                        $attachment = array(
+                            'post_mime_type' => $wp_filetype['type'] ?: 'image/' . $ext,
+                            'post_title'     => sanitize_file_name($title),
+                            'post_content'   => '',
+                            'post_status'    => 'inherit'
+                        );
+                        $attach_id = wp_insert_attachment($attachment, $upload['file'], $post_id);
+                        if (!function_exists('wp_generate_attachment_metadata')) {
+                            require_once ABSPATH . 'wp-admin/includes/image.php';
+                        }
+                        if ($attach_id && !is_wp_error($attach_id)) {
+                            $attach_data = wp_generate_attachment_metadata($attach_id, $upload['file']);
+                            wp_update_attachment_metadata($attach_id, $attach_data);
+                            update_post_meta($attach_id, '_wp_attachment_image_alt', $alt);
+                            set_post_thumbnail($post_id, $attach_id);
+                            return (int)$attach_id;
+                        }
+                    }
+                }
+            }
         }
 
         return 0;

@@ -111,13 +111,36 @@ export async function POST(request: Request) {
       });
     }
 
+    const jobPayload = { ...(claimedJob.payload || {}) };
+
+    // GUARANTEE FEATURED IMAGES: If job payload has a remote HTTP featured_image_url and no direct featured_media,
+    // convert it to a Base64 Data URI on our high-speed server. This triggers WordPress plugin Case A (local wp_upload_bits)
+    // and eliminates failure on shared hosts (like Hostinger) that block or fail outbound cURL requests in media_sideload_image.
+    if (
+      jobPayload.featured_image_url &&
+      typeof jobPayload.featured_image_url === 'string' &&
+      jobPayload.featured_image_url.startsWith('http') &&
+      !jobPayload.featured_media
+    ) {
+      try {
+        const imgRes = await fetch(jobPayload.featured_image_url, { signal: AbortSignal.timeout(6000) });
+        if (imgRes.ok) {
+          const contentType = imgRes.headers.get('content-type') || 'image/webp';
+          const buffer = await imgRes.arrayBuffer();
+          jobPayload.featured_image_url = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+        }
+      } catch (imgErr) {
+        console.warn(`[Outbound Poll] Failed to inline featured image for job ${claimedJob.id}:`, imgErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       has_job: true,
       job: {
         id: claimedJob.id,
         job_type: claimedJob.job_type,
-        payload: claimedJob.payload,
+        payload: jobPayload,
         created_at: claimedJob.created_at,
       },
     });
