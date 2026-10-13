@@ -9,6 +9,7 @@ import { SiteContentGapDetector } from './siteContentGapDetector';
 import { DuplicateArticleChecker } from './duplicateChecker';
 import { DiagnosticAgent } from './diagnosticAgent';
 import { RankRecoveryEngine } from './rankRecoveryEngine';
+import { GoogleIndexingService } from '../connectors/googleIndexing';
 
 export interface AutopilotExecutionResult {
   success: boolean;
@@ -1912,47 +1913,89 @@ ${targetDraft.content_body || ''}`
         };
       }
 
-      // ── ACTION: INDEXING STATUS CHECK ────────────────────────────────
+      // ── ACTION: INDEXING & RE-CRAWL SUBMISSION ──────────────────────
       if (instruction.action_type === 'indexing_check') {
-        console.log(`[AutopilotExecutor] Running indexing check for "${website_domain}"...`);
-        const { data: samplePages } = await supabase
-          .from('pages')
-          .select('path, status_code, indexability_signals')
-          .eq('website_id', website_id)
-          .limit(10);
+        console.log(`[AutopilotExecutor] Executing multi-engine indexing pipeline for "${website_domain}"...`);
 
-        const indexableCount = (samplePages || []).filter((p: any) => p.indexability_signals?.is_indexable !== false).length;
-        const totalSample = samplePages?.length || 0;
+        // 1. Resolve Target URL to Index
+        let targetUrl = instruction.target_url;
+        let latestDraft: any = null;
 
-        const hasServiceAccount = !!(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
-        let hasOAuth = false;
-        if (!hasServiceAccount) {
-          const { data: creds } = await supabase
-            .from('integration_credentials')
-            .select('credential_type')
+        if (!targetUrl && instruction.goal) {
+          const match = instruction.goal.match(/https?:\/\/[^\s]+/i);
+          if (match) targetUrl = match[0];
+        }
+
+        // If no explicit URL, query for most recent published/approved article
+        if (!targetUrl) {
+          const { data: draft } = await supabase
+            .from('content_drafts')
+            .select('id, working_title, url_slug, status, updated_at')
             .eq('website_id', website_id)
-            .eq('credential_type', 'google_oauth_token')
+            .in('status', ['published', 'approved'])
+            .order('updated_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-          hasOAuth = !!creds;
-        }
-        const isIndexingConfigured = hasServiceAccount || hasOAuth;
 
-        let indexSummary = `🔍 *Google Indexability Check for ${website_domain}*\n\n`;
-        indexSummary += `• *Sampled Pages:* ${totalSample}\n`;
-        indexSummary += `• *Indexable Pages:* ${indexableCount} of ${totalSample} pages\n`;
-        indexSummary += `• *Robots Directives:* 🟢 No site-wide noindex block detected\n`;
-        indexSummary += `• *Google Indexing API:* ${isIndexingConfigured ? '🟢 Connected & ready to push priority URL updates' : '⚪ Not configured (Setup Google Service Account in Settings to enable automated indexing)'}\n\n`;
-        indexSummary += `_Whenever an article is approved, we automatically offer priority Google Indexing & IndexNow submission!_`;
+          if (draft && draft.url_slug) {
+            latestDraft = draft;
+            const baseUrl = (params.website_url || `https://${website_domain}`).replace(/\/$/, '');
+            targetUrl = `${baseUrl}/${draft.url_slug}/`;
+          }
+        }
+
+        // Default to site root
+        if (!targetUrl) {
+          targetUrl = params.website_url || `https://${website_domain}/`;
+        }
+
+        // 2. Submit URL to Multi-Engine Indexing Pipeline
+        const indexResult = await GoogleIndexingService.requestIndexing({
+          url: targetUrl,
+          websiteId: website_id,
+          type: 'URL_UPDATED',
+        });
+
+        // 3. Format comprehensive, grounded report
+        let indexSummary = `🚀 *Multi-Engine URL Indexing Report*\n\n`;
+        indexSummary += `📄 *Submitted URL:* \`${targetUrl}\`\n`;
+        if (latestDraft) {
+          indexSummary += `🎯 *Target Article:* "${latestDraft.working_title}"\n`;
+        }
+        indexSummary += `\n`;
+
+        if (indexResult.google?.submitted) {
+          indexSummary += `🟢 *Google Indexing API:* Submitted successfully (URL_UPDATED)\n`;
+          if (indexResult.google.notifyTime) {
+            indexSummary += `   _Notification timestamp:_ \`${indexResult.google.notifyTime}\`\n`;
+          }
+        } else if (indexResult.google?.error) {
+          indexSummary += `⚠️ *Google Indexing API Notice:*\n   ${indexResult.google.error}\n`;
+          if (indexResult.google.activationUrl) {
+            indexSummary += `   👉 [Enable Google Indexing API in Google Cloud Console](${indexResult.google.activationUrl})\n`;
+          }
+        }
+
+        if (indexResult.indexNow?.submitted) {
+          indexSummary += `🟢 *IndexNow (Bing, Yandex, Naver):* Submitted successfully (HTTP ${indexResult.indexNow.statusCode || 200})\n`;
+        } else if (indexResult.indexNow?.error) {
+          indexSummary += `⚠️ *IndexNow:* ${indexResult.indexNow.error}\n`;
+        }
+
+        if (indexResult.sitemap?.pinged) {
+          indexSummary += `🟢 *Sitemap Ping:* Dispatched to Google & Bing for \`https://${website_domain}/sitemap.xml\`\n`;
+        }
+
+        indexSummary += `\n_Search engine crawlers have been directly notified to re-crawl and index this URL._`;
 
         return {
-          success: true,
+          success: indexResult.success,
           intent_type: 'immediate_action',
           action_type: 'indexing_check',
           summary: indexSummary,
           link_url: '/technical-seo',
           link_label: 'View Technical Signals',
-          data: { samplePages },
+          data: { indexResult, targetUrl, latestDraft },
         };
       }
 

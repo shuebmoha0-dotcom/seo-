@@ -1017,6 +1017,21 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'edit_article';
       }
 
+      // Route indexing requests directly to indexing_check to execute live multi-engine submission
+      const isIndexingRequest = /^(index|indexing|request\s+indexing|submit\s+for\s+indexing)\b/i.test(taskPrompt.trim()) ||
+        /(is.*(site|url|page).*indexed|check.*index(ing)?|submit.*(google|index(ing)?)|request.*index(ing)?|index\s+(this|my|the|it|url|page|site|article|post|https?))/i.test(taskPrompt) ||
+        /\b(index|indexing)\s+(now|url|link|page|post|article|site)\b/i.test(taskPrompt) ||
+        /\b(request(ed)?\s+(the\s+)?bot\s+for\s+indexing|bot\s+for\s+indexing)\b/i.test(taskPrompt) ||
+        /^index$/i.test(taskPrompt.trim());
+      if (isIndexingRequest) {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'indexing_check';
+        const urlMatch = taskPrompt.match(/https?:\/\/[^\s]+/i);
+        if (urlMatch) {
+          parsed.target_url = urlMatch[0];
+        }
+      }
+
       // E. Conversational Response (Greetings, Questions, Explanations)
       if (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question') {
         let answer = parsed.response_message;
@@ -1150,6 +1165,12 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         await telegram.sendMessage(
           chatId,
           `✏️ *Applying edits to:* "${parsed.goal}" for \`${currentSite.domain}\`... ⏳`,
+          { parse_mode: 'Markdown' }
+        );
+      } else if (parsed.action_type === 'indexing_check') {
+        await telegram.sendMessage(
+          chatId,
+          `🚀 *Instant Indexing Pipeline Activated for \`${currentSite.domain}\`...* ⏳\n\nSubmitting to Google Indexing API, IndexNow (Bing/Yandex), and search engine re-crawl bots...`,
           { parse_mode: 'Markdown' }
         );
       } else {

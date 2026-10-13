@@ -325,13 +325,19 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
       };
     }
 
-    // F. Indexing Status & Google Search Console Verification
-    if (/(is.*(site|url|page).*indexed|check.*index(ing)?|submit.*google|request.*index(ing)?)/i.test(lower)) {
+    // F. Indexing Status & Search Engine Indexing Submission
+    const isIndexing = /^(index|indexing|request\s+indexing|submit\s+for\s+indexing)\b/i.test(lower) ||
+      /(is.*(site|url|page).*indexed|check.*index(ing)?|submit.*(google|index(ing)?)|request.*index(ing)?|index\s+(this|my|the|it|url|page|site|article|post|https?))/i.test(lower) ||
+      /\b(index|indexing)\s+(now|url|link|page|post|article|site)\b/i.test(lower) ||
+      /^index$/i.test(lower);
+    if (isIndexing) {
+      const urlMatch = prompt.match(/https?:\/\/[^\s]+/i);
       return {
         intent_type: 'immediate_action',
         action_type: 'indexing_check',
         goal: prompt,
-        summary: `Check Google indexing signals and request priority re-crawl for ${domain}`,
+        target_url: urlMatch ? urlMatch[0] : undefined,
+        summary: `Submit URL to Google Indexing API & IndexNow for ${domain}`,
       };
     }
 

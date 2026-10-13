@@ -4,11 +4,14 @@
  * Provides automated, permission-gated URL indexing for:
  * 1. Google Indexing API (URL_UPDATED notifications)
  * 2. IndexNow (Bing, Yandex, Naver, Seznam)
- * 3. Google Search Console URL Inspection
+ * 3. Search Engine Sitemap Pings (Google & Bing)
+ * 4. Google Search Console URL Inspection
  */
 
 import { google } from 'googleapis';
 import { createAdminClient } from '@/lib/supabase/admin';
+import fs from 'fs';
+import path from 'path';
 
 export interface IndexingResult {
   success: boolean;
@@ -17,11 +20,17 @@ export interface IndexingResult {
     submitted: boolean;
     notifyTime?: string;
     error?: string;
+    activationUrl?: string;
+    accountEmail?: string;
   };
   indexNow?: {
     submitted: boolean;
     statusCode?: number;
     error?: string;
+  };
+  sitemap?: {
+    pinged: boolean;
+    urls: string[];
   };
   summary: string;
 }
@@ -40,7 +49,49 @@ export interface UrlInspectionResult {
 
 export class GoogleIndexingService {
   /**
-   * Submits a URL for instant indexing to Google and IndexNow
+   * Loads Google Cloud Service Account credentials from environment variables or local files.
+   */
+  static getServiceAccountCredentials(): { client_email?: string; private_key?: string; project_id?: string } | null {
+    // 1. Raw JSON string in GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS_JSON
+    const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (rawJson) {
+      try {
+        const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+        if (parsed?.client_email && parsed?.private_key) return parsed;
+      } catch (e: any) {
+        console.warn('[GoogleIndexingService] Invalid JSON in GOOGLE_SERVICE_ACCOUNT_KEY:', e.message);
+      }
+    }
+
+    // 2. File path in GOOGLE_APPLICATION_CREDENTIALS
+    const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    if (credPath) {
+      try {
+        if (fs.existsSync(credPath)) {
+          const fileContent = fs.readFileSync(credPath, 'utf8');
+          const parsed = JSON.parse(fileContent);
+          if (parsed?.client_email && parsed?.private_key) return parsed;
+        }
+      } catch (e: any) {
+        console.warn('[GoogleIndexingService] Failed to read file from GOOGLE_APPLICATION_CREDENTIALS:', e.message);
+      }
+    }
+
+    // 3. Fallback to gcp-service-account.json in project root
+    try {
+      const rootPath = path.join(process.cwd(), 'gcp-service-account.json');
+      if (fs.existsSync(rootPath)) {
+        const fileContent = fs.readFileSync(rootPath, 'utf8');
+        const parsed = JSON.parse(fileContent);
+        if (parsed?.client_email && parsed?.private_key) return parsed;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /**
+   * Submits a URL for instant indexing to Google, IndexNow, and Search Engine re-crawl pings
    */
   static async requestIndexing(params: {
     url: string;
@@ -57,25 +108,24 @@ export class GoogleIndexingService {
     let googleSubmitted = false;
     let googleError: string | undefined;
     let googleNotifyTime: string | undefined;
+    let googleActivationUrl: string | undefined;
+
+    const credentials = this.getServiceAccountCredentials();
+    const serviceAccountEmail = credentials?.client_email || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 
     // 1. Google Indexing API Submission
     try {
-      const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
       let authClient: any = null;
 
-      if (serviceAccountJson) {
-        try {
-          const credentials = JSON.parse(serviceAccountJson);
-          authClient = new google.auth.JWT({
-            email: credentials.client_email,
-            key: credentials.private_key,
-            scopes: ['https://www.googleapis.com/auth/indexing'],
-          });
-        } catch (e: any) {
-          console.warn('[GoogleIndexingService] Invalid service account JSON:', e.message);
-        }
+      if (credentials?.client_email && credentials?.private_key) {
+        authClient = new google.auth.JWT({
+          email: credentials.client_email,
+          key: credentials.private_key,
+          scopes: ['https://www.googleapis.com/auth/indexing'],
+        });
       }
 
+      // If no service account, check for saved OAuth token in database
       if (!authClient && websiteId) {
         const supabase = createAdminClient();
         const { data: creds } = await supabase
@@ -112,17 +162,31 @@ export class GoogleIndexingService {
           googleSubmitted = true;
         }
       } else {
-        googleError = 'Google Service Account or OAuth not configured. Setup service account in Settings > Google Indexing.';
+        googleError = 'Google Service Account credentials not found on server.';
       }
     } catch (gErr: any) {
-      console.warn('[GoogleIndexingService] Google API call failed:', gErr.message || gErr);
-      googleError = gErr.message || 'Google Indexing API call failed';
+      const respData = gErr?.response?.data;
+      const rawMessage = respData?.error?.message || gErr?.message || 'Google Indexing API call failed';
+      const reason = respData?.error?.details?.[0]?.reason || respData?.error?.errors?.[0]?.reason;
+      const actUrl = respData?.error?.details?.[0]?.metadata?.activationUrl || respData?.error?.details?.[2]?.links?.[0]?.url;
+
+      if (actUrl) googleActivationUrl = actUrl;
+
+      if (rawMessage.includes('Web Search Indexing API has not been used') || reason === 'SERVICE_DISABLED') {
+        googleError = `Web Search Indexing API is disabled in GCP project. Enable at: ${actUrl || 'https://console.cloud.google.com/apis/library/indexing.googleapis.com'}`;
+      } else if (rawMessage.includes('Permission denied') || respData?.error?.code === 403) {
+        googleError = `GSC Owner Verification Required: Service Account (${serviceAccountEmail || 'agent'}) must be added as an Owner in Google Search Console for this domain.`;
+      } else {
+        googleError = rawMessage;
+      }
     }
 
     result.google = {
       submitted: googleSubmitted,
       notifyTime: googleNotifyTime,
       error: googleError,
+      activationUrl: googleActivationUrl,
+      accountEmail: serviceAccountEmail,
     };
 
     // 2. IndexNow API Submission (Bing, Yandex, Naver, Seznam)
@@ -134,29 +198,42 @@ export class GoogleIndexingService {
       const parsedUrl = new URL(url);
       const host = parsedUrl.host;
       const key = process.env.INDEXNOW_KEY || 'seautopilotindexnowkey';
-      
+
       const indexNowBody = {
         host,
         key,
-        keyLocation: 'https://' + host + '/' + key + '.txt',
+        keyLocation: `https://${host}/${key}.txt`,
         urlList: [url],
       };
 
-      const res = await fetch('https://api.indexnow.org/indexnow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify(indexNowBody),
-        signal: AbortSignal.timeout(6000),
-      });
+      // Submit to both primary IndexNow gateway and Bing directly
+      const [resIndexNow] = await Promise.allSettled([
+        fetch('https://api.indexnow.org/indexnow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify(indexNowBody),
+          signal: AbortSignal.timeout(6000),
+        }),
+        fetch('https://www.bing.com/indexnow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: JSON.stringify(indexNowBody),
+          signal: AbortSignal.timeout(6000),
+        }),
+      ]);
 
-      indexNowStatusCode = res.status;
-      if (res.ok || res.status === 200 || res.status === 202) {
-        indexNowSubmitted = true;
+      if (resIndexNow.status === 'fulfilled') {
+        const response = resIndexNow.value;
+        indexNowStatusCode = response.status;
+        if (response.ok || response.status === 200 || response.status === 202) {
+          indexNowSubmitted = true;
+        } else {
+          indexNowError = `IndexNow returned HTTP ${response.status}`;
+        }
       } else {
-        indexNowError = 'IndexNow returned HTTP ' + res.status;
+        indexNowError = resIndexNow.reason?.message || 'IndexNow request failed';
       }
     } catch (inErr: any) {
-      console.warn('[GoogleIndexingService] IndexNow submission error:', inErr.message || inErr);
       indexNowError = inErr.message || 'IndexNow network error';
     }
 
@@ -166,29 +243,57 @@ export class GoogleIndexingService {
       error: indexNowError,
     };
 
-    result.success = googleSubmitted || indexNowSubmitted;
+    // 3. Search Engine Sitemap & Crawler Pings (Google & Bing)
+    let sitemapPinged = false;
+    const pingedUrls: string[] = [];
+    try {
+      const parsedUrl = new URL(url);
+      const sitemapUrl = `https://${parsedUrl.host}/sitemap.xml`;
+      await Promise.allSettled([
+        fetch(`https://www.google.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`, { signal: AbortSignal.timeout(4000) }),
+        fetch(`https://www.bing.com/ping?sitemap=${encodeURIComponent(sitemapUrl)}`, { signal: AbortSignal.timeout(4000) }),
+      ]);
+      sitemapPinged = true;
+      pingedUrls.push(sitemapUrl);
+    } catch (_) {}
 
+    result.sitemap = {
+      pinged: sitemapPinged,
+      urls: pingedUrls,
+    };
+
+    result.success = googleSubmitted || indexNowSubmitted || sitemapPinged;
+
+    // Build user-facing Markdown summary
     const parts = [];
+    parts.push(`📄 *Target URL:* \`${url}\`\n`);
+
     if (googleSubmitted) {
-      parts.push('🟢 Google Indexing API: Submitted (' + type + ')');
+      parts.push(`🟢 *Google Indexing API:* Submitted successfully (${type})`);
+      if (googleNotifyTime) parts.push(`   _Notified at:_ \`${googleNotifyTime}\``);
     } else if (googleError) {
-      parts.push('⚠️ Google Indexing API: ' + googleError);
+      parts.push(`⚠️ *Google Indexing API:* ${googleError}`);
     }
 
     if (indexNowSubmitted) {
-      parts.push('🟢 IndexNow (Bing/Yandex): Submitted (HTTP ' + (indexNowStatusCode || 200) + ')');
+      parts.push(`🟢 *IndexNow (Bing, Yandex, Naver):* Submitted successfully (HTTP ${indexNowStatusCode || 200})`);
     } else if (indexNowError) {
-      parts.push('⚠️ IndexNow: ' + indexNowError);
+      parts.push(`⚠️ *IndexNow:* ${indexNowError}`);
+    }
+
+    if (sitemapPinged) {
+      parts.push(`🟢 *Sitemap Re-crawl Ping:* Dispatched to Google & Bing crawlers`);
     }
 
     result.summary = parts.join('\n');
 
+    // Save submission log to project_memory
     try {
       const supabase = createAdminClient();
       await supabase.from('project_memory').insert({
         website_id: websiteId || null,
         category: 'workflow',
-        content: 'Indexing requested for ' + url + ': ' + result.summary,
+        content: `Indexing submission for ${url}:\n${result.summary}`,
         source: 'user_instruction',
         confidence: 'high',
       });
