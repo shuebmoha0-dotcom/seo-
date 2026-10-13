@@ -7,13 +7,14 @@ import { TelegramService } from '@/lib/telegram/telegramService';
 import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
 import { createWordPressJob } from '@/lib/connectors/wordpressOutbound';
 
-export type AutopilotCadence = 'continuous' | 'every_2_hours' | 'every_6_hours' | 'daily' | 'twice_weekly' | 'weekly';
+export type AutopilotCadence = 'daily' | 'every_2_days' | 'twice_weekly' | 'weekly';
 
 export interface FullAutopilotConfig {
   website_id: string;
   enabled: boolean;
   goal: string;
   cadence: AutopilotCadence;
+  max_daily_articles: number;
   auto_publish: boolean;
   auto_fix_technical: boolean;
   last_run_at: string | null;
@@ -49,21 +50,19 @@ export interface AutonomousCycleResult {
 }
 
 export class FullAutopilotEngine {
-  private static getCadenceIntervalMs(cadence: AutopilotCadence): number {
+  private static getCadenceIntervalMs(cadence: AutopilotCadence | string): number {
     switch (cadence) {
-      case 'continuous':
-        return 60 * 60 * 1000; // 1 hour (continuous posting throughout the day)
-      case 'every_2_hours':
-        return 2 * 60 * 60 * 1000; // 2 hours
-      case 'every_6_hours':
-        return 6 * 60 * 60 * 1000; // 6 hours
-      case 'daily':
-        return 24 * 60 * 60 * 1000; // 24 hours
+      case 'weekly':
+        return 7 * 24 * 60 * 60 * 1000; // 7 days
       case 'twice_weekly':
         return 84 * 60 * 60 * 1000; // 3.5 days
-      case 'weekly':
+      case 'every_2_days':
+        return 48 * 60 * 60 * 1000; // 48 hours
+      case 'daily':
       default:
-        return 7 * 24 * 60 * 60 * 1000; // 7 days
+        // HARD SAFETY FLOOR: Minimum interval is 24 hours. Sub-daily cadences (e.g. continuous/hourly)
+        // are strictly clamped to at least 24 hours to prevent runaway loops and token drain.
+        return 24 * 60 * 60 * 1000; // 24 hours
     }
   }
 
@@ -112,7 +111,8 @@ export class FullAutopilotEngine {
       website_id: websiteId,
       enabled: false,
       goal: 'Grow organic search traffic and establish niche topical authority',
-      cadence: 'twice_weekly',
+      cadence: 'daily',
+      max_daily_articles: 1,
       auto_publish: true,
       auto_fix_technical: true,
       last_run_at: null,
@@ -128,11 +128,19 @@ export class FullAutopilotEngine {
     if (!task) return defaultConfig;
 
     const rawConfig = task.schedule_config || {};
+    let safeCadence: AutopilotCadence = 'daily';
+    const rawCadence = (rawConfig.cadence || '').toLowerCase();
+    if (rawCadence === 'weekly') safeCadence = 'weekly';
+    else if (rawCadence === 'twice_weekly') safeCadence = 'twice_weekly';
+    else if (rawCadence === 'every_2_days') safeCadence = 'every_2_days';
+    else safeCadence = 'daily';
+
     return {
       website_id: websiteId,
       enabled: task.status === 'active',
       goal: rawConfig.goal || defaultConfig.goal,
-      cadence: (rawConfig.cadence as AutopilotCadence) || 'twice_weekly',
+      cadence: safeCadence,
+      max_daily_articles: rawConfig.max_daily_articles || 1,
       auto_publish: rawConfig.auto_publish !== false,
       auto_fix_technical: rawConfig.auto_fix_technical !== false,
       last_run_at: task.last_run_at || null,
@@ -155,13 +163,21 @@ export class FullAutopilotEngine {
     website_id: string;
     goal?: string;
     cadence?: AutopilotCadence;
+    max_daily_articles?: number;
     auto_publish?: boolean;
     auto_fix_technical?: boolean;
     trigger_first_cycle_now?: boolean;
   }): Promise<FullAutopilotConfig> {
     const supabase = createAdminClient();
-    const cadence = params.cadence || 'twice_weekly';
-    const intervalMs = this.getCadenceIntervalMs(cadence);
+
+    let safeCadence: AutopilotCadence = 'daily';
+    const rawCadence = (params.cadence || 'daily').toLowerCase();
+    if (rawCadence === 'weekly') safeCadence = 'weekly';
+    else if (rawCadence === 'twice_weekly') safeCadence = 'twice_weekly';
+    else if (rawCadence === 'every_2_days') safeCadence = 'every_2_days';
+    else safeCadence = 'daily';
+
+    const intervalMs = this.getCadenceIntervalMs(safeCadence);
     const nextRunAt = new Date(Date.now() + intervalMs).toISOString();
 
     const { data: website } = await supabase
@@ -213,7 +229,8 @@ export class FullAutopilotEngine {
     const updatedConfig = {
       ...existingConfig,
       full_autopilot: true,
-      cadence,
+      cadence: safeCadence,
+      max_daily_articles: params.max_daily_articles || existingConfig.max_daily_articles || 1,
       goal: params.goal || existingConfig.goal || 'Grow organic search traffic and establish niche topical authority',
       auto_publish: params.auto_publish !== false,
       auto_fix_technical: params.auto_fix_technical !== false,
@@ -223,7 +240,7 @@ export class FullAutopilotEngine {
       last_cycle_status: 'active_running',
     };
 
-    const dbScheduleType = cadence === 'twice_weekly' ? 'custom' : cadence;
+    const dbScheduleType = safeCadence === 'twice_weekly' || safeCadence === 'every_2_days' ? 'custom' : safeCadence;
     let taskId = existingTask?.id;
 
     if (existingTask) {
@@ -256,29 +273,38 @@ export class FullAutopilotEngine {
       taskId = insertedTask?.id;
     }
 
-    // Pre-enqueue execution for background worker pick-up
-    if (taskId) {
+    // Only pre-enqueue execution if explicitly requested and daily quota is not already filled
+    if (taskId && params.trigger_first_cycle_now) {
       try {
-        await supabase.from('task_executions').insert({
-          task_id: taskId,
-          project_id: projectId,
-          website_id: params.website_id,
-          status: 'queued',
-          execution_payload: {
-            type: 'full_autopilot',
-            full_autopilot: true,
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: recentCount } = await supabase
+          .from('content_drafts')
+          .select('id', { count: 'exact', head: true })
+          .eq('website_id', params.website_id)
+          .gte('created_at', oneDayAgo);
+
+        if ((recentCount ?? 0) < (updatedConfig.max_daily_articles || 1)) {
+          await supabase.from('task_executions').insert({
+            task_id: taskId,
+            project_id: projectId,
             website_id: params.website_id,
-            goal: updatedConfig.goal,
-            task_name: 'Zero-Touch Full Autopilot',
-          },
-        });
+            status: 'queued',
+            execution_payload: {
+              type: 'full_autopilot',
+              full_autopilot: true,
+              website_id: params.website_id,
+              goal: updatedConfig.goal,
+              task_name: 'Zero-Touch Full Autopilot',
+            },
+          });
+        }
       } catch (_) {}
     }
 
     // Also sync scheduled_agent_configs table
     await supabase.from('scheduled_agent_configs').upsert({
       website_id: params.website_id,
-      frequency: cadence === 'daily' ? 'daily' : 'weekly',
+      frequency: safeCadence === 'daily' ? 'daily' : 'weekly',
       schedule_time: '09:00',
       timezone: 'UTC',
       status: 'active',
@@ -293,7 +319,7 @@ export class FullAutopilotEngine {
       const telegram = new TelegramService();
       await telegram.notifyWebsiteSubscribers(
         params.website_id,
-        `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Target:* \`${website.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Needed)\n• *Cadence:* ${cadence.replace('_', ' ').toUpperCase()}\n• *Auto-Publish:* ${updatedConfig.auto_publish ? '✅ Yes (Live WordPress)' : '⏸️ Requires Manual Click'}\n• *Auto-Fix Technical SEO:* ${updatedConfig.auto_fix_technical ? '✅ Yes (Continuous Auto-Repair)' : '❌ Off'}\n\n_The autonomous engine will now discover keywords, draft comprehensive articles, and resolve technical issues continuously._`
+        `🚀 *Zero-Touch Full Autopilot Activated!*\n\n• *Target:* \`${website.domain}\`\n• *Mode:* 24/7 Fully Autonomous (0 Human Needed)\n• *Cadence:* ${safeCadence.replace('_', ' ').toUpperCase()}\n• *Auto-Publish:* ${updatedConfig.auto_publish ? '✅ Yes (Live WordPress)' : '⏸️ Requires Manual Click'}\n• *Auto-Fix Technical SEO:* ${updatedConfig.auto_fix_technical ? '✅ Yes (Continuous Auto-Repair)' : '❌ Off'}\n\n_The autonomous engine will now discover keywords, draft comprehensive articles, and resolve technical issues continuously._`
       );
     } catch (_) {}
 
@@ -432,6 +458,73 @@ export class FullAutopilotEngine {
     let technicalFixesInfo = { count: 0, fixed_urls: [] as string[], summary: '' };
 
     try {
+      // ── CIRCUIT BREAKER: DAILY ARTICLE PUBLICATION QUOTA ─────────────────
+      const maxDailyArticles = currentStatus.max_daily_articles || 1;
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+      const { count: recentDraftsCount } = await supabase
+        .from('content_drafts')
+        .select('id', { count: 'exact', head: true })
+        .eq('website_id', websiteId)
+        .gte('created_at', twentyFourHoursAgo);
+
+      const isDailyCapReached = (recentDraftsCount ?? 0) >= maxDailyArticles;
+
+      if (isDailyCapReached && !options?.force) {
+        console.log(`[FullAutopilotEngine] Daily article cap reached for ${domain} (${recentDraftsCount}/${maxDailyArticles} articles created in last 24h). Skipping content generation to prevent token waste.`);
+
+        // Step: Technical SEO health check (lightweight, zero LLM token waste)
+        if (autoFix) {
+          try {
+            const { WebsiteCrawler } = await import('./crawler');
+            const crawler = new WebsiteCrawler();
+            await crawler.crawlPage(siteUrl, domain);
+            technicalFixesInfo = {
+              count: 0,
+              fixed_urls: [],
+              summary: 'Daily article quota active. Technical SEO health verified.',
+            };
+          } catch (techErr) {
+            console.warn('[FullAutopilotEngine] Technical audit notice:', techErr);
+          }
+        }
+
+        // Reschedule next run cleanly (minimum 24 hours)
+        const intervalMs = this.getCadenceIntervalMs(cadence);
+        const nextRunAt = new Date(Date.now() + intervalMs).toISOString();
+
+        await supabase
+          .from('tasks')
+          .update({
+            last_run_at: new Date().toISOString(),
+            next_run_at: nextRunAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('name', 'Zero-Touch Full Autopilot')
+          .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`);
+
+        const capSummary = `Daily article quota reached (${recentDraftsCount}/${maxDailyArticles} articles in past 24h). Content generation skipped to conserve tokens and maintain consistent cadence. Technical health verified. Next scheduled cycle: ${new Date(nextRunAt).toLocaleString()}.`;
+
+        if (execution?.id) {
+          await supabase
+            .from('task_executions')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              result_summary: capSummary,
+            })
+            .eq('id', execution.id);
+        }
+
+        return {
+          success: true,
+          cycle_id: cycleId,
+          technical_fixes: technicalFixesInfo,
+          next_run_at: nextRunAt,
+          summary: capSummary,
+        };
+      }
+
       // ── STEP 1: NICHE PROFILING & CONTENT INVENTORY ──────────────────────
       console.log(`[FullAutopilotEngine] Mapping niche profile and site inventory for ${domain}...`);
       const [profile, inventory] = await Promise.all([

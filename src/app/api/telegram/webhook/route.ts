@@ -583,7 +583,7 @@ Your agent will process the request in the background and ping you when finished
 
         await safeBackground(async () => {
           try {
-            await FullAutopilotEngine.runAutonomousCycle(currentSite.id, { force: true });
+            await FullAutopilotEngine.runAutonomousCycle(currentSite.id);
           } catch (runErr: any) {
             console.error('[Telegram /autopilot on Cycle Error]:', runErr);
           }

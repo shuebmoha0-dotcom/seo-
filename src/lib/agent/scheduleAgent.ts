@@ -111,6 +111,37 @@ export class ScheduleAgent {
         const { createAdminClient } = await import('../supabase/admin');
         const supabase = createAdminClient();
 
+        // ── RATE LIMIT GUARD: ENFORCE 1 ARTICLE PER 24 HOURS ──
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { count: recentDrafts } = await supabase
+          .from('content_drafts')
+          .select('id', { count: 'exact', head: true })
+          .eq('website_id', input.website_id)
+          .gte('created_at', oneDayAgo);
+
+        if ((recentDrafts ?? 0) >= 1) {
+          console.log(`[ScheduleAgent] Daily article quota already satisfied for website ${input.website_id} (${recentDrafts} in past 24h). Skipping generation to prevent token waste.`);
+          return {
+            id: runId,
+            website_id: input.website_id,
+            status: 'completed',
+            trigger_type: input.trigger_type || 'schedule',
+            start_time: startTime.toISOString(),
+            end_time: new Date().toISOString(),
+            duration_seconds: Math.round((Date.now() - startTime.getTime()) / 1000),
+            pages_analyzed: 0,
+            queries_checked: 0,
+            ranking_changes_detected: 0,
+            opportunities_found: 0,
+            actions_prepared: 0,
+            actions_approved: 0,
+            actions_executed: 0,
+            actions_verified: 0,
+            estimated_cost_usd: 0,
+            summary: `Daily article quota already satisfied (${recentDrafts} article drafted in the last 24h). Skipping content generation to conserve tokens and maintain consistent publishing cadence.`,
+          };
+        }
+
         let primaryKeyword = instruction
           .replace(/^(write|publish|create|draft)\s+(an?\s+)?(article|blog\s+post|post|guide|content)?\s*(about|on|for)?/i, '')
           .replace(/\b(every|daily|weekly|monthly|each)\s+(day|week|month|monday|friday|sunday)?\b/gi, '')

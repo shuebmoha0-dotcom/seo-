@@ -62,6 +62,22 @@ export class SchedulerEngine {
               if (site) websiteId = site.id;
             }
 
+            // DAILY RATE LIMIT GUARD: Prevent enqueueing if website already reached daily draft cap in last 24h
+            if (websiteId && (isFullAutopilot || /article|write|content|blog|draft/i.test(task.name || ''))) {
+              const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+              const { count: recentCount } = await this.supabase
+                .from('content_drafts')
+                .select('id', { count: 'exact', head: true })
+                .eq('website_id', websiteId)
+                .gte('created_at', oneDayAgo);
+
+              const maxDaily = task.schedule_config?.max_daily_articles || 1;
+              if ((recentCount ?? 0) >= maxDaily) {
+                WorkerLogger.info(`[SchedulerEngine] Daily article quota already satisfied (${recentCount}/${maxDaily}) for website [${websiteId}]. Skipping execution enqueue to prevent token waste.`);
+                continue;
+              }
+            }
+
             // Enqueue new task_execution
             const { data: newExecution, error: execErr } = await this.supabase
               .from('task_executions')
@@ -172,14 +188,11 @@ export class SchedulerEngine {
     const next = new Date();
     const freq = (frequency || 'daily').toLowerCase();
 
-    if (freq === 'continuous' || freq === 'hourly') {
-      next.setHours(next.getHours() + 1);
-    } else if (freq === 'every_2_hours') {
-      next.setHours(next.getHours() + 2);
-    } else if (freq === 'every_6_hours') {
-      next.setHours(next.getHours() + 6);
-    } else if (freq === 'every_12_hours') {
-      next.setHours(next.getHours() + 12);
+    // Prevent runaway loops: clamp all sub-daily frequencies to minimum 24 hours (1 day)
+    if (['continuous', 'hourly', 'every_2_hours', 'every_6_hours', 'every_12_hours'].includes(freq)) {
+      next.setDate(next.getDate() + 1);
+    } else if (freq === 'every_2_days') {
+      next.setDate(next.getDate() + 2);
     } else if (freq === 'twice_weekly') {
       next.setHours(next.getHours() + 84);
     } else if (freq === 'weekly') {
@@ -191,9 +204,7 @@ export class SchedulerEngine {
       next.setDate(next.getDate() + 1);
     }
 
-    // Only apply fixed time-of-day (e.g. "09:00") for daily or longer frequencies
-    const isSubDaily = ['continuous', 'hourly', 'every_2_hours', 'every_6_hours', 'every_12_hours'].includes(freq);
-    if (!isSubDaily && scheduleConfig?.time && typeof scheduleConfig.time === 'string') {
+    if (scheduleConfig?.time && typeof scheduleConfig.time === 'string') {
       const [hours, minutes] = scheduleConfig.time.split(':').map((s: string) => parseInt(s, 10));
       if (!isNaN(hours) && !isNaN(minutes)) {
         next.setHours(hours, minutes, 0, 0);

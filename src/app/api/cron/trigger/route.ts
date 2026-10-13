@@ -91,12 +91,42 @@ async function handleCronExecution(request: Request) {
 
           if (!websiteId) continue;
 
-          // Compute next run time
-          const frequency = task.schedule_type || task.schedule_config?.frequency || 'daily';
+          // Compute next run time (strictly minimum 24 hours)
+          const frequency = task.schedule_type || task.schedule_config?.cadence || task.schedule_config?.frequency || 'daily';
           let intervalMs = 86400000; // 1 day
           if (frequency === 'weekly') intervalMs = 7 * 86400000;
+          if (frequency === 'twice_weekly') intervalMs = 3.5 * 86400000;
+          if (frequency === 'every_2_days') intervalMs = 2 * 86400000;
           if (frequency === 'monthly') intervalMs = 30 * 86400000;
-          const nextRunAt = new Date(Date.now() + intervalMs).toISOString();
+          const nextRunAt = new Date(Date.now() + Math.max(86400000, intervalMs)).toISOString();
+
+          // Guard: If task is Full Autopilot or content creation, check if daily quota has been satisfied
+          const isFullAutopilot = task.schedule_config?.full_autopilot === true || task.name === 'Zero-Touch Full Autopilot';
+          const isContentTask = isFullAutopilot || /article|write|content|blog|draft/i.test(task.name || task.natural_language_instruction || '');
+
+          if (isContentTask) {
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { count: recentDrafts } = await supabase
+              .from('content_drafts')
+              .select('id', { count: 'exact', head: true })
+              .eq('website_id', websiteId)
+              .gte('created_at', oneDayAgo);
+
+            const maxDaily = task.schedule_config?.max_daily_articles || 1;
+            if ((recentDrafts ?? 0) >= maxDaily) {
+              console.log(`[Cron Trigger] Daily article quota already satisfied (${recentDrafts}/${maxDaily}) for ${domain}. Advancing next_run_at and skipping execution to protect tokens.`);
+              await supabase
+                .from('tasks')
+                .update({
+                  last_run_at: nowIso,
+                  next_run_at: nextRunAt,
+                  updated_at: nowIso,
+                })
+                .eq('id', task.id);
+              results.push({ task_id: task.id, status: 'skipped', reason: `Daily article quota reached (${recentDrafts}/${maxDaily})` });
+              continue;
+            }
+          }
 
           // Create execution record
           const { data: execution } = await supabase
@@ -111,7 +141,6 @@ async function handleCronExecution(request: Request) {
             .single();
 
           // Execute task via FullAutopilotEngine if configured for Zero-Touch Full Autopilot
-          const isFullAutopilot = task.schedule_config?.full_autopilot === true || task.name === 'Zero-Touch Full Autopilot';
           const goal = task.name || task.natural_language_instruction;
           let summary = '';
 

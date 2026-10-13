@@ -36,7 +36,7 @@ export default function AutopilotPage() {
   const [updatingAutopilot, setUpdatingAutopilot] = useState(false);
   const [runningFullCycle, setRunningFullCycle] = useState(false);
   const [autopilotGoal, setAutopilotGoal] = useState('Grow organic search traffic and establish niche topical authority');
-  const [selectedCadence, setSelectedCadence] = useState<'continuous' | 'every_2_hours' | 'every_6_hours' | 'daily' | 'twice_weekly' | 'weekly'>('continuous');
+  const [selectedCadence, setSelectedCadence] = useState<'daily' | 'every_2_days' | 'twice_weekly' | 'weekly'>('daily');
   const [autoPublishToggle, setAutoPublishToggle] = useState(true);
   const [autoFixToggle, setAutoFixToggle] = useState(true);
 
@@ -53,7 +53,7 @@ export default function AutopilotPage() {
         if (data.status) {
           setFullAutopilot(data.status);
           setAutopilotGoal(data.status.goal || 'Grow organic search traffic and establish niche topical authority');
-          setSelectedCadence(data.status.cadence || 'twice_weekly');
+          setSelectedCadence(data.status.cadence || 'daily');
           setAutoPublishToggle(data.status.auto_publish !== false);
           setAutoFixToggle(data.status.auto_fix_technical !== false);
         }
@@ -621,14 +621,15 @@ export default function AutopilotPage() {
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-neutral-800 flex items-center justify-between">
                         <span>Publishing & Optimization Cadence</span>
-                        <span className="text-[10px] text-emerald-600 font-bold">Continuous 24/7 or Custom Frequency</span>
+                        <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-emerald-600 inline" />
+                          Rate-Limited: Max 1 Article / 24 Hours
+                        </span>
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                         {[
-                          { id: 'continuous', label: 'Continuous (Hourly)', sub: 'Non-stop' },
-                          { id: 'every_2_hours', label: 'Every 2 Hours', sub: '12/day' },
-                          { id: 'every_6_hours', label: 'Every 6 Hours', sub: '4/day' },
-                          { id: 'daily', label: 'Daily', sub: '1/day' },
+                          { id: 'daily', label: 'Daily', sub: '1/day (Recommended)' },
+                          { id: 'every_2_days', label: 'Every 2 Days', sub: '3-4/wk' },
                           { id: 'twice_weekly', label: 'Twice Weekly', sub: '2/wk' },
                           { id: 'weekly', label: 'Weekly', sub: '1/wk' },
                         ].map((cad) => (
