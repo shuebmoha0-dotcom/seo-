@@ -104,6 +104,22 @@ export async function POST(request: Request) {
           await supabase.from('content_drafts').update(draftUpdatePayload).eq('working_title', job.payload.title);
           console.log(`[Outbound Report] Marked draft title "${job.payload.title}" as published live: ${result?.permalink}`);
         }
+
+        // Automatically trigger multi-engine indexing (Google, IndexNow, Sitemap) on live publication
+        const liveUrl = result?.permalink || (job.payload?.slug && site.site_url ? `${site.site_url.replace(/\/+$/, '')}/${job.payload.slug}/` : null);
+        if (liveUrl) {
+          try {
+            const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+            const idxRes = await GoogleIndexingService.requestIndexing({
+              url: liveUrl,
+              websiteId: job.website_id,
+              type: 'URL_UPDATED',
+            });
+            console.log(`[Outbound Report] Auto-indexing completed for ${liveUrl}:`, idxRes.summary);
+          } catch (idxErr) {
+            console.warn('[Outbound Report] Auto-indexing notice:', idxErr);
+          }
+        }
       } catch (draftUpdErr) {
         console.warn('[Outbound Report] Draft status update error:', draftUpdErr);
       }

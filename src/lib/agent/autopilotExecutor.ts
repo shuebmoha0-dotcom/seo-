@@ -828,7 +828,15 @@ export class AutopilotExecutor {
           siteUrl: website_url,
         });
 
-        // 1. Check if domain has striking-distance queries (established site with GSC history)
+        // 1. Proactively sync the freshest Google Search Console performance data
+        try {
+          const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
+          await syncSearchConsoleData(website_id);
+        } catch (syncErr) {
+          console.warn('[AutopilotExecutor] GSC proactive sync notice:', syncErr);
+        }
+
+        // 2. Check if domain has striking-distance queries (established site with GSC history)
         const report = await RankRecoveryEngine.scanAndAnalyze({
           websiteId: website_id,
           domain: website_domain,

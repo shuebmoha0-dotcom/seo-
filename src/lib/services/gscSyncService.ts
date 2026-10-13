@@ -199,22 +199,66 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     }
   }
 
-  // 5. Query top queries if available
-  const queryResult = await queryGoogleAnalytics({
+  // 5. Query top queries & pages combined (dimension: ['query', 'page']) for high-precision SEO intelligence
+  const queryPageResult = await queryGoogleAnalytics({
     startDate,
     endDate,
-    dimensions: ['query'],
+    dimensions: ['query', 'page'],
     dataState: 'all',
-    rowLimit: 100,
+    rowLimit: 250,
   });
 
-  if (queryResult.ok && queryResult.data?.rows?.length > 0) {
+  // Pre-load existing pages to map page_id
+  const { data: existingPages } = await supabase
+    .from('pages')
+    .select('id, path, canonical_url')
+    .eq('website_id', websiteId);
+
+  const pageMap = new Map<string, string>();
+  for (const p of existingPages || []) {
+    if (p.path) pageMap.set(p.path.toLowerCase().replace(/\/+$/, ''), p.id);
+    if (p.canonical_url) pageMap.set(p.canonical_url.toLowerCase().replace(/\/+$/, ''), p.id);
+  }
+
+  if (queryPageResult.ok && queryPageResult.data?.rows?.length > 0) {
     const latestDate = endDate;
-    for (const qRow of queryResult.data.rows) {
+    for (const qRow of queryPageResult.data.rows) {
       const q = qRow.keys?.[0];
+      const pageUrl = qRow.keys?.[1];
       if (q) {
+        let pageId: string | null = null;
+        if (pageUrl) {
+          try {
+            const parsed = new URL(pageUrl);
+            const pathClean = parsed.pathname.toLowerCase().replace(/\/+$/, '');
+            pageId = pageMap.get(pathClean) || pageMap.get(pageUrl.toLowerCase().replace(/\/+$/, '')) || null;
+            
+            // If page doesn't exist in pages table yet, auto-register it so crawler & audit engines have it
+            if (!pageId && parsed.pathname && parsed.pathname !== '/') {
+              const { data: newPage } = await supabase
+                .from('pages')
+                .insert({
+                  website_id: websiteId,
+                  path: parsed.pathname,
+                  canonical_url: pageUrl,
+                  status_code: 200,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .select('id')
+                .maybeSingle();
+
+              if (newPage?.id) {
+                pageId = newPage.id;
+                pageMap.set(pathClean, newPage.id);
+              }
+            }
+          } catch (_) {}
+        }
+
         rowsToUpsert.push({
           website_id: websiteId,
+          page_id: pageId,
           query: q,
           date: latestDate,
           clicks: qRow.clicks || 0,

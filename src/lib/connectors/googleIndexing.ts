@@ -128,17 +128,30 @@ export class GoogleIndexingService {
       // If no service account, check for saved OAuth token in database
       if (!authClient && websiteId) {
         const supabase = createAdminClient();
-        const { data: creds } = await supabase
-          .from('integration_credentials')
-          .select('encrypted_value, credential_type')
-          .eq('credential_type', 'google_oauth_token')
-          .limit(1)
+        const { data: intg } = await supabase
+          .from('integrations')
+          .select('id')
+          .eq('website_id', websiteId)
+          .eq('provider', 'google_search_console')
           .maybeSingle();
 
-        if (creds?.encrypted_value) {
-          const auth = new google.auth.OAuth2();
-          auth.setCredentials({ access_token: creds.encrypted_value });
-          authClient = auth;
+        if (intg?.id) {
+          const { data: creds } = await supabase
+            .from('integration_credentials')
+            .select('encrypted_value, credential_type')
+            .eq('integration_id', intg.id)
+            .maybeSingle();
+
+          if (creds?.encrypted_value) {
+            const { decryptCredential } = await import('@/lib/utils/encryption');
+            const parts = creds.encrypted_value.split(':::');
+            const token = decryptCredential(parts[0]);
+            if (token) {
+              const auth = new google.auth.OAuth2();
+              auth.setCredentials({ access_token: token });
+              authClient = auth;
+            }
+          }
         }
       }
 
@@ -312,7 +325,24 @@ export class GoogleIndexingService {
   }): Promise<UrlInspectionResult> {
     const { inspectionUrl, siteUrl, accessToken } = params;
     try {
-      const token = accessToken || process.env.GOOGLE_SEARCH_CONSOLE_TOKEN;
+      let token = accessToken || process.env.GOOGLE_SEARCH_CONSOLE_TOKEN;
+      if (!token) {
+        try {
+          const supabase = createAdminClient();
+          const { data: creds } = await supabase
+            .from('integration_credentials')
+            .select('encrypted_value')
+            .eq('credential_type', 'oauth_tokens')
+            .limit(1)
+            .maybeSingle();
+          if (creds?.encrypted_value) {
+            const { decryptCredential } = await import('@/lib/utils/encryption');
+            const parts = creds.encrypted_value.split(':::');
+            token = decryptCredential(parts[0]);
+          }
+        } catch (_) {}
+      }
+
       if (!token) {
         return {
           success: false,

@@ -285,8 +285,8 @@ ABSOLUTE GROUNDING MANDATE (RULE 9):
       };
     }
 
-    // C. Fast-Rank Growth & Striking Distance
-    if (/(rank.*fast|ranking.*fast|rank.*faster|get.*more.*clicks|boost.*(ranks?|rankings?|traffic|clicks)|striking.*distance|low.*hanging.*fruit|push.*to.*top\s*3|click.*accelerator|do.*everything.*to.*rank|achieve.*task.*rank)/i.test(lower)) {
+    // C. Fast-Rank Growth & Striking Distance / Clicks Acceleration
+    if (/(rank.*fast|ranking.*fast|rank.*faster|get.*more.*clicks|grow.*(their|our|my)?\s*clicks|boost.*(ranks?|rankings?|traffic|clicks)|striking.*distance|low.*hanging.*fruit|push.*to.*top\s*3|click.*accelerator|help.*rank|rank.*on.*google|do.*everything.*to.*rank|achieve.*task.*rank|analyze.*(client|site|gsc|search\s+console).*to.*(grow|rank)|use.*(it|gsc|search\s+console).*to.*(grow|rank))/i.test(lower)) {
       return {
         intent_type: 'immediate_action',
         action_type: 'growth_acceleration',

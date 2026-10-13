@@ -328,27 +328,25 @@ export async function POST(request: Request) {
         console.warn('[Content Approval] Outbound job insert error:', jobErr);
       }
 
-      // 3. If user explicitly requested indexing alongside approval
-      if (body.request_indexing) {
-        try {
-          let siteDomain = '';
-          if (updatedDraft.website_id) {
-            const { data: wRecord } = await supabase.from('websites').select('url, domain').eq('id', updatedDraft.website_id).maybeSingle();
-            if (wRecord) siteDomain = wRecord.url || (wRecord.domain ? `https://${wRecord.domain}` : '');
-          }
-          const liveUrl = wpPostResult?.link || (siteDomain ? `${siteDomain.replace(/\/$/, '')}/${updatedDraft.url_slug}/` : '');
-          if (liveUrl) {
-            const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
-            const indexRes = await GoogleIndexingService.requestIndexing({
-              url: liveUrl,
-              websiteId: updatedDraft.website_id,
-              type: 'URL_UPDATED',
-            });
-            console.log('[Content Approval] Indexing triggered:', indexRes.summary);
-          }
-        } catch (idxErr) {
-          console.warn('[Content Approval] Indexing request error:', idxErr);
+      // 3. Automatically trigger multi-engine indexing upon approval and publishing
+      try {
+        let siteDomain = '';
+        if (updatedDraft.website_id) {
+          const { data: wRecord } = await supabase.from('websites').select('url, domain').eq('id', updatedDraft.website_id).maybeSingle();
+          if (wRecord) siteDomain = wRecord.url || (wRecord.domain ? `https://${wRecord.domain}` : '');
         }
+        const liveUrl = wpPostResult?.link || (siteDomain ? `${siteDomain.replace(/\/$/, '')}/${updatedDraft.url_slug}/` : '');
+        if (liveUrl) {
+          const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+          const indexRes = await GoogleIndexingService.requestIndexing({
+            url: liveUrl,
+            websiteId: updatedDraft.website_id,
+            type: 'URL_UPDATED',
+          });
+          console.log('[Content Approval] Auto-indexing triggered:', indexRes.summary);
+        }
+      } catch (idxErr) {
+        console.warn('[Content Approval] Indexing request notice:', idxErr);
       }
     }
 
