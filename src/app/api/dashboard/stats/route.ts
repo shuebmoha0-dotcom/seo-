@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 function formatRelativeTime(dateString: string): string {
@@ -38,7 +39,8 @@ export async function GET(request: Request) {
       });
     }
 
-    const supabase = createAdminClient();
+    const userClient = await createClient();
+    const supabase = userClient || createAdminClient();
 
     const [
       { count: keywordCount },
@@ -47,6 +49,7 @@ export async function GET(request: Request) {
       { data: approvals },
       { count: competitorsCount },
       { data: gscRows },
+      { data: topQueries },
       { data: recentDrafts },
       { data: recentIssues },
       { data: gscIntegration },
@@ -95,6 +98,15 @@ export async function GET(request: Request) {
         .order('date', { ascending: true })
         .limit(500),
 
+      // 6b. Top Search Queries from Google Search Console
+      supabase
+        .from('search_console_data')
+        .select('query, clicks, impressions, ctr, position')
+        .eq('website_id', websiteId)
+        .not('query', 'is', null)
+        .order('impressions', { ascending: false })
+        .limit(10),
+
       // 7. Recent Content Drafts
       supabase
         .from('content_drafts')
@@ -133,24 +145,44 @@ export async function GET(request: Request) {
     let finalGscRows = gscRows || [];
     const isGscConnected = gscIntegration?.status === 'connected';
 
-    // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, or explicitly requested
+    // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, hourly missing/stale (> 30 mins), or explicitly requested
     const lastSyncTime = gscIntegration?.last_synced_at ? new Date(gscIntegration.last_synced_at).getTime() : 0;
     const isStale = Date.now() - lastSyncTime > 5 * 60 * 1000;
     const forceSync = searchParams.get('sync') === 'true';
 
-    if (isGscConnected && (isStale || forceSync || finalGscRows.length === 0)) {
+    let activeGscConfig = gscIntegration?.config;
+    let activeLastSynced = gscIntegration?.last_synced_at;
+
+    const hourlyLastSynced = activeGscConfig?.hourly_data_24h?.lastSyncedAt 
+      ? new Date(activeGscConfig.hourly_data_24h.lastSyncedAt).getTime() 
+      : 0;
+    const isHourlyStale = Date.now() - hourlyLastSynced > 30 * 60 * 1000;
+
+    if (isGscConnected && (isStale || forceSync || finalGscRows.length === 0 || !activeGscConfig?.hourly_data_24h || isHourlyStale)) {
       try {
         const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
-        await syncSearchConsoleData(websiteId);
-        const { data: refreshedRows } = await supabase
-          .from('search_console_data')
-          .select('date, clicks, impressions, ctr, position')
-          .eq('website_id', websiteId)
-          .is('query', null)
-          .order('date', { ascending: true })
-          .limit(500);
-        if (refreshedRows && refreshedRows.length > 0) {
-          finalGscRows = refreshedRows;
+        await syncSearchConsoleData(websiteId, 480, supabase);
+        const [refreshedRows, refreshedIntg] = await Promise.all([
+          supabase
+            .from('search_console_data')
+            .select('date, clicks, impressions, ctr, position')
+            .eq('website_id', websiteId)
+            .is('query', null)
+            .order('date', { ascending: true })
+            .limit(500),
+          supabase
+            .from('integrations')
+            .select('config, last_synced_at')
+            .eq('website_id', websiteId)
+            .eq('provider', 'google_search_console')
+            .maybeSingle(),
+        ]);
+        if (refreshedRows?.data && refreshedRows.data.length > 0) {
+          finalGscRows = refreshedRows.data;
+        }
+        if (refreshedIntg?.data) {
+          activeGscConfig = refreshedIntg.data.config;
+          activeLastSynced = refreshedIntg.data.last_synced_at;
         }
       } catch (syncErr) {
         console.error('[Dashboard Stats] Auto-sync GSC error:', syncErr);
@@ -208,9 +240,17 @@ export async function GET(request: Request) {
       recent_approvals: approvals || [],
       recent_activity: activityList.slice(0, 6),
       chart_data: chartData,
+      top_queries: (topQueries || []).map((q: any) => ({
+        query: q.query,
+        clicks: q.clicks || 0,
+        impressions: q.impressions || 0,
+        ctr: q.ctr !== null && q.ctr !== undefined ? Number(q.ctr) : 0,
+        position: q.position !== null && q.position !== undefined ? Number(q.position) : 0,
+      })),
       gsc_connected: isGscConnected,
       gsc_property: gscIntegration?.config?.property_url || null,
-      gsc_last_synced: gscIntegration?.last_synced_at || null,
+      gsc_last_synced: activeLastSynced || gscIntegration?.last_synced_at || null,
+      gsc_hourly: activeGscConfig?.hourly_data_24h || null,
     });
   } catch (error: any) {
     console.error('[Dashboard Stats GET] Error:', error);

@@ -349,12 +349,19 @@ STRICT TOPIC DIVERSITY & EDITORIAL TITLE QUALITY MANDATE:
         const titleWords = title.split(/\s+/).filter(Boolean);
         if (!title || titleWords.length <= 3 || title.toLowerCase() === gap.keyword.trim().toLowerCase()) {
           const kw = gap.keyword.charAt(0).toUpperCase() + gap.keyword.slice(1);
+          const audLower = (profile?.targetAudience || '').toLowerCase();
+          const audienceLabel = audLower.includes('freelanc') || audLower.includes('small business') || audLower.includes('entrepreneur')
+            ? 'Entrepreneurs & Small Businesses'
+            : audLower.includes('agency')
+            ? 'Agencies & Growth Teams'
+            : 'Practitioners & Growing Teams';
+
           if (/^how to/i.test(kw)) {
-            title = `${kw}: A Practical Implementation Guide for B2B Teams`;
+            title = `${kw}: A Practical Implementation Guide for ${audienceLabel}`;
           } else if (/vs|comparison/i.test(kw)) {
             title = `${kw}: Key Differences and Which Strategy Wins`;
           } else {
-            title = `${kw} Strategies for Lean Teams: A Practical B2B Playbook`;
+            title = `${kw} Strategies for ${audienceLabel}: A Practical Playbook`;
           }
           gap.working_title = title;
         }

@@ -530,12 +530,22 @@ For each cluster:
   }
 
   // 6. Content Brief Generator
-  async generateContentBrief(opportunity: KeywordOpportunity): Promise<ContentBrief> {
+  async generateContentBrief(
+    opportunity: KeywordOpportunity,
+    context?: {
+      target_audience?: string;
+      domain?: string;
+      primary_niche?: string;
+      project_instructions?: string;
+    }
+  ): Promise<ContentBrief> {
+    const audience = context?.target_audience || 'Target practitioners, founders, and professionals';
+    const domainContext = context?.domain ? ` for ${context.domain}` : '';
+    const nicheContext = context?.primary_niche ? ` within ${context.primary_niche}` : '';
+
     try {
       const { object } = await LLMProvider.generateObject({
-      agent: 'KeywordAgent',
-      
-        
+        agent: 'KeywordAgent',
         schema: z.object({
           recommended_title: z.string(),
           h1: z.string(),
@@ -554,14 +564,18 @@ For each cluster:
           cta_recommendation: z.string(),
           target_audience: z.string(),
         }),
-        prompt: `Create a detailed SEO content brief for the keyword: "${opportunity.keyword}".
-        
+        prompt: `Create a detailed SEO content brief for the keyword: "${opportunity.keyword}"${domainContext}${nicheContext}.
+
+TARGET AUDIENCE:
+${audience}
+${context?.project_instructions ? `\nEDITORIAL GUIDELINES:\n${context.project_instructions.slice(0, 300)}` : ''}
+
 Search intent: ${opportunity.search_intent}
 Content type: ${opportunity.content_type}
 Business relevance: ${opportunity.business_relevance}/100
 Evidence: ${opportunity.evidence}
 
-Generate a practical, intent-focused brief. Do not pad word count artificially. Recommend word count based on topic complexity and SERP expectations.`,
+Generate a practical, intent-focused brief strictly tailored to the specified target audience. Do NOT assume SaaS or tech startup unless explicitly requested in the audience description. Recommend word count based on topic complexity and SERP expectations.`,
         system: 'You are an expert SEO strategist creating precise, audience-first content briefs.'
       });
 
@@ -569,7 +583,7 @@ Generate a practical, intent-focused brief. Do not pad word count artificially. 
         primary_keyword: opportunity.keyword,
         secondary_keywords: [],
         search_intent: opportunity.search_intent,
-        target_audience: object.target_audience,
+        target_audience: object.target_audience || audience,
         content_type: opportunity.content_type,
         recommended_title: object.recommended_title,
         h1: object.h1,
@@ -584,34 +598,35 @@ Generate a practical, intent-focused brief. Do not pad word count artificially. 
         cta_recommendation: object.cta_recommendation,
       };
     } catch (error) {
-      // Fallback structured brief
+      // Fallback structured brief strictly grounded in provided audience
+      const kwFormatted = opportunity.keyword.charAt(0).toUpperCase() + opportunity.keyword.slice(1);
       return {
         primary_keyword: opportunity.keyword,
         secondary_keywords: [],
         search_intent: opportunity.search_intent,
-        target_audience: 'SaaS founders and marketing teams',
+        target_audience: audience,
         content_type: opportunity.content_type,
-        recommended_title: `${opportunity.keyword.charAt(0).toUpperCase() + opportunity.keyword.slice(1)}: Complete Guide`,
-        h1: opportunity.keyword.charAt(0).toUpperCase() + opportunity.keyword.slice(1),
+        recommended_title: `${kwFormatted}: A Practical Implementation Guide`,
+        h1: kwFormatted,
         h2_h3_structure: [
-          { level: 'h2', heading: 'What Is It?', notes: 'Define the core concept clearly.' },
-          { level: 'h2', heading: 'Why It Matters', notes: 'Explain business impact for SaaS.' },
-          { level: 'h2', heading: 'How To Get Started', notes: 'Step-by-step actionable guide.' },
-          { level: 'h3', heading: 'Common Mistakes to Avoid', notes: 'Address audience pain points.' },
-          { level: 'h2', heading: 'Next Steps', notes: 'CTA to product.' },
+          { level: 'h2', heading: 'What Is It?', notes: 'Define the core concept clearly and concisely.' },
+          { level: 'h2', heading: 'Why It Matters', notes: 'Explain practical business impact and tangible results.' },
+          { level: 'h2', heading: 'Step-by-Step Implementation', notes: 'Actionable workflow and execution guide.' },
+          { level: 'h3', heading: 'Common Mistakes to Avoid', notes: 'Address reader pitfalls and key challenges.' },
+          { level: 'h2', heading: 'Actionable Checklist & Next Steps', notes: 'Practical checklist to get started today.' },
         ],
         questions_to_answer: [
           `What is ${opportunity.keyword}?`,
-          `Why does ${opportunity.keyword} matter for SaaS companies?`,
+          `Why does ${opportunity.keyword} matter for your business?`,
           `How do I get started with ${opportunity.keyword}?`,
         ],
-        important_entities: ['SaaS', 'SEO', 'organic traffic', 'search intent'],
-        competitor_observations: 'Competitors cover this topic broadly. Opportunity to go more specific and actionable.',
-        content_gaps: 'No existing resource addresses this specifically for SaaS companies.',
-        internal_linking_opportunities: ['/features', '/pricing', '/blog'],
-        recommended_word_count_min: 900,
-        recommended_word_count_max: 1500,
-        cta_recommendation: 'Start your free trial of the AI SEO Agent.',
+        important_entities: [opportunity.keyword, 'conversion rate', 'best practices', 'workflow optimization'],
+        competitor_observations: 'Competitors cover this topic broadly. Opportunity to provide a more practical, actionable breakdown.',
+        content_gaps: 'Provide real-world examples and step-by-step guidance rather than theoretical summaries.',
+        internal_linking_opportunities: ['/blog'],
+        recommended_word_count_min: 1200,
+        recommended_word_count_max: 1800,
+        cta_recommendation: 'Explore practical tools and proven strategies to streamline your workflow.',
       };
     }
   }

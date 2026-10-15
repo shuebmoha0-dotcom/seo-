@@ -98,13 +98,26 @@ export default function DashboardPage() {
   });
 
   const [chartInterval, setChartInterval] = useState<"daily" | "weekly">("daily");
-  const [chartTimeRange, setChartTimeRange] = useState<"24h" | "7d" | "28d" | "3m" | "6m" | "16m">("28d");
+  const [chartTimeRange, setChartTimeRange] = useState<"24h" | "7d" | "28d" | "3m" | "6m" | "16m">("24h");
   const [moreRangesOpen, setMoreRangesOpen] = useState(false);
   const [intervalDropdownOpen, setIntervalDropdownOpen] = useState(false);
   const [gscConnected, setGscConnected] = useState(false);
   const [gscProperty, setGscProperty] = useState<string | null>(null);
   const [gscLastSynced, setGscLastSynced] = useState<string | null>(null);
   const [isSyncingGsc, setIsSyncingGsc] = useState(false);
+  const [topQueries, setTopQueries] = useState<any[]>([]);
+  const [gscHourly, setGscHourly] = useState<any | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedSiteId = localStorage.getItem("seo_active_website_id");
+        if (storedSiteId) {
+          const cached = sessionStorage.getItem(`seo_dashboard_gsc_hourly_${storedSiteId}`);
+          if (cached) return JSON.parse(cached);
+        }
+      } catch {}
+    }
+    return null;
+  });
 
   const [activityStream, setActivityStream] = useState<ActivityEvent[]>(() => {
     if (typeof window !== "undefined") {
@@ -168,9 +181,11 @@ export default function DashboardPage() {
         setStats(data.stats);
         setRecentApprovals(data.recent_approvals || []);
         setChartData(data.chart_data || []);
+        setTopQueries(data.top_queries || []);
         setGscConnected(!!data.gsc_connected);
         setGscProperty(data.gsc_property || null);
         setGscLastSynced(data.gsc_last_synced || null);
+        setGscHourly(data.gsc_hourly || null);
 
         if (data.recent_activity && data.recent_activity.length > 0) {
           setActivityStream(data.recent_activity);
@@ -185,6 +200,12 @@ export default function DashboardPage() {
           sessionStorage.setItem(`seo_dashboard_stats_${currentWebsite.id}`, JSON.stringify(data.stats));
           sessionStorage.setItem(`seo_dashboard_approvals_${currentWebsite.id}`, JSON.stringify(data.recent_approvals || []));
           sessionStorage.setItem(`seo_dashboard_chart_${currentWebsite.id}`, JSON.stringify(data.chart_data || []));
+          if (data.gsc_hourly) {
+            sessionStorage.setItem(`seo_dashboard_gsc_hourly_${currentWebsite.id}`, JSON.stringify(data.gsc_hourly));
+          }
+          if (data.top_queries) {
+            sessionStorage.setItem(`seo_dashboard_top_queries_${currentWebsite.id}`, JSON.stringify(data.top_queries));
+          }
         }
       }
     } catch (err) {
@@ -218,11 +239,23 @@ export default function DashboardPage() {
       const cachedApprovals = sessionStorage.getItem(`seo_dashboard_approvals_${currentWebsite.id}`);
       const cachedChart = sessionStorage.getItem(`seo_dashboard_chart_${currentWebsite.id}`);
       const cachedActivity = sessionStorage.getItem(`seo_dashboard_activity_${currentWebsite.id}`);
+      const cachedHourly = sessionStorage.getItem(`seo_dashboard_gsc_hourly_${currentWebsite.id}`);
+      const cachedTopQueries = sessionStorage.getItem(`seo_dashboard_top_queries_${currentWebsite.id}`);
       if (cachedStats) {
         setStats(JSON.parse(cachedStats));
         setRecentApprovals(cachedApprovals ? JSON.parse(cachedApprovals) : []);
         setChartData(cachedChart ? JSON.parse(cachedChart) : []);
         setActivityStream(cachedActivity ? JSON.parse(cachedActivity) : []);
+        if (cachedHourly) {
+          try {
+            setGscHourly(JSON.parse(cachedHourly));
+          } catch {}
+        }
+        if (cachedTopQueries) {
+          try {
+            setTopQueries(JSON.parse(cachedTopQueries));
+          } catch {}
+        }
         setLoading(false);
       } else {
         setStats({
@@ -262,18 +295,28 @@ export default function DashboardPage() {
       setTimeout(() => setRunState("Running on-page and technical SEO checks..."), 1800);
       setTimeout(() => setRunState("Evaluating keyword opportunities & SERP positions..."), 2800);
 
-      const res = await fetch('/api/tasks/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          website_id: currentWebsite.id,
-          goal: `Audit ${currentWebsite.domain} and find high-priority SEO improvements.`,
-        })
-      });
+      const [res, recRes] = await Promise.allSettled([
+        fetch('/api/tasks/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            website_id: currentWebsite.id,
+            goal: `Audit ${currentWebsite.domain} and find high-priority SEO improvements.`,
+          })
+        }),
+        fetch('/api/rank-tracking/recovery', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            website_id: currentWebsite.id,
+          })
+        }),
+      ]);
 
-      await fetchDashboardStats();
+      await fetchDashboardStats(true);
+      const isOk = res.status === 'fulfilled' && res.value.ok;
       setActivityStream((prev) => [
-        res.ok
+        isOk
           ? {
               id: `ev-${Date.now()}`,
               type: "audit",
@@ -334,40 +377,48 @@ export default function DashboardPage() {
 
   // Process and aggregate chart data according to selected timeRange and interval (100% empirical live data)
   const { processedChartData, cardTotals } = useMemo(() => {
-    if (!chartData || chartData.length === 0) {
+    if ((!chartData || chartData.length === 0) && (!gscHourly || !gscHourly.points?.length)) {
       return {
         processedChartData: [],
         cardTotals: { totalClicks: 0, totalImpressions: 0, avgCtr: "0.0%", avgPos: "0.0" },
       };
     }
 
+    if (chartTimeRange === '24h') {
+      if (gscHourly?.points && gscHourly.points.length > 0) {
+        return {
+          processedChartData: gscHourly.points,
+          cardTotals: gscHourly.totals || {
+            totalClicks: 0,
+            totalImpressions: 0,
+            avgCtr: "0.0%",
+            avgPos: "0.0",
+          },
+        };
+      }
+    }
+
     // Sort ascending by raw date (YYYY-MM-DD)
-    const sorted = [...chartData].sort((a, b) => (a.date > b.date ? 1 : -1));
+    const sorted = [...(chartData || [])].sort((a, b) => (a.date > b.date ? 1 : -1));
 
     // Calculate exact slice based on timeRange from the latest date in the dataset
     let dataToUse: any[] = sorted;
-    let cardSlice: any[] = sorted;
 
     if (chartTimeRange === '24h') {
-      // Most recent date recorded by Google Search Console
-      cardSlice = sorted.slice(-1);
-      dataToUse = sorted.slice(-7);
+      dataToUse = sorted.slice(-1);
     } else if (chartTimeRange === '7d') {
       dataToUse = sorted.slice(-7);
-      cardSlice = dataToUse;
     } else if (chartTimeRange === '28d') {
       dataToUse = sorted.slice(-28);
-      cardSlice = dataToUse;
     } else if (chartTimeRange === '3m') {
       dataToUse = sorted.slice(-90);
-      cardSlice = dataToUse;
     } else if (chartTimeRange === '6m') {
       dataToUse = sorted.slice(-180);
-      cardSlice = dataToUse;
     } else if (chartTimeRange === '16m') {
       dataToUse = sorted.slice(-480);
-      cardSlice = dataToUse;
     }
+
+    const cardSlice = dataToUse;
 
     // Empirical metrics matching Google Search Console calculation formulas
     const totalClicks = cardSlice.reduce((acc, r) => acc + (r.clicks || r.traffic || 0), 0);
@@ -447,13 +498,13 @@ export default function DashboardPage() {
       processedChartData: processed,
       cardTotals: { totalClicks, totalImpressions, avgCtr, avgPos },
     };
-  }, [chartData, chartTimeRange, chartInterval]);
+  }, [chartData, chartTimeRange, chartInterval, gscHourly]);
 
   const handleExportCsv = () => {
     if (!processedChartData || processedChartData.length === 0) return;
     const header = "Date,Clicks,Impressions,CTR(%),Position\n";
     const rows = processedChartData
-      .map((r) => `${r.date},${r.clicks},${r.impressions},${r.ctr},${r.position}`)
+      .map((r: any) => `${r.date},${r.clicks},${r.impressions},${r.ctr},${r.position}`)
       .join("\n");
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -805,11 +856,17 @@ export default function DashboardPage() {
                           <div className="relative">
                             <button
                               type="button"
-                              onClick={() => setIntervalDropdownOpen(!intervalDropdownOpen)}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50"
+                              onClick={() => {
+                                if (chartTimeRange !== '24h') {
+                                  setIntervalDropdownOpen(!intervalDropdownOpen);
+                                }
+                              }}
+                              className={`inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 shadow-2xs ${
+                                chartTimeRange === '24h' ? 'cursor-default opacity-90' : 'hover:bg-neutral-50'
+                              }`}
                             >
-                              <span>{chartInterval === 'weekly' ? 'Weekly' : 'Daily'}</span>
-                              <ChevronDown className="h-3 w-3 text-neutral-400" />
+                              <span>{chartTimeRange === '24h' ? 'Hourly' : (chartInterval === 'weekly' ? 'Weekly' : 'Daily')}</span>
+                              {chartTimeRange !== '24h' && <ChevronDown className="h-3 w-3 text-neutral-400" />}
                             </button>
                             {intervalDropdownOpen && (
                               <div className="absolute right-0 mt-1 w-28 rounded-md border border-neutral-200 bg-white py-1 shadow-lg z-20 text-xs">
@@ -936,7 +993,8 @@ export default function DashboardPage() {
                                   name="Total impressions"
                                   stroke="#5e35b1"
                                   strokeWidth={2}
-                                  dot={false}
+                                  strokeDasharray={chartTimeRange === '24h' ? "3 3" : undefined}
+                                  dot={processedChartData.length <= 2 ? { r: 4, strokeWidth: 2, fill: '#5e35b1' } : false}
                                   activeDot={{ r: 4, stroke: '#5e35b1', strokeWidth: 2, fill: '#fff' }}
                                 />
                               )}
@@ -950,7 +1008,8 @@ export default function DashboardPage() {
                                   name="Total clicks"
                                   stroke="#1a73e8"
                                   strokeWidth={2}
-                                  dot={false}
+                                  strokeDasharray={chartTimeRange === '24h' ? "3 3" : undefined}
+                                  dot={processedChartData.length <= 2 ? { r: 4, strokeWidth: 2, fill: '#1a73e8' } : false}
                                   activeDot={{ r: 4, stroke: '#1a73e8', strokeWidth: 2, fill: '#fff' }}
                                 />
                               )}
@@ -964,7 +1023,7 @@ export default function DashboardPage() {
                                   name="Average CTR"
                                   stroke="#00897b"
                                   strokeWidth={2}
-                                  dot={false}
+                                  dot={processedChartData.length <= 2 ? { r: 4, strokeWidth: 2, fill: '#00897b' } : false}
                                   activeDot={{ r: 4, stroke: '#00897b', strokeWidth: 2, fill: '#fff' }}
                                 />
                               )}
@@ -978,13 +1037,47 @@ export default function DashboardPage() {
                                   name="Average position"
                                   stroke="#e8710a"
                                   strokeWidth={2}
-                                  dot={false}
+                                  dot={processedChartData.length <= 2 ? { r: 4, strokeWidth: 2, fill: '#e8710a' } : false}
                                   activeDot={{ r: 4, stroke: '#e8710a', strokeWidth: 2, fill: '#fff' }}
                                 />
                               )}
                             </LineChart>
                           </ResponsiveContainer>
                         </div>
+
+                        {/* Top Search Queries Table (Matching GSC UI) */}
+                        {topQueries && topQueries.length > 0 && (
+                          <div className="mt-4 border-t border-neutral-200 pt-4">
+                            <div className="flex items-center justify-between px-1 mb-2.5">
+                              <h3 className="text-xs font-semibold text-neutral-800 uppercase tracking-wider">Top Search Queries</h3>
+                              <span className="text-[11px] text-neutral-400">From Google Search Console</span>
+                            </div>
+                            <div className="overflow-x-auto rounded-lg border border-neutral-200">
+                              <table className="w-full border-collapse text-left text-xs">
+                                <thead>
+                                  <tr className="border-b border-neutral-200 bg-neutral-50/70 text-neutral-500 font-medium">
+                                    <th className="px-3.5 py-2 font-medium">Top queries</th>
+                                    <th className="px-3 py-2 text-right font-medium">Clicks</th>
+                                    <th className="px-3 py-2 text-right font-medium">Impressions</th>
+                                    <th className="px-3 py-2 text-right font-medium">CTR</th>
+                                    <th className="px-3.5 py-2 text-right font-medium">Position</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-100 text-neutral-700">
+                                  {topQueries.slice(0, 8).map((q: any, idx: number) => (
+                                    <tr key={idx} className="hover:bg-neutral-50/60 transition-colors">
+                                      <td className="px-3.5 py-2 font-medium text-neutral-900 max-w-xs truncate">{q.query}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums">{q.clicks.toLocaleString()}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums">{q.impressions.toLocaleString()}</td>
+                                      <td className="px-3 py-2 text-right tabular-nums">{typeof q.ctr === 'number' ? (q.ctr > 1 ? q.ctr.toFixed(1) : (q.ctr * 100).toFixed(1)) : q.ctr}%</td>
+                                      <td className="px-3.5 py-2 text-right tabular-nums">{typeof q.position === 'number' ? q.position.toFixed(1) : q.position}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="flex h-60 flex-col items-center justify-center px-6 text-center">

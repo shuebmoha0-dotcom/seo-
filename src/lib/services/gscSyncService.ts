@@ -11,8 +11,8 @@ export interface GSCSyncResult {
   error?: string;
 }
 
-export async function syncSearchConsoleData(websiteId: string, daysBack: number = 480): Promise<GSCSyncResult> {
-  const supabase = createAdminClient();
+export async function syncSearchConsoleData(websiteId: string, daysBack: number = 480, customClient?: any): Promise<GSCSyncResult> {
+  const supabase = customClient || createAdminClient();
 
   // 1. Fetch connected GSC integration
   const { data: integration, error: intErr } = await supabase
@@ -199,6 +199,85 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     }
   }
 
+  // 4b. Query rolling 24-hour hourly performance (dimension: 'hour') with dataState: 'HOURLY_ALL'
+  // Google Search Console records hourly buckets for the most recent 2-day period.
+  const hourlyStartDateObj = new Date(now.getTime() - 2 * 86400000);
+  const hourlyStartDate = hourlyStartDateObj.toISOString().split('T')[0];
+  const hourlyResult = await queryGoogleAnalytics({
+    startDate: hourlyStartDate,
+    endDate,
+    dimensions: ['HOUR'],
+    dataState: 'HOURLY_ALL',
+    rowLimit: 100,
+  });
+
+  let hourlyData24h: any = null;
+  if (hourlyResult.ok && hourlyResult.data?.rows?.length > 0) {
+    const rawHourlyRows = [...hourlyResult.data.rows];
+    // Sort rows chronologically by the ISO hour timestamp
+    rawHourlyRows.sort((a: any, b: any) => (a.keys?.[0] > b.keys?.[0] ? 1 : -1));
+
+    // The Google Search Console 24 hours window uses the last 24 available hourly buckets
+    const last24Rows = rawHourlyRows.slice(-24);
+
+    let hClicks = 0;
+    let hImpressions = 0;
+    let weightedPosSum = 0;
+
+    const points = last24Rows.map((r: any) => {
+      const isoHour = r.keys?.[0] || '';
+      const clicks = r.clicks || 0;
+      const impressions = r.impressions || 0;
+      const ctr = r.ctr || 0;
+      const position = r.position ? Math.round(r.position * 10) / 10 : 0;
+
+      hClicks += clicks;
+      hImpressions += impressions;
+      weightedPosSum += position * impressions;
+
+      // Format display hour (e.g. "2 PM", "4 PM", or "12 AM 10/14" on date rollover)
+      let displayDate = isoHour;
+      let shortHour = isoHour;
+      try {
+        const d = new Date(isoHour);
+        if (!isNaN(d.getTime())) {
+          const hourNum = d.getHours();
+          const ampm = hourNum >= 12 ? 'PM' : 'AM';
+          const hr12 = hourNum % 12 === 0 ? 12 : hourNum % 12;
+          shortHour = `${hr12} ${ampm}`;
+          const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+          displayDate = hourNum === 0 || hourNum === 14 ? `${shortHour} ${dateStr}` : shortHour;
+        }
+      } catch {}
+
+      return {
+        date: isoHour,
+        displayDate: shortHour,
+        fullDate: isoHour,
+        clicks,
+        traffic: clicks,
+        impressions,
+        ctr: impressions > 0 ? Number(((clicks / impressions) * 100).toFixed(2)) : 0,
+        position,
+      };
+    });
+
+    const avgPos = hImpressions > 0 
+      ? (weightedPosSum / hImpressions).toFixed(1)
+      : (points.length > 0 ? (points.reduce((a: any, b: any) => a + b.position, 0) / points.length).toFixed(1) : '0.0');
+
+    hourlyData24h = {
+      totals: {
+        totalClicks: hClicks,
+        totalImpressions: hImpressions,
+        avgCtr: hImpressions > 0 ? ((hClicks / hImpressions) * 100).toFixed(1) + '%' : '0.0%',
+        avgPos,
+      },
+      points,
+      lastSyncedAt: new Date().toISOString(),
+    };
+  }
+
   // 5. Query top queries & pages combined (dimension: ['query', 'page']) for high-precision SEO intelligence
   const queryPageResult = await queryGoogleAnalytics({
     startDate,
@@ -280,11 +359,17 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     }
   }
 
-  // 7. Update integration sync metadata
+  // 7. Update integration sync metadata and cache rolling 24h hourly stats
+  const updatedConfig = {
+    ...(integration.config || {}),
+    ...(hourlyData24h ? { hourly_data_24h: hourlyData24h } : {}),
+  };
+
   await supabase
     .from('integrations')
     .update({
       status: 'connected',
+      config: updatedConfig,
       status_message: `Connected to ${propertyUrl}. Performance metrics synced (${totalClicks} clicks, ${totalImpressions} impressions).`,
       last_synced_at: new Date().toISOString(),
       last_success_at: new Date().toISOString(),

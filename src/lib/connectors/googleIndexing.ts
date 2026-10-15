@@ -322,25 +322,52 @@ export class GoogleIndexingService {
     inspectionUrl: string;
     siteUrl: string;
     accessToken?: string;
+    websiteId?: string;
   }): Promise<UrlInspectionResult> {
-    const { inspectionUrl, siteUrl, accessToken } = params;
+    const { inspectionUrl, siteUrl, accessToken, websiteId } = params;
     try {
       let token = accessToken || process.env.GOOGLE_SEARCH_CONSOLE_TOKEN;
+      let refreshToken: string | undefined = undefined;
+
       if (!token) {
         try {
           const supabase = createAdminClient();
-          const { data: creds } = await supabase
-            .from('integration_credentials')
-            .select('encrypted_value')
-            .eq('credential_type', 'oauth_tokens')
-            .limit(1)
-            .maybeSingle();
-          if (creds?.encrypted_value) {
-            const { decryptCredential } = await import('@/lib/utils/encryption');
-            const parts = creds.encrypted_value.split(':::');
-            token = decryptCredential(parts[0]);
+          let intQuery = supabase
+            .from('integrations')
+            .select('id, config')
+            .eq('provider', 'google_search_console');
+
+          if (websiteId) {
+            intQuery = intQuery.eq('website_id', websiteId);
           }
-        } catch (_) {}
+
+          const { data: intRows } = await intQuery;
+          // Prefer row matching siteUrl/domain or first available
+          const cleanSiteUrl = siteUrl.replace(/\/+$/, '').toLowerCase();
+          const targetInt = (intRows || []).find((r: any) => {
+            const prop = (r.config?.property_url || '').replace(/\/+$/, '').toLowerCase();
+            return prop.includes(cleanSiteUrl) || cleanSiteUrl.includes(prop);
+          }) || (intRows && intRows[0]);
+
+          if (targetInt?.id) {
+            const { data: creds } = await supabase
+              .from('integration_credentials')
+              .select('encrypted_value')
+              .eq('integration_id', targetInt.id)
+              .maybeSingle();
+
+            if (creds?.encrypted_value) {
+              const { decryptCredential } = await import('@/lib/utils/encryption');
+              const parts = creds.encrypted_value.split(':::');
+              token = decryptCredential(parts[0]);
+              if (parts[1]) {
+                refreshToken = decryptCredential(parts[1]);
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[GoogleIndexingService] Error loading credentials from DB:', dbErr);
+        }
       }
 
       if (!token) {
@@ -351,8 +378,13 @@ export class GoogleIndexingService {
         };
       }
 
-      const auth = new google.auth.OAuth2();
-      auth.setCredentials({ access_token: token });
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const auth = new google.auth.OAuth2(clientId, clientSecret);
+      auth.setCredentials({
+        access_token: token,
+        refresh_token: refreshToken || undefined,
+      });
 
       const searchconsole = google.searchconsole({
         version: 'v1',

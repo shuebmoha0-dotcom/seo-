@@ -471,9 +471,9 @@ export class FullAutopilotEngine {
       const isDailyCapReached = (recentDraftsCount ?? 0) >= maxDailyArticles;
 
       if (isDailyCapReached && !options?.force) {
-        console.log(`[FullAutopilotEngine] Daily article cap reached for ${domain} (${recentDraftsCount}/${maxDailyArticles} articles created in last 24h). Skipping content generation to prevent token waste.`);
+        console.log(`[FullAutopilotEngine] Daily article cap reached for ${domain} (${recentDraftsCount}/${maxDailyArticles} articles created in last 24h). Shifting cycle to striking-distance rank optimization and technical audit to grow search traffic without token waste.`);
 
-        // Step: Technical SEO health check (lightweight, zero LLM token waste)
+        // Step A: Technical SEO health check (lightweight, zero LLM token waste)
         if (autoFix) {
           try {
             const { WebsiteCrawler } = await import('./crawler');
@@ -487,6 +487,44 @@ export class FullAutopilotEngine {
           } catch (techErr) {
             console.warn('[FullAutopilotEngine] Technical audit notice:', techErr);
           }
+        }
+
+        // Step B: Intelligent Striking-Distance Growth Mining from Search Console
+        let growthSprintSummary = '';
+        try {
+          const { RankRecoveryEngine } = await import('./rankRecoveryEngine');
+          const recoveryReport = await RankRecoveryEngine.scanAndAnalyze({
+            websiteId,
+            domain,
+            siteUrl,
+          });
+
+          if (recoveryReport.striking_distance_count > 0) {
+            const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+              websiteId,
+              report: recoveryReport,
+            });
+            const topOpp = recoveryReport.striking_distance_opportunities[0];
+            growthSprintSummary = `Identified ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at Pos #${topOpp?.current_position} with ${topOpp?.impressions} imps). Queued ${savedCount} CTR optimizations.`;
+          }
+        } catch (growthErr) {
+          console.warn('[FullAutopilotEngine] Growth sprint notice:', growthErr);
+        }
+
+        // Step C: Automated Post Indexing Audit & Instant Auto-Submit
+        let indexingAuditSummary = '';
+        try {
+          const { PostIndexVerificationService } = await import('@/lib/services/postIndexVerificationService');
+          const indexReport = await PostIndexVerificationService.verifyAndIndexAllPosts({
+            websiteId,
+            domain,
+            limit: 30,
+          });
+          if (indexReport.unindexed_submitted_count > 0) {
+            indexingAuditSummary = `Auto-submitted ${indexReport.unindexed_submitted_count} unindexed post(s) for indexing.`;
+          }
+        } catch (idxErr) {
+          console.warn('[FullAutopilotEngine] Post index audit notice:', idxErr);
         }
 
         // Reschedule next run cleanly (minimum 24 hours)
@@ -503,7 +541,7 @@ export class FullAutopilotEngine {
           .eq('name', 'Zero-Touch Full Autopilot')
           .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`);
 
-        const capSummary = `Daily article quota reached (${recentDraftsCount}/${maxDailyArticles} articles in past 24h). Content generation skipped to conserve tokens and maintain consistent cadence. Technical health verified. Next scheduled cycle: ${new Date(nextRunAt).toLocaleString()}.`;
+        const capSummary = `Daily article quota active (${recentDraftsCount}/${maxDailyArticles} articles created in past 24h). Autopilot executed a Search Console Growth & Indexing Sprint: ${growthSprintSummary || 'monitored keyword positions'}${indexingAuditSummary ? ` · ${indexingAuditSummary}` : ''}. Next scheduled cycle: ${new Date(nextRunAt).toLocaleString()}.`;
 
         if (execution?.id) {
           await supabase
@@ -850,6 +888,46 @@ export class FullAutopilotEngine {
         }
       }
 
+      // ── STEP 5.5: STRIKING-DISTANCE GROWTH MINING & DUAL-ENGINE ACCELERATION ──
+      let strikingDistanceSummary = '';
+      try {
+        const { RankRecoveryEngine } = await import('./rankRecoveryEngine');
+        const recoveryReport = await RankRecoveryEngine.scanAndAnalyze({
+          websiteId,
+          domain,
+          siteUrl,
+        });
+
+        if (recoveryReport.striking_distance_count > 0) {
+          const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+            websiteId,
+            report: recoveryReport,
+          });
+          const topOpp = recoveryReport.striking_distance_opportunities[0];
+          strikingDistanceSummary = `Discovered ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at #${topOpp?.current_position} · ${topOpp?.impressions} imps). Queued ${savedCount} High-CTR optimizations.`;
+        }
+      } catch (growthErr) {
+        console.warn('[FullAutopilotEngine] Striking-distance scan notice:', growthErr);
+      }
+
+      // ── STEP 5.6: AUTOMATED POST INDEXING AUDIT & INSTANT AUTO-SUBMIT ─────
+      let indexingVerificationSummary = '';
+      try {
+        const { PostIndexVerificationService } = await import('@/lib/services/postIndexVerificationService');
+        const indexReport = await PostIndexVerificationService.verifyAndIndexAllPosts({
+          websiteId,
+          domain,
+          limit: 30,
+        });
+        if (indexReport.unindexed_submitted_count > 0) {
+          indexingVerificationSummary = `Verified ${indexReport.total_posts_checked} published posts. Auto-submitted ${indexReport.unindexed_submitted_count} unindexed URL(s) to Google & IndexNow.`;
+        } else {
+          indexingVerificationSummary = `Verified ${indexReport.total_posts_checked} published posts. 100% confirmed indexed or queued.`;
+        }
+      } catch (idxErr) {
+        console.warn('[FullAutopilotEngine] Post index verification notice:', idxErr);
+      }
+
       // ── STEP 6: PERPETUAL RESCHEDULING FOR MONTHS OF CONTINUOUS OPERATION ─
       const intervalMs = this.getCadenceIntervalMs(cadence);
       const nextRunAt = new Date(Date.now() + intervalMs).toISOString();
@@ -905,6 +983,12 @@ export class FullAutopilotEngine {
           telegramMsg += `🔗 *Live Post:* [${livePostUrl}](${livePostUrl})\n`;
         }
         telegramMsg += `🛠️ *Technical SEO:* ${technicalFixesInfo.summary}\n`;
+        if (strikingDistanceSummary) {
+          telegramMsg += `⚡ *Growth Acceleration:* ${strikingDistanceSummary}\n`;
+        }
+        if (indexingVerificationSummary) {
+          telegramMsg += `🔍 *Google Indexation:* ${indexingVerificationSummary}\n`;
+        }
         telegramMsg += `⏱️ *Next Cycle:* ${new Date(nextRunAt).toUTCString()}\n\n`;
         telegramMsg += `_Operating 24/7 autonomously with zero human intervention needed._`;
 

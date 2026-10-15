@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
 
-    const result = await syncSearchConsoleData(website_id);
+    const result = await syncSearchConsoleData(website_id, 480, supabase);
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('[GSC Sync API] Error:', error);

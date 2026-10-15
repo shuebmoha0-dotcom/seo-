@@ -46,8 +46,8 @@ export function markdownToWordPressHtml(markdown: string): string {
     const cleanSrc = src.trim();
     const placeholder = `__PROTECTED_IMAGE_BLOCK_${imagePlaceholders.length}__`;
     const captionHtml = cleanAlt ? `<figcaption class="wp-element-caption">${cleanAlt}</figcaption>` : '';
-    // Standard, 100% valid Gutenberg core/image block serialization (never triggers invalid content error)
-    const imageTag = `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${cleanSrc}" alt="${cleanAlt}"/>${captionHtml}</figure>\n<!-- /wp:image -->\n\n`;
+    // Standard, 100% valid Gutenberg core/image block serialization (mobile-friendly with max-width:100%)
+    const imageTag = `\n\n<!-- wp:image {"sizeSlug":"large"} -->\n<figure class="wp-block-image size-large"><img src="${cleanSrc}" alt="${cleanAlt}" style="max-width:100%;height:auto;border-radius:8px;"/>${captionHtml}</figure>\n<!-- /wp:image -->\n\n`;
     imagePlaceholders.push(imageTag);
     return placeholder;
   });
@@ -102,6 +102,32 @@ export function markdownToWordPressHtml(markdown: string): string {
       .map(item => `<li>${item.replace(/^(?:>|&gt;)\s*/, '')}</li>`)
       .join('\n');
     return `\n\n<!-- wp:list {"ordered":true} -->\n<ol class="wp-block-list">\n${items}\n</ol>\n<!-- /wp:list -->\n\n`;
+  });
+
+  // 9.5. Convert Markdown Tables to Mobile-Responsive Gutenberg Tables
+  html = html.replace(/((?:^\|.+?\|\s*\n)+)/gm, (tableMatch) => {
+    const lines = tableMatch.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return tableMatch;
+
+    const isDivider = /^\|(?:\s*:?-+:?\s*\|)+$/.test(lines[1]);
+    if (!isDivider) return tableMatch;
+
+    const parseCells = (line: string) =>
+      line
+        .replace(/^\||\|$/g, '')
+        .split('|')
+        .map(c => c.trim());
+
+    const headerCells = parseCells(lines[0]);
+    const headerHtml = `<thead><tr>${headerCells.map(c => `<th>${c}</th>`).join('')}</tr></thead>`;
+
+    const bodyRows = lines.slice(2).map(line => {
+      const cells = parseCells(line);
+      return `<tr>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
+    }).join('');
+    const bodyHtml = `<tbody>${bodyRows}</tbody>`;
+
+    return `\n\n<!-- wp:table {"className":"is-style-stripes"} -->\n<figure class="wp-block-table is-style-stripes" style="overflow-x:auto;max-width:100%;margin:1.5rem 0;"><table class="has-fixed-layout" style="width:100%;min-width:450px;">${headerHtml}${bodyHtml}</table></figure>\n<!-- /wp:table -->\n\n`;
   });
 
   // 10. Convert Paragraphs

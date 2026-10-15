@@ -857,16 +857,23 @@ export class AutopilotExecutor {
             topActionSummary = `\n⚡ *Autonomous Quick-Win Armed for Top Query:*\n• *Target:* \`${topOpp.keyword}\` (Position #${topOpp.current_position})\n• *High-CTR Formula:* "${topOpp.prescriptive_actions.title_hook_suggestion}"\n• *Estimated Click Unlock:* ${topOpp.estimated_click_multiplier} to Top 3\n`;
           }
 
-          let growthSummary = `⚡ *Fast-Rank Growth Acceleration for ${website_domain}:*\n\n`;
-          growthSummary += `Identified ${report.striking_distance_count} striking-distance queries (positions 4–20) with potential unlock of +${report.total_potential_clicks_gain.toLocaleString()} monthly clicks!\n\n`;
+          let growthSummary = `⚡ *Intelligent Growth Acceleration Sprint for ${website_domain}:*\n\n`;
+          growthSummary += `📊 *Diagnosis:* Discovered *${report.striking_distance_count} striking-distance queries* (positions 4–20) with impressions but under 1% CTR.\n`;
+          growthSummary += `💡 *Growth Barrier Isolated:* You do not need dozens of new articles. Google is already testing and ranking these URLs on Page 1 & 2! Because titles and snippets lack high-CTR hooks and FAQ rich snippets, impressions sit at positions 5–15 without generating clicks.\n\n`;
+          growthSummary += `🎯 *Top Immediate Growth Sprints (Page 1/2 → Top 3):*\n\n`;
 
           for (const opp of report.striking_distance_opportunities.slice(0, 3)) {
-            growthSummary += `• *"${opp.keyword}"* (Position #${opp.current_position} · ${opp.impressions.toLocaleString()} imps)\n`;
-            growthSummary += `  ↳ _Action:_ ${opp.headline}\n`;
-            growthSummary += `  ↳ _Target:_ Push to Top 3 (${opp.estimated_click_multiplier})\n\n`;
+            growthSummary += `• *Query:* \`${opp.keyword}\` (Pos #${opp.current_position} · ${opp.impressions.toLocaleString()} imps · ${opp.clicks} clicks)\n`;
+            if (opp.page_url && opp.page_url !== 'unknown') {
+              growthSummary += `  ↳ *Landing Page:* \`${opp.page_url}\`\n`;
+            }
+            if (opp.prescriptive_actions?.title_hook_suggestion) {
+              growthSummary += `  ↳ *High-CTR Title Formula:* "${opp.prescriptive_actions.title_hook_suggestion}"\n`;
+            }
+            growthSummary += `  ↳ *Expected Lift:* ${opp.estimated_click_multiplier} to Top 3 (+${opp.estimated_monthly_clicks_gain} clicks/mo)\n\n`;
           }
           if (topActionSummary) growthSummary += topActionSummary;
-          growthSummary += `\nSaved ${savedCount} high-leverage opportunities queued for 1-click execution.`;
+          growthSummary += `\n✅ Saved ${savedCount} high-leverage growth opportunities in your dashboard for immediate execution.`;
 
           return {
             success: true,
@@ -1923,36 +1930,41 @@ ${targetDraft.content_body || ''}`
 
       // ── ACTION: INDEXING & RE-CRAWL SUBMISSION ──────────────────────
       if (instruction.action_type === 'indexing_check') {
-        console.log(`[AutopilotExecutor] Executing multi-engine indexing pipeline for "${website_domain}"...`);
+        console.log(`[AutopilotExecutor] Executing indexing check & verification pipeline for "${website_domain}"...`);
 
-        // 1. Resolve Target URL to Index
+        // Check if user requested a specific single URL or full-site batch verification of all posts
         let targetUrl = instruction.target_url;
-        let latestDraft: any = null;
-
         if (!targetUrl && instruction.goal) {
           const match = instruction.goal.match(/https?:\/\/[^\s]+/i);
           if (match) targetUrl = match[0];
         }
 
-        // If no explicit URL, query for most recent published/approved article
-        if (!targetUrl) {
-          const { data: draft } = await supabase
-            .from('content_drafts')
-            .select('id, working_title, url_slug, status, updated_at')
-            .eq('website_id', website_id)
-            .in('status', ['published', 'approved'])
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        const isBatchAllPostsRequest = !targetUrl || /(every|all|posts?|articles?|make\s+sure.*index|check.*index)/i.test(instruction.goal || instruction.summary || '');
 
-          if (draft && draft.url_slug) {
-            latestDraft = draft;
-            const baseUrl = (params.website_url || `https://${website_domain}`).replace(/\/$/, '');
-            targetUrl = `${baseUrl}/${draft.url_slug}/`;
-          }
+        if (isBatchAllPostsRequest) {
+          console.log(`[AutopilotExecutor] Running comprehensive post indexing verification & auto-submission for all published posts on "${website_domain}"...`);
+          const { PostIndexVerificationService } = await import('@/lib/services/postIndexVerificationService');
+          const batchReport = await PostIndexVerificationService.verifyAndIndexAllPosts({
+            websiteId: website_id,
+            domain: website_domain,
+            limit: 50,
+          });
+
+          return {
+            success: true,
+            intent_type: 'immediate_action',
+            action_type: 'indexing_check',
+            summary: batchReport.formatted_markdown,
+            link_url: '/technical-seo',
+            link_label: 'View Technical SEO Signals',
+            data: batchReport,
+          };
         }
 
-        // Default to site root
+        // Single specific URL workflow
+        let latestDraft: any = null;
+
+        // Default to site root if still no targetUrl
         if (!targetUrl) {
           targetUrl = params.website_url || `https://${website_domain}/`;
         }

@@ -194,3 +194,21 @@ td, th {
     @apply bg-white/90 backdrop-blur border border-neutral-200 shadow-sm;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Mobile responsiveness defaults
+   ────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  body main {
+    padding-top: 3.5rem; /* 56px to clear fixed mobile top header */
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
+
+/* Universal mobile-friendly image and element constraints */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+

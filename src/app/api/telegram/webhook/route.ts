@@ -985,6 +985,14 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'seo_diagnostic';
       }
 
+      // Route growth, fast ranking, and intelligence requests directly to growth_acceleration
+      const isGrowthOrIntelligenceRequest = 
+        /(grow.*fast|rank.*fast|ranking.*fast|accelerat|why.*not.*intelligent|why.*still.*not.*intelligent|not.*intelligent|help.*grow|boost.*clicks?|more.*clicks?|how.*to.*grow|striking.*distance|grow.*traffic|how.*to.*rank)/i.test(taskPrompt);
+      if (isGrowthOrIntelligenceRequest && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
+        parsed.intent_type = 'immediate_action';
+        parsed.action_type = 'growth_acceleration';
+      }
+
       // Route keyword requests directly to keyword_research to guarantee grounded inventory check
       const isKeywordRequest = /give me keywords?|find keywords?|keyword opportunities|what keywords?|keyword ideas/i.test(taskPrompt);
       if (isKeywordRequest && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
@@ -1019,9 +1027,9 @@ Your agent will process the request in the background and ping you when finished
 
       // Route indexing requests directly to indexing_check to execute live multi-engine submission
       const isIndexingRequest = /^(index|indexing|request\s+indexing|submit\s+for\s+indexing)\b/i.test(taskPrompt.trim()) ||
-        /(is.*(site|url|page).*indexed|check.*index(ing)?|submit.*(google|index(ing)?)|request.*index(ing)?|index\s+(this|my|the|it|url|page|site|article|post|https?))/i.test(taskPrompt) ||
-        /\b(index|indexing)\s+(now|url|link|page|post|article|site)\b/i.test(taskPrompt) ||
-        /\b(request(ed)?\s+(the\s+)?bot\s+for\s+indexing|bot\s+for\s+indexing)\b/i.test(taskPrompt) ||
+        /(is.*(site|url|page|post|article).*indexed|check.*index(ing)?|submit.*(google|index(ing)?)|request.*index(ing)?|index\s+(this|my|the|it|url|page|site|article|post|all|every|https?)|make\s+sure.*index(ed)?)/i.test(taskPrompt) ||
+        /\b(index|indexing)\s+(now|url|link|page|post|article|site|all|every)\b/i.test(taskPrompt) ||
+        /\b(request(ed)?\s+(the\s+)?bot\s+for\s+indexing|bot\s+for\s+indexing|make\s+sure\s+(every|all)\s+(post|article).*index(ed)?)\b/i.test(taskPrompt) ||
         /^index$/i.test(taskPrompt.trim());
       if (isIndexingRequest) {
         parsed.intent_type = 'immediate_action';
@@ -1171,6 +1179,12 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         await telegram.sendMessage(
           chatId,
           `🚀 *Instant Indexing Pipeline Activated for \`${currentSite.domain}\`...* ⏳\n\nSubmitting to Google Indexing API, IndexNow (Bing/Yandex), and search engine re-crawl bots...`,
+          { parse_mode: 'Markdown' }
+        );
+      } else if (parsed.action_type === 'growth_acceleration') {
+        await telegram.sendMessage(
+          chatId,
+          `⚡ *Autonomous Growth Acceleration Activated for \`${currentSite.domain}\`...* ⏳\n\n1️⃣ Inspecting live Google Search Console performance data\n2️⃣ Identifying striking-distance queries (positions 4–20 with impressions)\n3️⃣ Formulating High-CTR Title & Schema optimizations to leap into Top 3...`,
           { parse_mode: 'Markdown' }
         );
       } else {

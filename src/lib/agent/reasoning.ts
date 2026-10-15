@@ -26,7 +26,7 @@ export class ReasoningEngine {
     
     // Construct the prompt context
     const context = `
-      You are an elite, senior SEO architect analyzing a SaaS website page.
+      You are an elite, senior SEO architect analyzing a client website page.
       
       URL: ${page.url}
       Title: ${page.title || 'None'}

@@ -83,8 +83,9 @@ export class RankRecoveryEngine {
         .from('search_console_data')
         .select('query, position, impressions, clicks, ctr, date, page_id')
         .eq('website_id', websiteId)
-        .order('date', { ascending: false })
-        .limit(100),
+        .not('query', 'is', null)
+        .order('impressions', { ascending: false })
+        .limit(200),
       supabase
         .from('keywords')
         .select('term, volume, difficulty, intent')
@@ -130,7 +131,7 @@ export class RankRecoveryEngine {
       if (!q || processedQueries.has(q.toLowerCase())) continue;
 
       // Position between 4.0 and 20.0
-      if (pos >= 4.0 && pos <= 20.0 && imps >= 10) {
+      if (pos >= 4.0 && pos <= 20.0 && imps >= 5) {
         processedQueries.add(q.toLowerCase());
 
         // Calculate expected click multiplier if pushed to Top 3 (approx 12% CTR baseline)
