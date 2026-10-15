@@ -401,21 +401,27 @@ export default function DashboardPage() {
     // Sort ascending by raw date (YYYY-MM-DD)
     const sorted = [...(chartData || [])].sort((a, b) => (a.date > b.date ? 1 : -1));
 
-    // Calculate exact slice based on timeRange from the latest date in the dataset
-    let dataToUse: any[] = sorted;
+    // Google Search Console standard: Predefined multi-day filters (7d, 28d, 3m, 6m, 16m)
+    // always end at the last fully completed day (yesterday), excluding today's partial/incomplete data.
+    // 24h evaluates the most recent date / hourly window.
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isLatestToday = sorted.length > 0 && sorted[sorted.length - 1].date === todayStr;
+    const completedSorted = isLatestToday && sorted.length > 1 ? sorted.slice(0, -1) : sorted;
+
+    let dataToUse: any[] = completedSorted;
 
     if (chartTimeRange === '24h') {
       dataToUse = sorted.slice(-1);
     } else if (chartTimeRange === '7d') {
-      dataToUse = sorted.slice(-7);
+      dataToUse = completedSorted.slice(-7);
     } else if (chartTimeRange === '28d') {
-      dataToUse = sorted.slice(-28);
+      dataToUse = completedSorted.slice(-28);
     } else if (chartTimeRange === '3m') {
-      dataToUse = sorted.slice(-90);
+      dataToUse = completedSorted.slice(-90);
     } else if (chartTimeRange === '6m') {
-      dataToUse = sorted.slice(-180);
+      dataToUse = completedSorted.slice(-180);
     } else if (chartTimeRange === '16m') {
-      dataToUse = sorted.slice(-480);
+      dataToUse = completedSorted.slice(-480);
     }
 
     const cardSlice = dataToUse;
