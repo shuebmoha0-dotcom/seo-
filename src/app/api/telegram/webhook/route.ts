@@ -393,25 +393,45 @@ export async function POST(request: Request) {
     const username = message.chat.username;
     const firstName = message.chat.first_name || 'User';
 
+    // Security 1: Block group chats to prevent rogue third-party groups from spamming our bot
+    if (message.chat?.type && message.chat.type !== 'private') {
+      console.log(`[Telegram Webhook] Ignored non-private message from group ${message.chat.id}`);
+      return NextResponse.json({ ok: true, ignored: 'groups_disabled' });
+    }
+
+    // Security 2: Instant Cyrillic / Russian spam filter (prevents spam attacks on our AI agent)
+    if (/[\u0400-\u04FF]/.test(rawText)) {
+      console.warn(`[Telegram Webhook] Blocked Cyrillic spam message from chat ${chatId}: "${rawText.slice(0, 50)}"`);
+      return NextResponse.json({ ok: true, ignored: 'spam_blocked' });
+    }
+
     // A. Handle /start command (Pairing)
     if (rawText.startsWith('/start')) {
       const parts = rawText.split(' ');
       let websiteId = parts[1]?.trim();
 
-      // If no websiteId provided in command parameter, look up primary website
+      // If no websiteId provided, check if this chat is already an authorized subscriber
       if (!websiteId) {
-        const { data: defaultSite } = await supabase
-          .from('websites')
-          .select('id, domain')
-          .limit(1)
-          .single();
-        websiteId = defaultSite?.id;
+        const { data: allCustom } = await supabase
+          .from('integrations')
+          .select('id, website_id, config')
+          .eq('provider', 'custom');
+
+        const matchedInteg = allCustom?.find(row => 
+          row.config?.type === 'telegram' && 
+          Array.isArray(row.config.subscribers) && 
+          row.config.subscribers.some((s: any) => s.chat_id === chatId)
+        );
+
+        if (matchedInteg?.website_id) {
+          websiteId = matchedInteg.website_id;
+        }
       }
 
       if (!websiteId) {
         await telegram.sendMessage(
           chatId,
-          `👋 Hello *${firstName}*!\n\nTo pair your phone with your SEO dashboard, please click the *Connect Telegram* button inside your web dashboard or send:\n\n\`/start <your_website_id>\``,
+          `👋 Hello *${firstName}*!\n\nTo pair your Telegram with your Outdart dashboard, please click the *Connect Telegram* button inside your web dashboard or send:\n\n\`/start <your_website_id>\``,
           { parse_mode: 'Markdown' }
         );
         return NextResponse.json({ ok: true });
