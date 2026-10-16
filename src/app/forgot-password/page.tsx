@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { forgotPassword } from "@/lib/auth/actions";
+import { createClient } from "@/lib/supabase/client";
 import { Bot, Mail, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -14,10 +15,36 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
     setResult(null);
+
     const formData = new FormData(e.currentTarget);
-    const res = await forgotPassword(formData);
-    setResult(res);
-    setLoading(false);
+    const email = (formData.get("email") as string)?.trim();
+
+    if (!email) {
+      setResult({ error: "Please enter your email address." });
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+
+      if (resetErr) {
+        // Fallback to server action
+        const res = await forgotPassword(formData);
+        setResult(res);
+      } else {
+        setResult({ success: "Password reset link sent! Please check your inbox and click the direct link to set your new password." });
+      }
+    } catch {
+      const res = await forgotPassword(formData);
+      setResult(res);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

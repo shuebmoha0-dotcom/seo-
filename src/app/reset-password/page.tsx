@@ -30,16 +30,16 @@ export default function ResetPasswordPage() {
       const accessToken = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
 
+      const supabase = createClient();
+
       if (c) {
         setCode(c);
-        const supabase = createClient();
         supabase.auth.exchangeCodeForSession(c).then(({ error: exErr }) => {
           if (exErr) {
             console.warn("[ResetPassword] Client code exchange:", exErr.message);
           }
         });
       } else if (accessToken && refreshToken) {
-        const supabase = createClient();
         supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -49,6 +49,16 @@ export default function ResetPasswordPage() {
           }
         });
       }
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+        if (event === "PASSWORD_RECOVERY") {
+          console.log("[ResetPassword] Ready for password update via PASSWORD_RECOVERY");
+        }
+      });
+
+      return () => {
+        authListener.subscription.unsubscribe();
+      };
     }
   }, []);
 

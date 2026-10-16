@@ -16,12 +16,14 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/login',
   '/forgot-password',
   '/reset-password',
+  '/auth/callback',
   '/privacy',
   '/terms',
 ]);
 
 const PUBLIC_PAGE_PREFIXES = [
   '/blog/', // Public articles (e.g. /blog/how-ai-agents-fix-technical-seo)
+  '/auth/', // Auth callback, OAuth redirects, and recovery verifiers
 ];
 
 const PUBLIC_API_PREFIXES = [

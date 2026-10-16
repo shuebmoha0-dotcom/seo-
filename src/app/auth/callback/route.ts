@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   // 3. For password reset links that contain hash fragments (#access_token=... or #type=recovery):
   // Since hash fragments are never sent to the server in HTTP GET, render a client bridge that
   // inspects window.location.hash and redirects to /reset-password with the fragment intact.
-  if (next.includes('reset-password')) {
+  if (next.includes('reset-password') || type === 'recovery') {
     return new Response(
       `<!DOCTYPE html>
 <html>
