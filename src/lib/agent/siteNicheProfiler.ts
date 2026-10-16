@@ -3,11 +3,14 @@ import { LLMProvider } from '../tools/llm';
 import { z } from 'zod';
 
 export type AuthorityTier = 'new' | 'established';
+export type SiteType = 'blog' | 'saas' | 'ecommerce' | 'agency' | 'local_service';
 
 export interface SiteNicheProfile {
   domain: string;
   websiteId?: string;
   siteUrl: string;
+  siteType: SiteType;
+  siteTypeRationale: string;
   primaryNiche: string;
   coreOfferings: string[];
   targetAudience: string;
@@ -66,6 +69,7 @@ export class SiteNicheProfiler {
           const parsed = JSON.parse(cached.content) as SiteNicheProfile;
           if (
             parsed.primaryNiche &&
+            parsed.siteType &&
             parsed.authorityTier &&
             Array.isArray(parsed.contentPillars) &&
             parsed.contentPillars.length > 0 &&
@@ -222,6 +226,10 @@ export class SiteNicheProfiler {
     };
 
     let primaryNiche = `${domain.replace(/\.[a-z]+$/i, '').replace(/[-_]/g, ' ')}`;
+    let siteType: SiteType = (categoriesData.length > 0 || publishedArticlesCount > 0 || existingArticleTitles.length > 0) ? 'blog' : 'saas';
+    let siteTypeRationale = (categoriesData.length > 0 || publishedArticlesCount > 0 || existingArticleTitles.length > 0)
+      ? 'Identified as an editorial content publication/blog based on published articles and content categories.'
+      : 'Identified based on web software and service indicators.';
     let coreOfferings: string[] = [];
     let contentPillars: string[] = categoriesData.length > 0 ? categoriesData.slice(0, 8) : [primaryNiche];
     let nicheSeedKeywords: string[] = [];
@@ -237,6 +245,8 @@ export class SiteNicheProfiler {
         agent: 'DiagnosticAgent',
         complexity: 'simple',
         schema: z.object({
+          site_type: z.enum(['blog', 'saas', 'ecommerce', 'agency', 'local_service']).describe('Exact classification: "blog" for editorial publishers, content sites, informational blogs, guides; "saas" for software products/apps; "ecommerce" for physical/digital stores; "agency" for marketing/consulting firms; "local_service" for local/regional services.'),
+          site_type_rationale: z.string().describe('1 sentence explaining why this classification was chosen from evidence'),
           primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "B2B Cold Email Outreach & Sales Automation", "Dental Implants Clinic", "AI Video Editing SaaS")'),
           core_offerings: z.array(z.string()).describe('3-5 core products, services, or solutions this website provides'),
           target_audience: z.string().describe('Specific buyer persona or reader audience who uses this website'),
@@ -245,16 +255,19 @@ export class SiteNicheProfiler {
           negative_boundaries: z.array(z.string()).describe('3-5 unrelated niches or topic areas that this website DOES NOT belong to, to prevent cross-niche hallucination'),
         }),
         system: `You are an elite Business Analyst and SEO Growth Architect.
-Your task is to analyze evidence from the website "${domain}" and identify its EXACT, HIGH-PRECISION NICHE, DIVERSE CONTENT PILLARS, and BALANCED SEED KEYWORDS.
+Your task is to analyze evidence from the website "${domain}" and identify its EXACT SITE TYPE (editorial blog vs SaaS vs eCommerce), HIGH-PRECISION NICHE, DIVERSE CONTENT PILLARS, and BALANCED SEED KEYWORDS.
 
 STRICT GROUNDING & MULTI-TENANT DIVERSITY MANDATE:
+- CRITICAL: Accurately distinguish between an editorial blog/content publication vs a SaaS software application. If the site consists of educational articles, marketing guides, blog posts, and categories without a software sign-up or app portal, classify it strictly as "blog".
 - Heavily weigh the site's ACTUAL categories, published article titles, and knowledge bank.
 - Ground the niche strictly in the empirical evidence provided. Do not guess or hallucinate off-topic industries.
 - DIVERSITY REQUIREMENT: Content pillars MUST cover the site's entire topical scope across all verified categories (e.g., if the site has categories for tools, specific channels, deliverability, copywriting, strategy, include ALL of them as pillars).
 - SEED KEYWORDS MIX: Do NOT cluster all seed keywords around a single repetitive concept. Provide a mixed, balanced set of keywords spanning all content pillars.`,
-        prompt: `Analyze the site evidence for "${domain}" and extract the exact niche, offerings, target audience, content pillars, seed keywords, and negative boundaries:\n\n${JSON.stringify(evidenceSummary, null, 2)}`
+        prompt: `Analyze the site evidence for "${domain}" and extract the exact site type, niche, offerings, target audience, content pillars, seed keywords, and negative boundaries:\n\n${JSON.stringify(evidenceSummary, null, 2)}`
       });
 
+      if (object.site_type) siteType = object.site_type;
+      if (object.site_type_rationale) siteTypeRationale = object.site_type_rationale;
       if (object.primary_niche) primaryNiche = object.primary_niche;
       if (object.core_offerings?.length > 0) coreOfferings = object.core_offerings;
       if (object.target_audience) targetAudience = object.target_audience;
@@ -290,6 +303,8 @@ STRICT GROUNDING & MULTI-TENANT DIVERSITY MANDATE:
       domain,
       websiteId,
       siteUrl,
+      siteType,
+      siteTypeRationale,
       primaryNiche,
       coreOfferings,
       targetAudience,

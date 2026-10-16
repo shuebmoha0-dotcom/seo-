@@ -46,6 +46,8 @@ export default function BacklinksPage() {
   const [competitorIntel, setCompetitorIntel] = useState<any[]>([]);
   const [spyingCompetitors, setSpyingCompetitors] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [siteType, setSiteType] = useState<string>("blog");
+  const [primaryNiche, setPrimaryNiche] = useState<string>("");
 
   const fetchCompetitorIntel = async () => {
     if (!currentWebsite) return;
@@ -59,6 +61,8 @@ export default function BacklinksPage() {
       if (res.ok) {
         const data = await res.json();
         setCompetitorIntel(data.intel || []);
+        if (data.site_type) setSiteType(data.site_type);
+        if (data.niche) setPrimaryNiche(data.niche);
       }
     } catch (e) {
       console.error("Error fetching competitor backlink intel:", e);
@@ -85,6 +89,8 @@ export default function BacklinksPage() {
         setProspects(data.prospects || []);
         setAcquiredLinks(data.acquired || []);
         setLinkableAssets(data.linkable_assets || []);
+        if (data.site_type) setSiteType(data.site_type);
+        if (data.primary_niche) setPrimaryNiche(data.primary_niche);
       }
     } catch (err) {
       console.error("Error fetching backlink data:", err);
@@ -123,6 +129,29 @@ export default function BacklinksPage() {
     } catch (e) {
       console.error(e);
     } finally {
+      setResearching(false);
+    }
+  };
+
+  const handleDeleteProspect = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await fetch(`/api/backlinks?id=${id}`, { method: "DELETE" });
+      setProspects((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error("Failed to delete prospect:", err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!currentWebsite) return;
+    try {
+      setResearching(true);
+      await fetch(`/api/backlinks?website_id=${currentWebsite.id}`, { method: "DELETE" });
+      setProspects([]);
+      await handleResearch();
+    } catch (err) {
+      console.error(err);
       setResearching(false);
     }
   };
@@ -191,27 +220,52 @@ export default function BacklinksPage() {
               <h1 className="text-[22px] leading-7 font-semibold text-neutral-900">
                 Backlinks &amp; Digital PR
               </h1>
-              <p className="text-neutral-500 text-sm mt-1">
-                {currentWebsite
-                  ? `High-authority domain prospecting and personalized editorial outreach for ${currentWebsite.domain}`
-                  : "Connect a website to discover relevant link opportunities."}
-              </p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <p className="text-neutral-500 text-sm">
+                  {currentWebsite
+                    ? `High-authority domain prospecting and personalized editorial outreach for ${currentWebsite.domain}`
+                    : "Connect a website to discover relevant link opportunities."}
+                </p>
+                {currentWebsite && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                    siteType === 'blog'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    {siteType === 'blog' ? 'Editorial Blog / Publisher' : 'SaaS Software Platform'}
+                    {primaryNiche ? ` · ${primaryNiche}` : ''}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 self-start md:self-auto">
               {currentWebsite && (
-                <button
-                  onClick={handleResearch}
-                  disabled={researching}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
-                >
-                  {researching ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Search className="w-3.5 h-3.5" />
-                  )}
-                  <span>{researching ? "Scanning sources…" : "Find link prospects"}</span>
-                </button>
+                <>
+                  <button
+                    onClick={handleClearAll}
+                    disabled={researching}
+                    title="Clear all prospects and re-scan fresh"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2.5 text-[13px] font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50 hover:text-neutral-900 transition-colors disabled:opacity-60"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${researching ? 'animate-spin' : ''}`} />
+                    <span>Refresh &amp; Re-scan</span>
+                  </button>
+
+                  <button
+                    onClick={handleResearch}
+                    disabled={researching}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    {researching ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Search className="w-3.5 h-3.5" />
+                    )}
+                    <span>{researching ? "Scanning sources…" : "Find link prospects"}</span>
+                  </button>
+                </>
               )}
             </div>
           </header>
@@ -338,6 +392,15 @@ export default function BacklinksPage() {
                                 <span className="text-[11px] font-mono font-semibold text-neutral-700 bg-neutral-50 px-2 py-0.5 rounded border border-neutral-200">
                                   Score: {score}
                                 </span>
+                                {p.id && (
+                                  <button
+                                    onClick={(e) => handleDeleteProspect(p.id, e)}
+                                    title="Dismiss prospect"
+                                    className="text-neutral-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-neutral-100"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </div>
 

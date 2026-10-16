@@ -140,28 +140,34 @@ export class BacklinkAgent {
   /**
    * Autonomously discovers high-relevance backlink opportunities for a website
    * with specific strategic angles, pitch hooks, and verified working URLs.
+   * Dynamically adapts to the site's business model (editorial blog vs SaaS vs eCommerce).
    */
   async discoverProspectsDirect(
     customerDomain: string,
-    topic: string
+    topic: string,
+    siteType: 'blog' | 'saas' | 'ecommerce' | 'agency' | 'local_service' = 'blog',
+    contentPillars: string[] = []
   ): Promise<BacklinkProspect[]> {
+    const isBlog = siteType === 'blog';
+    const pillarsText = contentPillars.length > 0 ? contentPillars.join(', ') : topic;
+
     try {
       const { object } = await LLMProvider.generateObject({
         agent: 'BacklinkAgent',
         schema: z.object({
           prospects: z.array(z.object({
-            domain: z.string().describe('Clean domain name e.g. saashub.com'),
-            url: z.string().describe('Verified root or hub URL e.g. https://www.saashub.com. NEVER hallucinate deep article paths'),
+            domain: z.string().describe('Clean domain name e.g. marketingprofs.com or smartinsights.com'),
+            url: z.string().describe('Verified root or hub URL e.g. https://www.marketingprofs.com. NEVER hallucinate deep article paths'),
             category: z.enum(['competitor_gap', 'resource_page', 'unlinked_mention', 'broken_link', 'guest_contribution']),
-            opportunity_title: z.string().describe('Actionable opportunity title e.g. Curated SaaS Alternative Listing or Resource Page Submission'),
+            opportunity_title: z.string().describe('Actionable opportunity title e.g. Industry Contributor Desk or Curated Resource Guide Feature'),
             opportunity_angle: z.string().describe('Specific strategic angle: why this target site wants the link and what value we offer their readers'),
-            target_location: z.string().describe('Exact placement location on the target site (e.g. "Product Profile & Alternatives Grid at /submit")'),
+            target_location: z.string().describe('Exact placement location on the target site (e.g. "Author Contributor Column & Bio", "Resource Library Round-up")'),
             how_to_acquire: z.array(z.string()).describe('3-4 numbered sequential steps explaining exactly how to get this link placed'),
             target_anchor: z.string().describe('Recommended anchor text to request or use'),
-            link_type: z.string().describe('e.g. Dofollow Directory, Editorial Contextual, Profile Link'),
-            approval_time: z.string().describe('e.g. Instant (Self-service), 24-48 hours, 3-5 days'),
+            link_type: z.string().describe('e.g. High-DA Editorial Contextual, Curated Resource Citation, Contributor Column'),
+            approval_time: z.string().describe('e.g. 24-48 hours, 3-5 days, 1-2 weeks'),
             pitch_hook: z.string().describe('The compelling 1-2 sentence pitch hook to use in outreach or submission note'),
-            linkable_asset: z.string().describe('The recommended asset to pitch e.g. Industry Benchmark Report, Feature Comparison Matrix, or Free Calculator'),
+            linkable_asset: z.string().describe('The recommended asset to pitch e.g. In-Depth Tactical Guide, Original Data Benchmark Report, or Case Study Teardown'),
             relevance_score: z.number().min(50).max(100),
             quality_score: z.number().min(50).max(100),
             opportunity_score: z.number().min(50).max(100),
@@ -174,21 +180,36 @@ export class BacklinkAgent {
           You are an elite Digital PR and Link Building Strategist.
           Identify 6 to 8 high-value, REALISTIC backlink OPPORTUNITIES for:
           Customer Domain: ${customerDomain}
-          Niche & Topic: ${topic}
+          Website Business Model / Type: ${isBlog ? 'EDITORIAL / INFORMATIONAL CONTENT BLOG & Niche Publisher' : `${siteType.toUpperCase()} Software Platform`}
+          Primary Niche: ${topic}
+          Core Content Pillars: ${pillarsText}
+
+          ${isBlog ? `
+          CRITICAL PROHIBITION FOR EDITORIAL BLOGS:
+          - This website is an INFORMATIONAL BLOG / CONTENT PUBLISHER, NOT a SaaS product, app, or software tool.
+          - ABSOLUTELY DO NOT suggest software directories, app catalogs, or launch platforms (ZERO producthunt.com, ZERO saashub.com, ZERO betalist.com, ZERO toolify.ai, ZERO futurepedia.io, ZERO alternativeto.net, ZERO g2.com). Submitting a blog to software directories is 100% invalid and gets rejected immediately.
+          - ONLY identify high-authority EDITORIAL, DIGITAL PR, and CONTENT-DRIVEN backlink opportunities:
+            1. Authoritative Guest Contributor Desks on respected industry publications in this niche (e.g. for marketing/sales: MarketingProfs, SmartInsights, Demand Curve, B2B Marketing Zone, Hackernoon editorial, etc.)
+            2. Curated Resource Hubs, reading lists, and guide roundups that feature top blogs and guides in this niche
+            3. Statistical Citations & Industry Benchmarks where journalists and bloggers cite original surveys, metrics, or research
+            4. Niche Curated Newsletters & Weekly Digests featuring the best articles published in this space
+          ` : `
+          For a software/SaaS platform, identify high-authority software directories, launch communities, integrations, and comparison matrices.
+          `}
 
           CRITICAL RULES & GROUNDING MANDATE:
           1. EXPLAIN WHERE AND HOW TO GET IT EXACTLY:
              For every prospect, define:
              - An exact opportunity title
-             - target_location: The exact section, page, or hub where the backlink will reside (e.g. "Category Comparison Grid at /submit", "Author Contributor Desk", "Maker Directory Profile")
-             - how_to_acquire: Exactly 3 to 4 sequential steps explaining HOW to get the link (Step 1 navigate to URL, Step 2 fill category/specs, Step 3 pitch hook, Step 4 verification)
-             - target_anchor: Recommended anchor text (e.g. Brand Name, Brand + Main Keyword)
-             - link_type: Dofollow Directory, Editorial Contextual, etc.
+             - target_location: The exact section, page, or hub where the backlink will reside
+             - how_to_acquire: Exactly 3 to 4 sequential steps explaining HOW to get the link
+             - target_anchor: Recommended anchor text
+             - link_type: Editorial Contextual, Resource Citation, Contributor Column, etc.
              - approval_time: Estimated turnaround
              - pitch_hook: Concrete pitch or submission message ready to send
           2. STRICT ZERO-BROKEN-LINK GUARANTEE:
              - NEVER hallucinate fake article URLs or invented subpaths (e.g. do NOT invent https://domain.com/blog/topic-name which returns 404).
-             - Provide real root URLs (e.g. https://www.saashub.com, https://betalist.com, https://producthunt.com, https://growthhackers.com, https://hackernoon.com, https://www.indiehackers.com) or known canonical hubs.
+             - Provide real root URLs (e.g. ${isBlog ? 'https://www.marketingprofs.com, https://www.smartinsights.com, https://growthhackers.com, https://hackernoon.com, https://www.b2bmarketingzone.com, https://www.demandcurve.com' : 'https://www.saashub.com, https://betalist.com, https://producthunt.com, https://growthhackers.com, https://hackernoon.com'}) or known canonical submission hubs.
           3. Provide realistic relevance scores (75-98) and quality scores (75-95).
         `
       });
@@ -211,6 +232,162 @@ export class BacklinkAgent {
       return validatedProspects;
     } catch (err) {
       console.warn('[BacklinkAgent] Direct prospecting fallback:', err);
+      if (isBlog) {
+        return [
+          {
+            domain: 'marketingprofs.com',
+            url: 'https://www.marketingprofs.com',
+            category: 'guest_contribution',
+            opportunity_title: 'Authoritative Industry Guest Article & Thought Leadership',
+            opportunity_angle: `Contribute a practitioner deep-dive on ${topic} to reach over 600,000 B2B sales and marketing professionals.`,
+            target_location: 'Editorial Contributor Column & Article Archive',
+            how_to_acquire: [
+              '1. Review writer guidelines at https://www.marketingprofs.com/write-for-us.',
+              '2. Pitch a data-backed educational outline solving a specific tactical challenge.',
+              '3. Draft the complete manuscript with practitioner examples and zero promotional fluff.',
+              '4. Editorial team approves and publishes with permanent dofollow author bio and contextual citation.'
+            ],
+            target_anchor: `Contextual Guide on ${topic}`,
+            link_type: 'High-DA Editorial Contextual',
+            approval_time: '1-2 weeks',
+            pitch_hook: `Offering an educational, data-driven analysis of modern ${topic} workflows and best practices for B2B practitioners.`,
+            linkable_asset: 'Original Benchmark Guide & Tactical Case Study',
+            relevance_score: 95,
+            quality_score: 94,
+            opportunity_score: 93,
+            risk_score: 5,
+            outreach_priority: 'high',
+            contact_page: 'https://www.marketingprofs.com/write-for-us',
+          },
+          {
+            domain: 'smartinsights.com',
+            url: 'https://www.smartinsights.com',
+            category: 'guest_contribution',
+            opportunity_title: 'Expert Contributor Column on B2B Strategy & Tactics',
+            opportunity_angle: `Submit an in-depth framework or actionable tutorial on ${topic} to Smart Insights community of digital marketing leaders.`,
+            target_location: 'Expert Commentary Section & Strategy Guides',
+            how_to_acquire: [
+              '1. Visit https://www.smartinsights.com and review contributor guidelines.',
+              '2. Submit an outline detailing a specific tactical framework for outreach and optimization.',
+              '3. Write a comprehensive educational guide including actionable diagrams or checklists.',
+              '4. Receive permanent editorial credit with contextual links to your deep-dive guides.'
+            ],
+            target_anchor: 'Brand & Tactical Resource Anchor',
+            link_type: 'Editorial Guest Feature',
+            approval_time: '5-7 business days',
+            pitch_hook: `Sharing a proven framework and benchmark metrics from real campaign tests to help practitioners master ${topic}.`,
+            linkable_asset: 'Tactical Campaign Framework & Checklist',
+            relevance_score: 93,
+            quality_score: 92,
+            opportunity_score: 91,
+            risk_score: 5,
+            outreach_priority: 'high',
+            contact_page: 'https://www.smartinsights.com',
+          },
+          {
+            domain: 'growthhackers.com',
+            url: 'https://growthhackers.com',
+            category: 'resource_page',
+            opportunity_title: 'Growth Community Case Study & Knowledge Base',
+            opportunity_angle: `Publish an original benchmark case study analyzing ${topic} campaign data to earn community upvotes and newsletter syndication.`,
+            target_location: 'Community Knowledge Base & Trending Stories',
+            how_to_acquire: [
+              '1. Register contributor account at https://growthhackers.com.',
+              '2. Click "Submit Post" and select "Original Case Study".',
+              '3. Paste your data benchmark findings and link contextually to your full guide.',
+              '4. Engage with community comments to increase trending ranking and homepage exposure.'
+            ],
+            target_anchor: 'Contextual Research & Data Citation',
+            link_type: 'Community Case Study & Syndication',
+            approval_time: 'Instant upon submission',
+            pitch_hook: `Sharing original findings and benchmark metrics from our recent ${topic} experiments with the growth community.`,
+            linkable_asset: 'Original Data Benchmark Report',
+            relevance_score: 92,
+            quality_score: 89,
+            opportunity_score: 88,
+            risk_score: 8,
+            outreach_priority: 'high',
+            contact_page: 'https://growthhackers.com',
+          },
+          {
+            domain: 'hackernoon.com',
+            url: 'https://hackernoon.com',
+            category: 'guest_contribution',
+            opportunity_title: 'Technical Editorial Guest Breakdown',
+            opportunity_angle: `Publish an in-depth technical analysis or workflow breakdown on ${topic} to establish topical authority.`,
+            target_location: 'Contextual editorial link within technical guest breakdown',
+            how_to_acquire: [
+              '1. Create author account on https://hackernoon.com.',
+              '2. Submit draft via story editor with educational, technical breakdown.',
+              '3. Include contextual reference to your blog as an authoritative background guide.',
+              '4. Editorial review approves within 2-3 business days.'
+            ],
+            target_anchor: 'Contextual Authority Reference',
+            link_type: 'High-DA Editorial Contextual (Dofollow)',
+            approval_time: '2-3 business days',
+            pitch_hook: `Offering an educational, no-fluff guide dissecting modern ${topic} strategies and technical protocols.`,
+            linkable_asset: 'Technical Implementation Guide & Blueprint',
+            relevance_score: 90,
+            quality_score: 92,
+            opportunity_score: 87,
+            risk_score: 10,
+            outreach_priority: 'medium',
+            contact_page: 'https://hackernoon.com',
+          },
+          {
+            domain: 'b2bmarketingzone.com',
+            url: 'https://www.b2bmarketingzone.com',
+            category: 'resource_page',
+            opportunity_title: 'B2B Marketing Resource Hub & Content Syndication',
+            opportunity_angle: `Syndicate top-performing educational blog posts into the B2B Marketing Zone RSS network to reach enterprise marketing decision-makers.`,
+            target_location: 'Curated Topic Feeds & Partner Resource Archive',
+            how_to_acquire: [
+              '1. Go to https://www.b2bmarketingzone.com and apply for RSS blog syndication.',
+              '2. Provide your blog RSS feed URL and primary topic focus.',
+              '3. Editorial team verifies content standards and includes posts in weekly topic roundups.',
+              '4. Generates consistent referral traffic and syndicated backlinks.'
+            ],
+            target_anchor: 'Original Article Title & Blog URL',
+            link_type: 'Syndicated Content Backlink',
+            approval_time: '3-5 business days',
+            pitch_hook: `Requesting syndication of our weekly in-depth guides on ${topic} for your B2B leadership network.`,
+            linkable_asset: 'Comprehensive Guide Archive',
+            relevance_score: 91,
+            quality_score: 87,
+            opportunity_score: 89,
+            risk_score: 5,
+            outreach_priority: 'high',
+            contact_page: 'https://www.b2bmarketingzone.com',
+          },
+          {
+            domain: 'demandcurve.com',
+            url: 'https://www.demandcurve.com',
+            category: 'resource_page',
+            opportunity_title: 'Curated Growth Newsletter & Resource Recommendation',
+            opportunity_angle: `Pitch an exceptional tactical guide on ${topic} to be featured in the weekly Demand Curve newsletter sent to 90,000+ marketers.`,
+            target_location: 'Weekly Curated Links Section & Growth Resource Library',
+            how_to_acquire: [
+              '1. Identify your highest-converting, most tactical guide with unique insights.',
+              '2. Submit the link and key takeaways to the Demand Curve editorial team.',
+              '3. Highlight what specific new insight makes it worth reading for advanced growth practitioners.',
+              '4. Featured links receive hundreds of clicks and permanent newsletter archive links.'
+            ],
+            target_anchor: 'Contextual Guide Anchor',
+            link_type: 'Curated Newsletter Feature',
+            approval_time: 'Weekly review',
+            pitch_hook: `We conducted a teardown of modern ${topic} campaigns and uncovered 3 non-obvious patterns. Thought your newsletter readers would love it.`,
+            linkable_asset: 'Actionable Tactical Teardown & Case Study',
+            relevance_score: 94,
+            quality_score: 93,
+            opportunity_score: 92,
+            risk_score: 5,
+            outreach_priority: 'high',
+            contact_page: 'https://www.demandcurve.com',
+          },
+        ];
+      }
+
+      // SaaS fallback
       return [
         {
           domain: 'saashub.com',
@@ -497,8 +674,10 @@ export class BacklinkAgent {
   async spyCompetitorBacklinks(
     customerDomain: string,
     nicheTopic: string,
-    knownCompetitors: string[] = []
+    knownCompetitors: string[] = [],
+    siteType: 'blog' | 'saas' | 'ecommerce' | 'agency' | 'local_service' = 'blog'
   ): Promise<CompetitorBacklinkIntel[]> {
+    const isBlog = siteType === 'blog';
     try {
       const compList = knownCompetitors.length > 0 
         ? knownCompetitors.join(', ')
@@ -508,11 +687,11 @@ export class BacklinkAgent {
         agent: 'BacklinkAgent',
         schema: z.object({
           intel: z.array(z.object({
-            competitor_domain: z.string().describe('The competitor domain being analyzed e.g. lemlist.com or instantly.ai'),
-            referring_site: z.string().describe('The authoritative domain linking to the competitor e.g. zapier.com or g2.com'),
+            competitor_domain: z.string().describe('The competitor domain being analyzed e.g. lemlist.com or saleshacker.com'),
+            referring_site: z.string().describe('The authoritative domain linking to the competitor e.g. marketingprofs.com or smartinsights.com'),
             referring_url: z.string().describe('Verified root or hub URL of the referring domain'),
             source_authority: z.number().min(60).max(99),
-            link_type: z.string().describe('e.g. Curated Software Round-up, Industry Benchmark Citation, Native Integration Directory, Review Grid'),
+            link_type: z.string().describe('e.g. Curated Resource Guide, Industry Benchmark Citation, Editorial Column, Expert Roundup'),
             how_competitor_got_it: z.string().describe('Clear explanation of how and why the competitor acquired this backlink'),
             how_you_can_steal_it: z.object({
               exact_placement: z.string().describe('Where on the page or site this link is located'),
@@ -527,18 +706,32 @@ export class BacklinkAgent {
           You are an elite SEO Competitive Intelligence and Link Building Strategist.
           Analyze and spy on the real backlink acquisition strategies of competitors for:
           Customer Domain: ${customerDomain}
+          Website Type: ${isBlog ? 'EDITORIAL CONTENT BLOG & Niche Publisher' : `${siteType.toUpperCase()} Platform`}
           Niche & Topic: ${nicheTopic}
           Target Competitors: ${compList}
+
+          ${isBlog ? `
+          CRITICAL MANDATE FOR EDITORIAL BLOG:
+          - The customer site is an EDITORIAL BLOG / CONTENT PUBLISHER, NOT a SaaS product or software application.
+          - DO NOT suggest software directories (no SaaSHub, no BetaList, no Product Hunt, no Toolify).
+          - Reverse-engineer how top niche blogs earned their high-authority backlinks:
+            1. Curated industry reading lists and resource hubs
+            2. Thought leadership guest contributions on high-DA publications (e.g. MarketingProfs, SmartInsights, GrowthHackers, B2B Marketing Zone, etc.)
+            3. Original research surveys and benchmark citations
+            4. Expert roundup features and newsletter spotlights
+          ` : `
+          Analyze how top software tools earned directory listings, comparison rankings, and integrations.
+          `}
 
           INSTRUCTIONS:
           1. Reverse-engineer 4 to 6 specific, realistic high-authority backlinks that competitors in this space have acquired.
           2. For each backlink:
              - Identify the competitor who has it
              - Identify the authoritative referring domain
-             - Explain EXACTLY HOW the competitor got it (e.g. integration directory, curated comparison roundup, cited benchmark survey, free tool embed)
+             - Explain EXACTLY HOW the competitor got it
              - Provide an actionable, step-by-step blueprint for how our customer can steal/replicate that link
              - Provide the exact placement, angle, and outreach template
-          3. STRICT URL POLICY: NEVER invent fake subpaths or 404 links. Use real, verified root URLs (e.g. https://zapier.com, https://www.g2.com, https://www.saashub.com, https://growthhackers.com, https://betalist.com) or known working submission endpoints.
+          3. STRICT URL POLICY: NEVER invent fake subpaths or 404 links. Use real, verified root URLs (e.g. ${isBlog ? 'https://www.marketingprofs.com, https://www.smartinsights.com, https://growthhackers.com, https://www.b2bmarketingzone.com, https://hackernoon.com' : 'https://zapier.com, https://www.g2.com, https://www.saashub.com, https://growthhackers.com, https://betalist.com'}) or known working submission endpoints.
         `
       });
 
@@ -558,6 +751,92 @@ export class BacklinkAgent {
       return validatedIntel;
     } catch (err) {
       console.warn('[BacklinkAgent] Competitor link spying fallback:', err);
+      if (isBlog) {
+        return [
+          {
+            competitor_domain: knownCompetitors[0] || 'niche-leader.com',
+            referring_site: 'marketingprofs.com',
+            referring_url: 'https://www.marketingprofs.com',
+            source_authority: 94,
+            link_type: 'Editorial Column & Thought Leadership Feature',
+            how_competitor_got_it: 'Competitor published a high-level practitioner guide breaking down common deliverability errors, earning a permanent contextual byline backlink.',
+            how_you_can_steal_it: {
+              exact_placement: 'Contextual citation within MarketingProfs B2B article and author bio box',
+              step_by_step_guide: [
+                '1. Go to https://www.marketingprofs.com/write-for-us and review guest contributor guidelines.',
+                '2. Draft a 1,200-word tactical outline addressing a specific outreach challenge with fresh data.',
+                '3. Pitch the managing editor emphasizing practitioner value over promotional self-interest.',
+                '4. Upon approval, submit complete manuscript with contextual references to your in-depth benchmark report.'
+              ],
+              angle_to_pitch: 'Offer fresh 2026 data revealing what tactics outperform legacy playbook methods.',
+              pitch_template: 'Hi MarketingProfs Editorial Team, I would love to contribute a practitioner teardown analyzing recent changes in outreach response rates.'
+            },
+            replicate_url: 'https://www.marketingprofs.com/write-for-us'
+          },
+          {
+            competitor_domain: knownCompetitors[1] || 'market-competitor.com',
+            referring_site: 'smartinsights.com',
+            referring_url: 'https://www.smartinsights.com',
+            source_authority: 91,
+            link_type: 'Expert Strategy Framework & Editorial Citation',
+            how_competitor_got_it: 'Contributed an expert analysis featuring a visual optimization flowchart, earning dofollow citations from multiple agency strategy guides.',
+            how_you_can_steal_it: {
+              exact_placement: 'Editorial case study section and digital marketing strategy guide',
+              step_by_step_guide: [
+                '1. Navigate to https://www.smartinsights.com and submit an expert contribution pitch.',
+                '2. Include an original framework, diagram, or decision tree illustrating campaign mechanics.',
+                '3. Provide actionable templates that readers can immediately implement.',
+                '4. Receive high-authority editorial attribution and referral traffic.'
+              ],
+              angle_to_pitch: 'Present an actionable step-by-step framework solving workflow bottlenecks.',
+              pitch_template: 'Submitting a comprehensive strategy framework designed for modern B2B growth leaders.'
+            },
+            replicate_url: 'https://www.smartinsights.com'
+          },
+          {
+            competitor_domain: knownCompetitors[0] || 'niche-leader.com',
+            referring_site: 'growthhackers.com',
+            referring_url: 'https://growthhackers.com',
+            source_authority: 89,
+            link_type: 'Community Case Study & Benchmark Citation',
+            how_competitor_got_it: 'Published an original benchmark case study analyzing real campaign data, earning editorial features and citations from marketing newsletters.',
+            how_you_can_steal_it: {
+              exact_placement: 'Community discussion feed, Knowledge Base case studies, and editorial newsletter',
+              step_by_step_guide: [
+                '1. Extract original metrics or lessons learned from your content experiments.',
+                '2. Write a concise, no-fluff case study (under 800 words) focusing on actionable takeaways.',
+                '3. Post directly to GrowthHackers Community under "Case Studies".',
+                '4. Include a contextual link back to the full data table or tool on your site.'
+              ],
+              angle_to_pitch: 'Present fresh data proving what tactics actually work today vs outdated advice.',
+              pitch_template: 'We analyzed real data points in our niche to uncover the truth about modern performance. Here is the breakdown.'
+            },
+            replicate_url: 'https://growthhackers.com'
+          },
+          {
+            competitor_domain: knownCompetitors[1] || 'market-competitor.com',
+            referring_site: 'b2bmarketingzone.com',
+            referring_url: 'https://www.b2bmarketingzone.com',
+            source_authority: 87,
+            link_type: 'Content Syndication & Topic Feed Feature',
+            how_competitor_got_it: 'Syndicated their blog RSS feed into topic roundups, securing recurring contextual backlinks for every major post published.',
+            how_you_can_steal_it: {
+              exact_placement: 'Curated topic stream and partner syndication archive',
+              step_by_step_guide: [
+                '1. Visit https://www.b2bmarketingzone.com and navigate to syndication submission.',
+                '2. Provide your publication RSS feed and primary content pillars.',
+                '3. Editorial team confirms high editorial standards and whitelists your domain.',
+                '4. Articles are automatically included in weekly category digests.'
+              ],
+              angle_to_pitch: 'Provide high-frequency, high-quality practitioner insights to their subscriber base.',
+              pitch_template: 'Requesting inclusion of our weekly in-depth guides in the B2B Marketing Zone syndication network.'
+            },
+            replicate_url: 'https://www.b2bmarketingzone.com'
+          }
+        ];
+      }
+
+      // SaaS fallback
       return [
         {
           competitor_domain: knownCompetitors[0] || 'competitor-leader.com',

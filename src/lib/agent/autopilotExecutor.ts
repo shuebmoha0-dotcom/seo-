@@ -1352,8 +1352,8 @@ export class AutopilotExecutor {
           const { BacklinkAgent } = await import('./backlinkAgent');
           const backlinkAgent = new BacklinkAgent();
           const [rawProspects, competitorIntel] = await Promise.all([
-            backlinkAgent.discoverProspectsDirect(website_domain, nicheTopic),
-            backlinkAgent.spyCompetitorBacklinks(website_domain, nicheTopic, competitorDomains),
+            backlinkAgent.discoverProspectsDirect(website_domain, nicheTopic, siteProfile.siteType, siteProfile.contentPillars),
+            backlinkAgent.spyCompetitorBacklinks(website_domain, nicheTopic, competitorDomains, siteProfile.siteType),
           ]);
 
           if (rawProspects && rawProspects.length > 0) {

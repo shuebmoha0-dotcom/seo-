@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     }
 
     let nicheTopic = website.domain.split('.')[0].replace(/[-_]/g, ' ');
+    let siteType = 'blog' as any;
     try {
       const siteProfile = await SiteNicheProfiler.profileSite({
         websiteId: website.id,
@@ -33,6 +34,9 @@ export async function POST(request: Request) {
       });
       if (siteProfile.primaryNiche) {
         nicheTopic = siteProfile.primaryNiche;
+      }
+      if (siteProfile.siteType) {
+        siteType = siteProfile.siteType;
       }
     } catch {
       // fallback to domain name topic
@@ -54,11 +58,12 @@ export async function POST(request: Request) {
     }
 
     const agent = new BacklinkAgent();
-    const intel = await agent.spyCompetitorBacklinks(website.domain, nicheTopic, knownCompetitors);
+    const intel = await agent.spyCompetitorBacklinks(website.domain, nicheTopic, knownCompetitors, siteType);
 
     return NextResponse.json({
       success: true,
       niche: nicheTopic,
+      site_type: siteType,
       competitors: knownCompetitors,
       intel,
     });
