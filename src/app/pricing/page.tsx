@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Check,
@@ -14,13 +14,45 @@ import {
   Layers,
   Globe,
   Bot,
+  CreditCard,
+  Lock,
 } from "lucide-react";
 import { PublicNavbar } from "@/components/PublicNavbar";
 import { PublicFooter } from "@/components/PublicFooter";
+import { PaddleProvider, usePaddle } from "@/components/billing/PaddleProvider";
+import { PADDLE_PLANS } from "@/lib/billing/paddle";
+import { createClient } from "@/lib/supabase/client";
 
-export default function PricingPage() {
+function PricingContent() {
   const [annual, setAnnual] = useState(true);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const { openCheckout } = usePaddle();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) {
+        setUser({ id: data.user.id, email: data.user.email });
+      }
+    });
+  }, []);
+
+  const handleCheckout = (planKey: "starter" | "growth" | "agency") => {
+    const plan = PADDLE_PLANS[planKey];
+    const priceId = annual ? plan.annualPriceId : plan.monthlyPriceId;
+
+    openCheckout({
+      priceId,
+      customerEmail: user?.email,
+      customData: {
+        user_id: user?.id,
+        plan_id: plan.id,
+        billing_cycle: annual ? "annual" : "monthly",
+      },
+      successUrl: typeof window !== "undefined" ? `${window.location.origin}/dashboard?payment=success&plan=${plan.id}` : undefined,
+    });
+  };
 
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
@@ -101,7 +133,7 @@ export default function PricingPage() {
         </header>
 
         {/* 3. Pricing Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto mb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto mb-12">
           {/* Starter Plan */}
           <div className="bg-white border border-neutral-200 p-8 rounded-3xl flex flex-col justify-between shadow-sm hover:shadow-md transition-shadow relative">
             <div>
@@ -113,7 +145,7 @@ export default function PricingPage() {
                 Perfect for single-product SaaS founders and startups launching their organic search engine.
               </p>
               <div className="text-5xl font-extrabold text-neutral-900 mb-6 flex items-baseline gap-1">
-                ${annual ? "24" : "29"}
+                ${annual ? PADDLE_PLANS.starter.annualPrice : PADDLE_PLANS.starter.monthlyPrice}
                 <span className="text-sm font-medium text-neutral-500">/month</span>
               </div>
 
@@ -149,12 +181,13 @@ export default function PricingPage() {
               </div>
             </div>
 
-            <Link
-              href="/login"
-              className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 font-bold py-3.5 rounded-2xl text-center text-xs transition-colors flex items-center justify-center gap-2"
+            <button
+              type="button"
+              onClick={() => handleCheckout("starter")}
+              className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 font-bold py-3.5 rounded-2xl text-center text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               Start 14-Day Free Trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            </button>
           </div>
 
           {/* Growth Plan (Most Popular) */}
@@ -171,7 +204,7 @@ export default function PricingPage() {
                 Ideal for high-growth tech companies scaling revenue, traffic, and multi-page directories.
               </p>
               <div className="text-5xl font-extrabold text-neutral-900 mb-6 flex items-baseline gap-1">
-                ${annual ? "63" : "79"}
+                ${annual ? PADDLE_PLANS.growth.annualPrice : PADDLE_PLANS.growth.monthlyPrice}
                 <span className="text-sm font-medium text-neutral-500">/month</span>
               </div>
 
@@ -207,12 +240,13 @@ export default function PricingPage() {
               </div>
             </div>
 
-            <Link
-              href="/login"
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-center text-xs transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            <button
+              type="button"
+              onClick={() => handleCheckout("growth")}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl text-center text-xs transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 cursor-pointer"
             >
               Start 14-Day Free Trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            </button>
           </div>
 
           {/* Agency Plan */}
@@ -226,7 +260,7 @@ export default function PricingPage() {
                 For growth marketing agencies and media portfolios managing multiple client domains.
               </p>
               <div className="text-5xl font-extrabold text-neutral-900 mb-6 flex items-baseline gap-1">
-                ${annual ? "159" : "199"}
+                ${annual ? PADDLE_PLANS.agency.annualPrice : PADDLE_PLANS.agency.monthlyPrice}
                 <span className="text-sm font-medium text-neutral-500">/month</span>
               </div>
 
@@ -262,12 +296,33 @@ export default function PricingPage() {
               </div>
             </div>
 
-            <Link
-              href="/login"
-              className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 font-bold py-3.5 rounded-2xl text-center text-xs transition-colors flex items-center justify-center gap-2"
+            <button
+              type="button"
+              onClick={() => handleCheckout("agency")}
+              className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-900 font-bold py-3.5 rounded-2xl text-center text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
             >
               Start 14-Day Free Trial <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            </button>
+          </div>
+        </div>
+
+        {/* Payment & Security Trust Banner */}
+        <div className="max-w-4xl mx-auto mb-20 text-center">
+          <div className="inline-flex flex-wrap items-center justify-center gap-6 px-6 py-3 rounded-2xl bg-neutral-50 border border-neutral-200 text-xs text-neutral-500">
+            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+              <Lock className="w-3.5 h-3.5 text-emerald-600" />
+              Secure 256-bit SSL Checkout
+            </span>
+            <span className="text-neutral-300">·</span>
+            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+              <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+              Merchant of Record by Paddle (Cards, PayPal, Apple Pay, Google Pay)
+            </span>
+            <span className="text-neutral-300">·</span>
+            <span className="flex items-center gap-1.5 font-medium text-neutral-700">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              14-Day Free Trial · Cancel Anytime
+            </span>
           </div>
         </div>
 
@@ -367,5 +422,13 @@ export default function PricingPage() {
       {/* Public Marketing Footer */}
       <PublicFooter />
     </div>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <PaddleProvider>
+      <PricingContent />
+    </PaddleProvider>
   );
 }

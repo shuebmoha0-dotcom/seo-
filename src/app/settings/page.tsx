@@ -220,10 +220,13 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="bg-neutral-50 px-6 py-4 md:px-8 border-t border-neutral-200 flex items-center justify-between">
-                      <span className="text-sm text-neutral-500">Manage your subscription via Stripe.</span>
-                      <button className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors">
-                        Manage Billing
-                      </button>
+                      <span className="text-sm text-neutral-500">Manage your subscription via Paddle (Merchant of Record).</span>
+                      <a 
+                        href="/pricing"
+                        className="bg-neutral-900 text-white px-4 py-2 text-sm font-medium rounded-lg hover:bg-neutral-800 transition-colors"
+                      >
+                        Change Plan / Upgrade
+                      </a>
                     </div>
                   </section>
                 </div>

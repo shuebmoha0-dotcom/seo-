@@ -61,6 +61,18 @@ async function handleCronExecution(request: Request) {
     const agent = new ScheduleAgent();
     const results: any[] = [];
 
+    // 0.5. Autonomous Daily Platform Publishing Engine for Outdart (outdart.com/blog)
+    let platformBlogResult = null;
+    try {
+      const { PlatformBlogEngine } = await import('@/lib/blog/platformBlogEngine');
+      platformBlogResult = await PlatformBlogEngine.checkAndPublishDailyPlatformArticle();
+      if (platformBlogResult.published) {
+        console.log(`[Cron Trigger] Auto-published daily article for Outdart: ${platformBlogResult.post?.slug}`);
+      }
+    } catch (blogErr: any) {
+      console.warn('[Cron Trigger] Platform blog engine notice:', blogErr.message);
+    }
+
     // 1. Check and execute due tasks from public.tasks table
     const { data: dueTasks, error: tasksErr } = await supabase
       .from('tasks')
@@ -220,6 +232,7 @@ async function handleCronExecution(request: Request) {
     return NextResponse.json({
       success: true,
       executed: results.length,
+      platform_blog: platformBlogResult,
       results,
       timestamp: nowIso,
     });
