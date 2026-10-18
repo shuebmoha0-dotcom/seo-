@@ -80,6 +80,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Database RLS Guarantee**:
   - Every table must enforce Postgres Row Level Security (RLS) scoped to `user_id = auth.uid()` (directly or via `website_id IN (SELECT id FROM public.websites WHERE user_id = auth.uid())`).
 
+## 11. STRICT IMAGE GENERATION LIMIT (1 IMAGE PER ARTICLE)
+- **MANDATE**: Every article drafting, auto-writing, and publishing pipeline is strictly limited to exactly ONE (1) featured/hero visual per article.
+- **PROHIBITION**: Never generate secondary in-body diagrams, multiple illustrations, or redundant visual assets per article. Exactly 1 widescreen 16:9 hero image per article to guarantee fast pipeline completion and maximum cost efficiency.
+
 
 
 

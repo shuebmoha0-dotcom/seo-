@@ -237,13 +237,6 @@ export class ContentAgent {
           purpose: `Hero visual illustration for ${input.primary_keyword}`,
           alt_text: `${title} — overview illustration`,
           suggested_filename: `${input.primary_keyword.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-hero.png`
-        },
-        {
-          placement_context: 'After Framework / Step-by-Step section',
-          image_type: 'diagram',
-          purpose: `Workflow diagram illustrating the ${input.primary_keyword} execution process`,
-          alt_text: `${input.primary_keyword} workflow diagram`,
-          suggested_filename: `${input.primary_keyword.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-workflow.png`
         }
       ],
       cta: input.rules.cta_rules,
@@ -598,9 +591,9 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
       const enrichedImages: ImageRequirement[] = [];
 
       try {
-        console.log(`[ContentAgent] Generating images in parallel with drafting for "${brief.working_title}"...`);
-        // Limit to at most 2 visuals (1 hero + 1 body diagram) to guarantee fast generation (< 14s)
-        const imagePromises = brief.image_requirements.slice(0, 2).map(async (req, i) => {
+        console.log(`[ContentAgent] Generating hero image in parallel with drafting for "${brief.working_title}"...`);
+        // Strictly 1 featured hero visual per article for cost efficiency and speed
+        const imagePromises = brief.image_requirements.slice(0, 1).map(async (req, i) => {
           try {
             // Dynamic diverse visual style selection based on image requirement type and context
             let visualStyle = 'High-end editorial visual with sophisticated modern aesthetic and clean conceptual depth';

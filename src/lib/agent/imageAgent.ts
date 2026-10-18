@@ -133,7 +133,7 @@ export class ImageAgent {
     max_images?: number;
   }): Promise<ImagePlan> {
     const strategy = CONTENT_TYPE_STRATEGY[params.content_type];
-    const maxImages = params.max_images || 3;
+    const maxImages = params.max_images || 1;
 
     try {
       const { object } = await LLMProvider.generateObject({
@@ -141,7 +141,7 @@ export class ImageAgent {
       
         
         schema: z.object({
-          total_images: z.number().min(0).max(8),
+          total_images: z.number().min(0).max(1),
           rationale: z.string(),
           images: z.array(z.object({
             id: z.string(),

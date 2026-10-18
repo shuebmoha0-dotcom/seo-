@@ -1537,7 +1537,7 @@ export class AutopilotExecutor {
           task_id: targetDraft?.id,
         };
 
-        const heroImagePromise = ImageRouter.generate({
+        const heroResult = await ImageRouter.generate({
           topic: articleTitle,
           target_keyword: primaryKw,
           purpose: `Featured hero visual for ${articleTitle}`,
@@ -1547,20 +1547,8 @@ export class AutopilotExecutor {
           desired_visual_style: 'Premium editorial hero visual with cinematic lighting, rich textures, 16:9 widescreen framing, no text overlay',
         }, imageContext);
 
-        const bodyDiagramPromise = ImageRouter.generate({
-          topic: articleTitle,
-          target_keyword: primaryKw,
-          purpose: `Step-by-step framework diagram for ${articleTitle}`,
-          style: 'Minimalist modern architectural workflow visualization, elegant geometric data flow, subtle studio backlighting',
-          dimensions: '1792x1008',
-          image_placement: 'body',
-          desired_visual_style: 'Minimalist modern architectural workflow visualization, elegant geometric data flow, 16:9 widescreen, no text overlay',
-        }, imageContext);
-
-        const [heroResult, bodyResult] = await Promise.all([heroImagePromise, bodyDiagramPromise]);
-
         const heroUrl = heroResult?.url || '';
-        const bodyUrl = bodyResult?.url || '';
+        const bodyUrl = '';
 
         if (!heroUrl) {
           throw new Error('Image generation provider failed to return an image URL.');
