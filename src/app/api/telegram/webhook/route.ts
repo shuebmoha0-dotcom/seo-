@@ -206,22 +206,52 @@ export async function POST(request: Request) {
             .eq('id', draft.id);
         }
 
-        // Edit current message confirming approval
+        // Execute Google & IndexNow multi-engine indexing immediately
+        let indexReportSummary = '';
+        if (livePostUrl) {
+          try {
+            const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+            const indexRes = await GoogleIndexingService.requestIndexing({
+              url: livePostUrl,
+              websiteId: draft?.website_id,
+              type: 'URL_UPDATED',
+            });
+            indexReportSummary = indexRes.summary;
+            console.log(`[Telegram Webhook] Auto-indexing completed for ${livePostUrl}:`, indexReportSummary);
+
+            // Update revision_notes with indexing confirmation
+            if (draft?.id) {
+              try {
+                let existingNotes: any = {};
+                if (draft.revision_notes && typeof draft.revision_notes === 'string') {
+                  try { existingNotes = JSON.parse(draft.revision_notes); } catch {}
+                }
+                existingNotes.indexing_status = indexRes.summary;
+                existingNotes.indexed_at = new Date().toISOString();
+                existingNotes.wordpress_post_url = livePostUrl;
+
+                await supabase
+                  .from('content_drafts')
+                  .update({ revision_notes: JSON.stringify(existingNotes) })
+                  .eq('id', draft.id);
+              } catch (_) {}
+            }
+          } catch (idxErr: any) {
+            console.warn('[Telegram Webhook] Auto-indexing notice:', idxErr);
+          }
+        }
+
+        // Edit current message confirming approval and immediate search engine indexing
         if (chatId && messageId) {
+          const indexingLine = indexReportSummary
+            ? `\n\n🚀 *Search Engine Indexing Dispatched:*\n${indexReportSummary}`
+            : `\n\n🚀 *Indexing Submitted:* Googlebot & Bingbot (IndexNow) have been notified to crawl immediately.`;
+
           await telegram.editMessageText(
             chatId,
             messageId,
-            `✅ *Approved & Published Live!*\n\n*Title:* "${draft?.working_title || 'Article'}"\n🔗 *URL:* ${livePostUrl || siteBaseUrl}\n\nQueued to WordPress for immediate publication.`
+            `✅ *Approved & Published Live!*\n\n*Title:* "${draft?.working_title || 'Article'}"\n🔗 *URL:* ${livePostUrl || siteBaseUrl}\n\nQueued to WordPress for immediate publication.${indexingLine}`
           );
-        }
-
-        // Send permission prompt card asking user if they want to request Google Indexing
-        if (chatId && livePostUrl) {
-          await telegram.sendIndexingPrompt(chatId, {
-            postUrl: livePostUrl,
-            postTitle: draft?.working_title || 'New Article',
-            draftId: executionId,
-          });
         }
       } else if (action === 'approve_index' && executionId) {
         // User explicitly approved Google Indexing

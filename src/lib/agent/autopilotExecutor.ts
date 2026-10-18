@@ -1879,6 +1879,21 @@ ${targetDraft.content_body || ''}`
           console.warn('[AutopilotExecutor] WP update notice for edit:', wpErr);
         }
 
+        // If the article is already published live, immediately submit re-crawl indexing request
+        if (livePostUrl) {
+          try {
+            const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+            await GoogleIndexingService.requestIndexing({
+              url: livePostUrl,
+              websiteId: website_id,
+              type: 'URL_UPDATED',
+            });
+            console.log(`[AutopilotExecutor] Auto-reindexing dispatched for edited article: ${livePostUrl}`);
+          } catch (idxErr) {
+            console.warn('[AutopilotExecutor] Re-indexing notice for edited post:', idxErr);
+          }
+        }
+
         // Send Telegram confirmation or approval prompt
         let editSummary = `✏️ *Article Successfully Updated!*\n\n`;
         editSummary += `📌 *Title:* "${targetDraft.working_title}"\n`;

@@ -61,12 +61,29 @@ export async function POST(request: Request) {
       meta_description,
     });
 
+    // 5. If post is published live, immediately submit to Google & IndexNow
+    let indexingResult: any = null;
+    if (post.status === 'publish' && post.link) {
+      try {
+        const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+        indexingResult = await GoogleIndexingService.requestIndexing({
+          url: post.link,
+          websiteId: website_id,
+          type: 'URL_UPDATED',
+        });
+        console.log(`[WP Draft Route] Auto-indexing completed for ${post.link}:`, indexingResult?.summary);
+      } catch (idxErr) {
+        console.warn('[WP Draft Route] Indexing request notice:', idxErr);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       post_id: post.id,
       status: post.status,
       link: post.link,
       title: post.title.rendered,
+      indexing: indexingResult,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to create WordPress post.' }, { status: 500 });

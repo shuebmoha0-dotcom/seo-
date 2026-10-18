@@ -77,6 +77,7 @@ export async function POST(request: Request) {
 
     let wpPostResult: { id?: number | string; link?: string; status?: string } | null = null;
     let pushError: string | null = null;
+    let indexingResult: any = null;
 
     // When approved/published, execute live auto-post to Platform Blog, Custom API, or WordPress
     if ((action === 'approve' || action === 'publish') && updatedDraft) {
@@ -330,6 +331,7 @@ export async function POST(request: Request) {
       }
 
       // 3. Automatically trigger multi-engine indexing upon approval and publishing
+      indexingResult = null;
       try {
         let siteDomain = '';
         if (updatedDraft.website_id) {
@@ -344,7 +346,24 @@ export async function POST(request: Request) {
             websiteId: updatedDraft.website_id,
             type: 'URL_UPDATED',
           });
+          indexingResult = indexRes;
           console.log('[Content Approval] Auto-indexing triggered:', indexRes.summary);
+
+          // Persist indexing status in revision_notes
+          try {
+            let existingNotes: any = {};
+            if (updatedDraft.revision_notes && typeof updatedDraft.revision_notes === 'string') {
+              try { existingNotes = JSON.parse(updatedDraft.revision_notes); } catch {}
+            }
+            existingNotes.indexing_status = indexRes.summary;
+            existingNotes.indexed_at = new Date().toISOString();
+            if (liveUrl) existingNotes.wordpress_post_url = liveUrl;
+
+            await supabase
+              .from('content_drafts')
+              .update({ revision_notes: JSON.stringify(existingNotes) })
+              .eq('id', updatedDraft.id);
+          } catch (_) {}
         }
       } catch (idxErr) {
         console.warn('[Content Approval] Indexing request notice:', idxErr);
@@ -357,6 +376,7 @@ export async function POST(request: Request) {
       action,
       new_status: newStatus,
       wordpress: wpPostResult,
+      indexing: indexingResult,
       push_warning: pushError,
     });
   } catch (error: any) {

@@ -230,7 +230,22 @@ STRICT EDITORIAL RULES:
       };
     }
 
-    console.log(`[PlatformBlogEngine] Successfully published daily platform post: https://outdart.com/blog/${chosenTopic.slug}`);
+    const livePostUrl = `https://outdart.com/blog/${newPost.slug || chosenTopic.slug}`;
+    console.log(`[PlatformBlogEngine] Successfully published daily platform post: ${livePostUrl}`);
+
+    // 5.5. Auto-Submit to Google Indexing API, IndexNow & Search Engine Pings
+    let indexingSummary = '';
+    try {
+      const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+      const indexRes = await GoogleIndexingService.requestIndexing({
+        url: livePostUrl,
+        type: 'URL_UPDATED',
+      });
+      indexingSummary = indexRes.summary;
+      console.log(`[PlatformBlogEngine] Auto-indexing completed for ${livePostUrl}:`, indexingSummary);
+    } catch (idxErr) {
+      console.warn('[PlatformBlogEngine] Indexing request notice:', idxErr);
+    }
 
     // 6. Notify Admin via Telegram (if configured)
     try {
@@ -240,9 +255,10 @@ STRICT EDITORIAL RULES:
         const notificationText =
           `🚀 *New Platform Blog Published Live!*\n\n` +
           `📰 *Title:* ${newPost.title}\n` +
-          `🔗 *URL:* https://outdart.com/blog/${newPost.slug}\n` +
+          `🔗 *URL:* ${livePostUrl}\n` +
           `⏱ *Word Count:* ${wordCount} words (${readingTime})\n` +
           `🏷 *Target Keyword:* \`${chosenTopic.targetKeyword}\`\n\n` +
+          (indexingSummary ? `⚡ *Indexing:* ${indexingSummary}\n\n` : '') +
           `_Indexed in sitemap.xml and ranking engine._`;
 
         for (const sub of subscribers) {

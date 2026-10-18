@@ -84,6 +84,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **MANDATE**: Every article drafting, auto-writing, and publishing pipeline is strictly limited to exactly ONE (1) featured/hero visual per article.
 - **PROHIBITION**: Never generate secondary in-body diagrams, multiple illustrations, or redundant visual assets per article. Exactly 1 widescreen 16:9 hero image per article to guarantee fast pipeline completion and maximum cost efficiency.
 
+## 12. MANDATORY AUTO-INDEXING CONTRACT
+- **MANDATE**: Every article written, approved, and published (via WordPress outbound connector, direct WordPress REST API, native platform blog at outdart.com, Telegram mobile controller, or background autopilot) MUST automatically and immediately dispatch an indexing submission to Google Indexing API, IndexNow (Bing/Yandex/Naver), and sitemap pings.
+- **PROHIBITION**: Never require manual confirmation or skip search engine indexing on published articles. Indexing must occur synchronously or reliably in the immediate post-publish lifecycle without failing the publish pipeline if an indexing API times out.
+
+
 
 
 
