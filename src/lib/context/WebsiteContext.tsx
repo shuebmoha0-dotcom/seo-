@@ -60,15 +60,22 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       try {
         const cachedCurrent = localStorage.getItem("seo_cached_current_website");
-        if (cachedCurrent) return JSON.parse(cachedCurrent);
+        if (cachedCurrent) {
+          const parsed = JSON.parse(cachedCurrent);
+          if (parsed && !parsed.domain?.includes('vercel.app')) {
+            return parsed;
+          }
+        }
 
         const storedId = localStorage.getItem("seo_active_website_id");
         const cachedWebsites = localStorage.getItem("seo_cached_websites");
         if (cachedWebsites) {
           const list: WebsiteData[] = JSON.parse(cachedWebsites);
           if (Array.isArray(list) && list.length > 0) {
-            const matched = list.find(s => s.id === storedId);
-            return matched || list[0];
+            const nonVercel = list.filter(s => !s.domain?.includes('vercel.app'));
+            const candidates = nonVercel.length > 0 ? nonVercel : list;
+            const matched = candidates.find(s => s.id === storedId);
+            return matched || candidates[0];
           }
         }
       } catch {}
@@ -114,7 +121,11 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
       });
       if (res.ok) {
         const data = await res.json();
-        const siteList: WebsiteData[] = data.websites || [];
+        // Filter out any internal platform Vercel app domains if real client sites exist
+        const allSites: WebsiteData[] = data.websites || [];
+        const nonPlatformSites = allSites.filter(s => !s.domain?.includes('vercel.app'));
+        const siteList: WebsiteData[] = nonPlatformSites.length > 0 ? nonPlatformSites : allSites;
+
         setWebsites(siteList);
         setPlanLimit(data.plan_limit || null);
 
@@ -127,7 +138,12 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
 
         // Retrieve stored active website ID from localStorage
         const storedId = typeof window !== "undefined" ? localStorage.getItem("seo_active_website_id") : null;
-        const matched = siteList.find(s => s.id === storedId);
+        let matched = siteList.find(s => s.id === storedId);
+
+        // If the stored site was a platform deployment domain or invalid, clear it
+        if (matched && matched.domain?.includes('vercel.app') && nonPlatformSites.length > 0) {
+          matched = undefined;
+        }
 
         let activeSite: WebsiteData | null = null;
         if (matched) {
@@ -138,6 +154,7 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
         }
 
         setCurrentWebsiteState(activeSite);
+
         if (typeof window !== "undefined") {
           if (activeSite) {
             localStorage.setItem("seo_active_website_id", activeSite.id);
@@ -173,16 +190,21 @@ export function WebsiteProvider({ children }: { children: React.ReactNode }) {
 
       let activeSite: WebsiteData | null = null;
       if (cachedCurrent) {
-        activeSite = JSON.parse(cachedCurrent);
-      } else if (siteList.length > 0) {
-        activeSite = siteList.find(s => s.id === storedId) || siteList[0];
+        try {
+          const parsed = JSON.parse(cachedCurrent);
+          if (parsed && !parsed.domain?.includes("vercel.app")) {
+            activeSite = parsed;
+          }
+        } catch {}
+      }
+      if (!activeSite && siteList.length > 0) {
+        const nonVercel = siteList.filter(s => !s.domain?.includes("vercel.app"));
+        const candidates = nonVercel.length > 0 ? nonVercel : siteList;
+        activeSite = candidates.find(s => s.id === storedId) || candidates[0];
       }
 
       if (activeSite) {
         setCurrentWebsiteState(activeSite);
-        setLoading(false);
-      } else if (siteList.length > 0) {
-        setCurrentWebsiteState(siteList[0]);
         setLoading(false);
       }
 

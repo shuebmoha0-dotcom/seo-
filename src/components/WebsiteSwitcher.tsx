@@ -13,11 +13,17 @@ export function WebsiteSwitcher() {
     if (typeof window !== "undefined") {
       try {
         const raw = localStorage.getItem("seo_cached_current_website");
-        if (raw) return JSON.parse(raw);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && !parsed.domain?.includes("vercel.app")) return parsed;
+        }
         const rawList = localStorage.getItem("seo_cached_websites");
         if (rawList) {
           const list: WebsiteData[] = JSON.parse(rawList);
-          if (Array.isArray(list) && list.length > 0) return list[0];
+          if (Array.isArray(list)) {
+            const valid = list.find((s) => !s.domain?.includes("vercel.app"));
+            if (valid) return valid;
+          }
         }
       } catch {}
     }
@@ -30,7 +36,12 @@ export function WebsiteSwitcher() {
     } else {
       try {
         const raw = localStorage.getItem("seo_cached_current_website");
-        if (raw) setCachedSite(JSON.parse(raw));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && !parsed.domain?.includes("vercel.app")) {
+            setCachedSite(parsed);
+          }
+        }
       } catch {}
     }
   }, [currentWebsite]);
