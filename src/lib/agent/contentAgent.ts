@@ -35,6 +35,7 @@ export interface ContentInput {
   rules: ContentRules;
   draft_id?: string;
   site_url?: string;
+  serp_benchmark?: any;
 }
 
 export interface ContentBrief {
@@ -55,6 +56,7 @@ export interface ContentBrief {
   image_requirements: ImageRequirement[];
   cta: string;
   applied_rules: string;
+  serp_benchmark?: any;
 }
 
 export interface ImageRequirement {
@@ -190,6 +192,25 @@ export class ContentAgent {
       ];
     }
 
+    // If Algorithmic SERP Benchmark is available, adopt winning Page 1 heading hierarchy, entities, and word counts
+    if (input.serp_benchmark) {
+      if (input.serp_benchmark.heading_structure?.suggested_outline?.length > 0) {
+        h2_h3_structure = input.serp_benchmark.heading_structure.suggested_outline.map((o: any) => ({
+          level: o.level,
+          heading: o.heading,
+          notes: o.rationale || 'Engineered directly from top ranking Page 1 competitor headings.',
+        }));
+      }
+      if (input.serp_benchmark.salient_entities?.length > 0) {
+        const serpEntities = input.serp_benchmark.salient_entities.map((e: any) => e.entity);
+        input.entities = Array.from(new Set([...(input.entities || []), ...serpEntities]));
+      }
+      if (input.serp_benchmark.target_word_count) {
+        input.rules.word_count_min = Math.max(1200, input.serp_benchmark.target_word_count.min);
+        input.rules.word_count_max = Math.min(2400, input.serp_benchmark.target_word_count.max);
+      }
+    }
+
     return {
       working_title: title,
       primary_keyword: input.primary_keyword,
@@ -226,7 +247,8 @@ export class ContentAgent {
         }
       ],
       cta: input.rules.cta_rules,
-      applied_rules: `Tone: ${input.rules.tone} | Audience: ${input.rules.audience} | Lang: ${input.rules.language}`
+      applied_rules: `Tone: ${input.rules.tone} | Audience: ${input.rules.audience} | Lang: ${input.rules.language}`,
+      serp_benchmark: input.serp_benchmark,
     };
   }
 
@@ -281,7 +303,9 @@ ${headingOutline}
 QUESTIONS TO ANSWER:
 ${brief.questions_to_answer.map(q => `- ${q}`).join('\n')}
 
-IMAGE PLACEMENT MARKERS (include exactly as written):
+${brief.entities && brief.entities.length > 0 ? `MANDATORY ALGORITHMIC SERP ENTITIES (Naturally incorporate each of these high-value topical terms throughout the content):
+${brief.entities.map(e => `- ${e}`).join('\n')}
+` : ''}IMAGE PLACEMENT MARKERS (include exactly as written):
 ${imageMarkers}
 
 REAL LIVE VERIFIED INTERNAL LINKS (YOU MUST EMBED AT LEAST 3 OF THESE EXACT URLS):
@@ -539,6 +563,16 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
       if (dupCheck.isDuplicate) {
         console.warn(`[ContentAgent] Duplicate article prevented: ${dupCheck.reason}`);
         throw new Error(`Duplicate article prevented: ${dupCheck.reason}`);
+      }
+    }
+
+    // Automatically reverse-engineer live Page 1 SERP to match top 3 word counts, headings, and NLP entities
+    if (!input.serp_benchmark && input.primary_keyword) {
+      try {
+        const { SerpReverseEngineer } = await import('./serpReverseEngineer');
+        input.serp_benchmark = await SerpReverseEngineer.reverseEngineerQuery(input.primary_keyword, { maxCompetitors: 4 });
+      } catch (serpErr) {
+        console.warn('[ContentAgent] SERP reverse-engineer notice:', serpErr);
       }
     }
 
