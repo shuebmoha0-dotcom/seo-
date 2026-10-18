@@ -8,7 +8,7 @@ export async function GET(request: Request) {
     const proto = request.headers.get('x-forwarded-proto') || 'https';
     const siteUrl = (host && !host.includes('localhost'))
       ? `${proto}://${host}`
-      : (process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app');
+      : (process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com');
 
     const clientId = process.env.GITHUB_CLIENT_ID;
 

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 
-const PRODUCTION_WEBHOOK_URL = 'https://seo-hazel-eight.vercel.app/api/telegram/webhook';
+const PRODUCTION_WEBHOOK_URL = `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com').replace(/\/+$/, '')}/api/telegram/webhook`;
 
 export async function GET() {
   try {

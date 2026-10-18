@@ -22,7 +22,7 @@ async function getAppOrigin(): Promise<string> {
       return `${proto}://${host}`;
     }
   } catch {}
-  return 'https://seo-hazel-eight.vercel.app';
+  return 'https://outdart.com';
 }
 
 // ─────────────────────────────────────────────

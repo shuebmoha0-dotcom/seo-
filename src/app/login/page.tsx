@@ -92,10 +92,11 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      const redirectUri = typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined;
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: typeof window !== "undefined" ? `${window.location.origin}/auth/callback` : undefined,
+          redirectTo: redirectUri,
           queryParams: {
             access_type: "offline",
             prompt: "consent",
@@ -105,6 +106,8 @@ function LoginForm() {
       if (oauthError) {
         setError(oauthError.message);
         setLoading(false);
+      } else if (data?.url) {
+        window.location.assign(data.url);
       }
     } catch (err: any) {
       setError(err.message || "Failed to initialize Google Sign In.");

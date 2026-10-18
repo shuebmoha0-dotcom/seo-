@@ -120,7 +120,7 @@ export class TelegramService {
    * If hijacked, cleared, or pointing to a rogue third-party server, instantly restores it.
    */
   async ensureWebhook(expectedUrl?: string): Promise<{ restored: boolean; currentUrl: string; lastError?: string }> {
-    const targetUrl = expectedUrl || `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://seo-hazel-eight.vercel.app').replace(/\/+$/, '')}/api/telegram/webhook`;
+    const targetUrl = expectedUrl || `${(process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com').replace(/\/+$/, '')}/api/telegram/webhook`;
     const info = await this.getWebhookInfo();
     const currentUrl = info?.url || '';
     const hasError = !!info?.last_error_message;

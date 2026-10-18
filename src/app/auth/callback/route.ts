@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const proto = request.headers.get('x-forwarded-proto') || 'https'
   const origin = (host && !host.includes('localhost'))
     ? `${proto}://${host}`
-    : (process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://seo-hazel-eight.vercel.app'))
+    : (process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://outdart.com'))
 
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
@@ -35,6 +35,7 @@ export async function GET(request: Request) {
       return NextResponse.redirect(redirectUrl)
     }
     console.error('Code exchange error:', exchangeError)
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(exchangeError.message)}`)
   }
 
   // 2. Handle token_hash verification (email signup confirmation / recovery)

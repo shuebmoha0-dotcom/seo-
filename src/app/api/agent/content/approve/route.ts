@@ -103,6 +103,7 @@ export async function POST(request: Request) {
 
       const isPlatformBlog = sitePlatform === 'platform_blog' || 
         allIntegrations?.some(i => i.provider === 'platform_blog') ||
+        siteDomain.includes('outdart.com') ||
         siteDomain.includes('seo-hazel-eight.vercel.app') ||
         siteDomain.includes('localhost');
 
