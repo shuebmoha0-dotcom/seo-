@@ -387,6 +387,35 @@ export async function POST(request: Request) {
             { parse_mode: 'Markdown' }
           );
         }
+      } else if (action === 'switch_site' && executionId) {
+        const { data: targetSite } = await supabase
+          .from('websites')
+          .select('id, domain, platform')
+          .eq('id', executionId)
+          .maybeSingle();
+
+        if (targetSite && chatId) {
+          await supabase.from('telegram_subscribers').upsert({
+            website_id: targetSite.id,
+            chat_id: String(chatId),
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'website_id,chat_id' });
+
+          await supabase
+            .from('telegram_subscribers')
+            .update({ is_active: false })
+            .eq('chat_id', String(chatId))
+            .neq('website_id', targetSite.id);
+
+          if (messageId) {
+            await telegram.editMessageText(
+              chatId,
+              messageId,
+              `🔄 *Active Website Switched!*\n\n🌐 *Now Active:* \`${targetSite.domain}\` (${targetSite.platform || 'WordPress'})\n\nAll subsequent article drafts, audits, and autopilot actions will now target *${targetSite.domain}*.`
+            );
+          }
+        }
       }
 
       return NextResponse.json({ ok: true });
@@ -480,45 +509,59 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Find paired website for this chat ID
-    const { data: integrations } = await supabase
-      .from('integrations')
-      .select('website_id, config')
-      .eq('provider', 'custom');
+    // 1. Fetch all registered websites for user / admin
+    const { data: allWebsites } = await supabase
+      .from('websites')
+      .select('*')
+      .order('created_at', { ascending: true });
 
-    let pairedWebsiteId: string | null = null;
-    if (integrations) {
-      for (const integ of integrations) {
-        const subs = integ.config?.subscribers || [];
-        if (subs.some((s: any) => s.chat_id === chatId)) {
-          pairedWebsiteId = integ.website_id;
-          break;
+    // Check if user has an explicit active website preference stored
+    const { data: activeSub } = await supabase
+      .from('telegram_subscribers')
+      .select('website_id')
+      .eq('chat_id', String(chatId))
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let pairedWebsiteId: string | null = activeSub?.website_id || null;
+
+    if (!pairedWebsiteId) {
+      const { data: integrations } = await supabase
+        .from('integrations')
+        .select('website_id, config')
+        .eq('provider', 'custom');
+
+      if (integrations) {
+        for (const integ of integrations) {
+          const subs = integ.config?.subscribers || [];
+          if (subs.some((s: any) => String(s.chat_id) === String(chatId))) {
+            pairedWebsiteId = integ.website_id;
+            break;
+          }
         }
       }
     }
 
-    // Fallback: Check if this is the verified admin chat ID (never auto-pair strangers!)
-    if (!pairedWebsiteId) {
-      const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705';
-      if (chatId === adminChatId) {
-        const { data: adminSite } = await supabase
-          .from('websites')
-          .select('id')
-          .limit(1)
-          .single();
-        pairedWebsiteId = adminSite?.id || null;
-        if (pairedWebsiteId) {
-          await telegram.addSubscriber(pairedWebsiteId, {
-            chat_id: chatId,
-            username,
-            first_name: firstName,
-          });
-        }
+    // Fallback: Check if this is the verified admin chat ID or user with registered sites
+    const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705';
+    if (!pairedWebsiteId && (String(chatId) === String(adminChatId) || (allWebsites && allWebsites.length > 0))) {
+      pairedWebsiteId = allWebsites?.[0]?.id || null;
+      if (pairedWebsiteId) {
+        await supabase.from('telegram_subscribers').upsert({
+          website_id: pairedWebsiteId,
+          chat_id: String(chatId),
+          username,
+          first_name: firstName,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'website_id,chat_id' });
       }
     }
 
     // If NOT paired, reject immediately! Never allow strangers or spam bots to interact!
-    if (!pairedWebsiteId) {
+    if (!pairedWebsiteId || !allWebsites || allWebsites.length === 0) {
       console.warn(`[Telegram Webhook] Blocked unauthorized chat attempt from ID: ${chatId} (${username || firstName})`);
       await telegram.sendMessage(
         chatId,
@@ -528,14 +571,76 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, ignored: 'unauthorized_device' });
     }
 
-    const { data: currentSite } = await supabase
-      .from('websites')
-      .select('*')
-      .eq('id', pairedWebsiteId)
-      .single();
+    const defaultSite = allWebsites.find(w => w.id === pairedWebsiteId) || allWebsites[0];
 
-    if (!currentSite) {
-      await telegram.sendMessage(chatId, `⚠️ Paired website was not found.`);
+    // Check if the prompt explicitly mentions one of the websites (e.g. "for outdart.com" or "on bizaigenius")
+    const promptLower = rawText.toLowerCase();
+    const explicitMention = allWebsites.find(w => {
+      const cleanDomain = w.domain.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, '');
+      const baseName = cleanDomain.split('.')[0];
+      return promptLower.includes(cleanDomain) || (baseName.length >= 4 && promptLower.includes(baseName));
+    });
+
+    const currentSite = explicitMention || defaultSite;
+
+    // A1. Handle /sites command (Lists all websites with 1-click switch buttons)
+    if (rawText === '/sites') {
+      let msg = `🌐 *Your Connected Websites (${allWebsites.length}):*\n\n`;
+      const buttons: any[] = [];
+
+      allWebsites.forEach((w, idx) => {
+        const isCurrent = w.id === defaultSite.id;
+        msg += `${isCurrent ? '🟢' : '⚪'} *${idx + 1}. \`${w.domain}\`* — _${w.platform || 'Next.js'}_ ${isCurrent ? '*(Active Target)*' : ''}\n`;
+        if (!isCurrent) {
+          buttons.push([{ text: `👉 Switch to ${w.domain}`, callback_data: `switch_site:${w.id}` }]);
+        }
+      });
+
+      msg += `\n_To switch your active site, tap a button below or type:_ \`/switch <domain>\`\n_Or simply mention the domain in your prompt (e.g. "Write an article for outdart.com...")_`;
+
+      await telegram.sendMessage(chatId, msg, {
+        parse_mode: 'Markdown',
+        reply_markup: buttons.length > 0 ? { inline_keyboard: buttons } : undefined,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // A2. Handle /switch <domain> command
+    if (rawText.startsWith('/switch')) {
+      const targetQuery = rawText.replace(/^\/switch\s*/i, '').trim().toLowerCase();
+      const matched = allWebsites.find(w =>
+        w.domain.toLowerCase().includes(targetQuery) ||
+        w.domain.toLowerCase().split('.')[0] === targetQuery ||
+        w.id === targetQuery
+      );
+
+      if (matched) {
+        await supabase.from('telegram_subscribers').upsert({
+          website_id: matched.id,
+          chat_id: String(chatId),
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'website_id,chat_id' });
+
+        await supabase
+          .from('telegram_subscribers')
+          .update({ is_active: false })
+          .eq('chat_id', String(chatId))
+          .neq('website_id', matched.id);
+
+        await telegram.sendMessage(
+          chatId,
+          `🔄 *Active Website Switched!*\n\n🌐 *Now Active:* \`${matched.domain}\` (${matched.platform || 'Next.js'})\n\nAll subsequent writing, auditing, and indexing tasks will now execute for *${matched.domain}*.`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        let notFoundMsg = `⚠️ Website matching *"${targetQuery}"* was not found.\n\n*Available Websites:*\n`;
+        allWebsites.forEach((w) => {
+          notFoundMsg += `• \`${w.domain}\`\n`;
+        });
+        notFoundMsg += `\n_Usage:_ \`/switch outdart.com\` or \`/switch bizaigenius.com\``;
+        await telegram.sendMessage(chatId, notFoundMsg, { parse_mode: 'Markdown' });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -583,9 +688,16 @@ _Send any task prompt to start writing or auditing!_`,
         chatId,
         `🤖 *SEO Agent Mobile Commands*
 
-• \`/status\` — Site health, active tasks, latest post
+• \`/sites\` — View all your websites & switch active target
+• \`/switch <domain>\` — Switch active site (e.g. \`/switch outdart.com\`)
+• \`/status\` — Site health, active tasks, latest post for active site
 • \`/autopilot\` — Zero-touch full autopilot status & controls
 • \`/help\` — Show this help message
+
+🌐 *Multi-Site Support:*
+You can switch active sites with \`/switch\` or simply mention the site in any prompt:
+• _"Write an article for outdart.com about AI SEO agents"_
+• _"Post to bizaigenius.com about cold email benchmarks"_
 
 💬 *Natural Language Tasks:*
 Just text what you want your agent to do:
