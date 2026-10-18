@@ -845,4 +845,60 @@ export class WordPressClient {
       title: post.title.rendered,
     };
   }
+
+  /**
+   * Retrieve comments (for spam auditing)
+   */
+  async getComments(params: {
+    page?: number;
+    per_page?: number;
+    status?: string;
+    post?: number;
+  } = {}): Promise<any[]> {
+    const searchParams = new URLSearchParams({
+      page: (params.page || 1).toString(),
+      per_page: (params.per_page || 100).toString(),
+      status: params.status || 'all',
+    });
+    if (params.post) searchParams.set('post', params.post.toString());
+
+    try {
+      const { data } = await this.request<any[]>(`/comments?${searchParams.toString()}`);
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      console.warn('[WordPressClient] getComments notice:', err.message);
+      return [];
+    }
+  }
+
+  /**
+   * Delete comment by ID (purges spam comments)
+   */
+  async deleteComment(commentId: number, force = true): Promise<boolean> {
+    try {
+      const { data } = await this.request<any>(`/comments/${commentId}?force=${force}`, {
+        method: 'DELETE',
+      });
+      return !!data?.deleted;
+    } catch (err: any) {
+      console.error(`[WordPressClient] deleteComment ${commentId} failed:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Set comment status on post ('open' or 'closed')
+   */
+  async updatePostCommentStatus(postId: number, commentStatus: 'open' | 'closed'): Promise<boolean> {
+    try {
+      await this.request<any>(`/posts/${postId}`, {
+        method: 'POST',
+        body: JSON.stringify({ comment_status: commentStatus }),
+      });
+      return true;
+    } catch (err: any) {
+      console.error(`[WordPressClient] updatePostCommentStatus failed on post ${postId}:`, err);
+      return false;
+    }
+  }
 }

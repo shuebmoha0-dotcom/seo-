@@ -5,7 +5,7 @@ import { DuplicateArticleChecker } from './duplicateChecker';
 import { ContentPresentationAuditor } from '@/lib/crawler/contentPresentationAuditor';
 
 export interface DiagnosticFinding {
-  category: 'technical_block' | 'cannibalization' | 'content_decay' | 'intent_shift' | 'link_equity' | 'algorithm_volatility' | 'presentation_readability';
+  category: 'technical_block' | 'cannibalization' | 'content_decay' | 'intent_shift' | 'link_equity' | 'algorithm_volatility' | 'presentation_readability' | 'ranking_disruptor';
   severity: 'critical' | 'high' | 'medium' | 'low';
   title: string;
   affected_url?: string;
@@ -302,6 +302,19 @@ export class DiagnosticAgent {
       console.warn('[DiagnosticAgent] Presentation audit notice:', presErr);
     }
 
+    // I. Ranking Disruptors & Site Hygiene Engine (slug collision, comment spam, open comments, AI leaks)
+    let rankingDisruptorResult: any = null;
+    try {
+      const { RankingDisruptorAgent } = await import('./rankingDisruptorAgent');
+      rankingDisruptorResult = await RankingDisruptorAgent.scanWebsite({
+        websiteId,
+        domain,
+        siteUrl,
+      });
+    } catch (rdErr) {
+      console.warn('[DiagnosticAgent] Ranking disruptor scan notice:', rdErr);
+    }
+
     // 2. Synthesize Evidence Context
     const evidenceContext = {
       domain,
@@ -341,6 +354,18 @@ export class DiagnosticAgent {
       potentialCannibalizationCount: potentialCannibalization.length,
       presentationIssuesDetected: presentationIssues.length,
       presentationIssuesSample: presentationIssues.slice(0, 5),
+      rankingDisruptorShield: rankingDisruptorResult ? {
+        disruptorCount: rankingDisruptorResult.disruptorCount,
+        healthImpactScore: rankingDisruptorResult.healthImpactScore,
+        summary: rankingDisruptorResult.summary,
+        issues: rankingDisruptorResult.issues.map((iss: any) => ({
+          category: iss.category,
+          severity: iss.severity,
+          title: iss.title,
+          affectedCount: iss.affectedCount,
+          evidence: iss.evidence,
+        })),
+      } : null,
     };
 
     // 3. Multi-Agent Diagnostic Reasoning via LLM
@@ -352,7 +377,7 @@ export class DiagnosticAgent {
           overall_health: z.enum(['healthy', 'at_risk', 'critical_drop', 'recovering']),
           executive_summary: z.string().describe('Clear, decisive 2-3 sentence summary explaining why the ranking or traffic shifted and the core root cause.'),
           findings: z.array(z.object({
-            category: z.enum(['technical_block', 'cannibalization', 'content_decay', 'intent_shift', 'link_equity', 'algorithm_volatility', 'presentation_readability']),
+            category: z.enum(['technical_block', 'cannibalization', 'content_decay', 'intent_shift', 'link_equity', 'algorithm_volatility', 'presentation_readability', 'ranking_disruptor']),
             severity: z.enum(['critical', 'high', 'medium', 'low']),
             title: z.string(),
             affected_url: z.string().nullable(),
@@ -377,17 +402,19 @@ EVIDENCE COLLECTED FOR THIS WEBSITE:
 ${JSON.stringify(evidenceContext, null, 2)}
 
 DIAGNOSTIC FRAMEWORK:
-1. Technical Roadblock (crawl error, 4xx/5xx, noindex, broken canonical):
+1. Ranking Disruptors & Toxic Site Hygiene:
+   - If rankingDisruptorShield is present with issues (malicious spam comments, duplicate slug collisions e.g. -2, open unmoderated comments vulnerability, leaked AI prompt artifacts or claude.ai/chat citations), this is a CRITICAL ranking disruptor. Flag it immediately and prescribe automated shield remediation.
+2. Technical Roadblock (crawl error, 4xx/5xx, noindex, broken canonical):
    - If technical issues are present, evaluate if Google de-indexed or demoted pages due to rendering/status errors.
-2. Visual Presentation & Readability Defects (bad optimized size, bloated Table of Contents, all-caps spam):
+3. Visual Presentation & Readability Defects (bad optimized size, bloated Table of Contents, all-caps spam):
    - If presentation issues are present in evidenceContext, explain the exact visual defect (e.g. unconstrained container width stretching text across desktop screens, bloated TOC dominating viewport, shouting uppercase keywords). Provide immediate auto-repair action.
-3. Keyword Cannibalization:
+4. Keyword Cannibalization:
    - If multiple articles target the same search query, Google splits click-through equity and often demotes both URLs.
-4. Content Decay & Competitor Leapfrogging:
+5. Content Decay & Competitor Leapfrogging:
    - If content is > 6 months old or lacks depth compared to SERP top 3, competitors updated their articles and captured position 1-3.
-5. Search Intent Shift:
+6. Search Intent Shift:
    - Google SERP evolved from general guides to practical tools/templates or vice-versa.
-6. Internal Link Starvation:
+7. Internal Link Starvation:
    - Dropped pages have few or zero internal links from top-traffic pages.
 
 OUTPUT MANDATE & ABSOLUTE GROUNDING CONTRACT:
