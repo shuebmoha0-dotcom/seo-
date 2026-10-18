@@ -56,6 +56,16 @@ async function safeBackground(fn: () => Promise<void>) {
 
 export async function POST(request: Request) {
   try {
+    // 0. Secret Token Verification (blocks any spoofed or non-Telegram requests)
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (secret && secret.length >= 8) {
+      const headerSecret = request.headers.get('x-telegram-bot-api-secret-token');
+      if (headerSecret !== secret) {
+        console.warn('[Telegram Webhook] Unauthorized request rejected: secret token mismatch');
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
+
     const body = await request.json();
     const telegram = new TelegramService();
     const supabase = createAdminClient();
@@ -393,15 +403,16 @@ export async function POST(request: Request) {
     const username = message.chat.username;
     const firstName = message.chat.first_name || 'User';
 
-    // Security 1: Block group chats to prevent rogue third-party groups from spamming our bot
+    // Security 1: Block group chats and make the bot leave any group it was invited into
     if (message.chat?.type && message.chat.type !== 'private') {
-      console.log(`[Telegram Webhook] Ignored non-private message from group ${message.chat.id}`);
+      console.log(`[Telegram Webhook] Leaving and ignoring non-private message from group ${message.chat.id}`);
+      await telegram.leaveChat(message.chat.id);
       return NextResponse.json({ ok: true, ignored: 'groups_disabled' });
     }
 
-    // Security 2: Instant Cyrillic / Russian spam filter (prevents spam attacks on our AI agent)
-    if (/[\u0400-\u04FF]/.test(rawText)) {
-      console.warn(`[Telegram Webhook] Blocked Cyrillic spam message from chat ${chatId}: "${rawText.slice(0, 50)}"`);
+    // Security 2: Instant Cyrillic / Russian / Casino / Crypto spam filter
+    if (/[\u0400-\u04FF]/.test(rawText) || /t\.me\/(joinchat|\+[a-zA-Z0-9_-]+)/i.test(rawText)) {
+      console.warn(`[Telegram Webhook] Blocked foreign/spam message from chat ${chatId}: "${rawText.slice(0, 50)}"`);
       return NextResponse.json({ ok: true, ignored: 'spam_blocked' });
     }
 
@@ -486,26 +497,35 @@ export async function POST(request: Request) {
       }
     }
 
-    // Fallback: If not explicitly paired, fallback to primary website
+    // Fallback: Check if this is the verified admin chat ID (never auto-pair strangers!)
     if (!pairedWebsiteId) {
-      const { data: fallbackSite } = await supabase
-        .from('websites')
-        .select('id')
-        .limit(1)
-        .single();
-      pairedWebsiteId = fallbackSite?.id || null;
-      if (pairedWebsiteId) {
-        await telegram.addSubscriber(pairedWebsiteId, {
-          chat_id: chatId,
-          username,
-          first_name: firstName,
-        });
+      const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705';
+      if (chatId === adminChatId) {
+        const { data: adminSite } = await supabase
+          .from('websites')
+          .select('id')
+          .limit(1)
+          .single();
+        pairedWebsiteId = adminSite?.id || null;
+        if (pairedWebsiteId) {
+          await telegram.addSubscriber(pairedWebsiteId, {
+            chat_id: chatId,
+            username,
+            first_name: firstName,
+          });
+        }
       }
     }
 
+    // If NOT paired, reject immediately! Never allow strangers or spam bots to interact!
     if (!pairedWebsiteId) {
-      await telegram.sendMessage(chatId, `⚠️ You have not connected a website yet. Please open your dashboard and link a website.`);
-      return NextResponse.json({ ok: true });
+      console.warn(`[Telegram Webhook] Blocked unauthorized chat attempt from ID: ${chatId} (${username || firstName})`);
+      await telegram.sendMessage(
+        chatId,
+        `🔒 *Device Not Authorized*\n\nYour Telegram account is not paired with an Outdart website.\n\nTo pair your phone securely, open your web dashboard and click *Connect Telegram*, or send:\n\`/start <your_website_id>\``,
+        { parse_mode: 'Markdown' }
+      );
+      return NextResponse.json({ ok: true, ignored: 'unauthorized_device' });
     }
 
     const { data: currentSite } = await supabase

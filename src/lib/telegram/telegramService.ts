@@ -22,7 +22,8 @@ export class TelegramService {
   private isConfigured: boolean;
 
   constructor(token?: string) {
-    this.token = token || process.env.TELEGRAM_BOT_TOKEN;
+    const raw = token || process.env.TELEGRAM_BOT_TOKEN;
+    this.token = raw ? raw.trim().replace(/^["']|["']$/g, '') : undefined;
     this.isConfigured = !!(this.token && !this.token.includes('your-') && this.token.trim().length > 15);
   }
 
@@ -67,24 +68,49 @@ export class TelegramService {
   }
 
   /**
-   * Set the Webhook URL for Telegram updates
+   * Set the Webhook URL for Telegram updates, with optional secret_token protection
    */
-  async setWebhook(webhookUrl: string): Promise<boolean> {
+  async setWebhook(webhookUrl: string, secretToken?: string): Promise<boolean> {
     if (!this.isConfigured) return false;
     try {
+      const secret = secretToken || process.env.TELEGRAM_WEBHOOK_SECRET;
+      const payload: any = {
+        url: webhookUrl,
+        allowed_updates: ['message', 'edited_message', 'callback_query'],
+        drop_pending_updates: false,
+      };
+      if (secret && secret.length >= 8) {
+        payload.secret_token = secret;
+      }
+
       const res = await fetch(`${this.apiUrl}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: webhookUrl,
-          allowed_updates: ['message', 'edited_message', 'callback_query'],
-          drop_pending_updates: false,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       return !!data.ok;
     } catch (err) {
       console.error('[TelegramService] setWebhook error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Instructs the bot to immediately leave a group or channel (blocking Russian/spam group scraping)
+   */
+  async leaveChat(chatId: string | number): Promise<boolean> {
+    if (!this.isConfigured) return false;
+    try {
+      const res = await fetch(`${this.apiUrl}/leaveChat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId }),
+      });
+      const data = await res.json();
+      return !!data.ok;
+    } catch (err) {
+      console.error('[TelegramService] leaveChat error:', err);
       return false;
     }
   }
