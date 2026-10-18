@@ -44,23 +44,36 @@ export default function BacklinksPage() {
   const [acquiredLinks, setAcquiredLinks] = useState<any[]>([]);
   const [linkableAssets, setLinkableAssets] = useState<any[]>([]);
   const [competitorIntel, setCompetitorIntel] = useState<any[]>([]);
+  const [targetCompetitor, setTargetCompetitor] = useState<string>("");
+  const [replicationPlaybooks, setReplicationPlaybooks] = useState<any[]>([]);
+  const [copiedPitchIndex, setCopiedPitchIndex] = useState<number | null>(null);
   const [spyingCompetitors, setSpyingCompetitors] = useState(false);
   const [loading, setLoading] = useState(true);
   const [siteType, setSiteType] = useState<string>("blog");
   const [primaryNiche, setPrimaryNiche] = useState<string>("");
 
-  const fetchCompetitorIntel = async () => {
+  const fetchCompetitorIntel = async (competitorOverride?: string) => {
     if (!currentWebsite) return;
+    const compDomain = competitorOverride !== undefined ? competitorOverride : targetCompetitor.trim();
+    if (competitorOverride !== undefined) {
+      setTargetCompetitor(competitorOverride);
+    }
     try {
       setSpyingCompetitors(true);
       const res = await fetch("/api/agent/backlink/competitors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ website_id: currentWebsite.id }),
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          competitor_domain: compDomain || undefined,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         setCompetitorIntel(data.intel || []);
+        if (data.replication?.playbooks) {
+          setReplicationPlaybooks(data.replication.playbooks);
+        }
         if (data.site_type) setSiteType(data.site_type);
         if (data.niche) setPrimaryNiche(data.niche);
       }
@@ -487,31 +500,218 @@ export default function BacklinksPage() {
                   <div>
                     <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
                       <Crosshair className="w-4 h-4 text-indigo-600" />
-                      Competitor Link Reverse-Engineering &amp; Spy Engine
+                      Competitor Link Replicator &amp; Reverse-Engineering Engine
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
-                      Analyzes competitor referral profiles and generates actionable blueprints to replicate high-authority placements.
+                      Enter any competitor domain to extract their exact backlink profile, step-by-step acquisition plans, and ready-to-send pitch emails.
                     </p>
                   </div>
-                  <button
-                    onClick={fetchCompetitorIntel}
-                    disabled={spyingCompetitors}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3.5 py-2 rounded-lg flex items-center gap-1.5 transition-all shadow-xs self-start sm:self-auto disabled:opacity-50"
-                  >
-                    {spyingCompetitors ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    )}
-                    <span>{spyingCompetitors ? "Scanning Competitor Links..." : "Scan Competitor Links"}</span>
-                  </button>
                 </div>
 
-                {spyingCompetitors && competitorIntel.length === 0 ? (
+                {/* Competitor Domain Search Bar & Quick Chips */}
+                <div className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                      <input
+                        type="text"
+                        value={targetCompetitor}
+                        onChange={(e) => setTargetCompetitor(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") fetchCompetitorIntel();
+                        }}
+                        placeholder="Enter competitor domain (e.g. lemlist.com, ahrefs.com, zapier.com)..."
+                        className="w-full bg-neutral-50 border border-neutral-300 rounded-lg pl-10 pr-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-indigo-600 transition-colors"
+                      />
+                    </div>
+                    <button
+                      onClick={() => fetchCompetitorIntel()}
+                      disabled={spyingCompetitors}
+                      className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all shadow-xs shrink-0"
+                    >
+                      {spyingCompetitors ? <Loader2 className="w-4 h-4 animate-spin" /> : <Crosshair className="w-4 h-4" />}
+                      <span>{spyingCompetitors ? "Replicating..." : "Spy & Replicate Backlinks"}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-500">
+                    <span className="font-semibold text-neutral-700">Quick Competitor Suggestions:</span>
+                    {[
+                      "lemlist.com",
+                      "woodpecker.co",
+                      "ahrefs.com",
+                      "surferseo.com",
+                      "zapier.com"
+                    ].map((comp) => (
+                      <button
+                        key={comp}
+                        disabled={spyingCompetitors}
+                        onClick={() => fetchCompetitorIntel(comp)}
+                        className="bg-neutral-100 hover:bg-indigo-50 hover:text-indigo-700 text-neutral-700 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+                      >
+                        + {comp}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {spyingCompetitors ? (
                   <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-3 max-w-lg mx-auto shadow-xs">
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto" />
                     <p className="text-xs font-bold text-neutral-900">Reverse-Engineering Competitor Backlinks...</p>
-                    <p className="text-[11px] text-neutral-500">Scanning referring domains, guest columns, and directory profiles across your niche.</p>
+                    <p className="text-[11px] text-neutral-500">
+                      Analyzing competitor placement patterns, authority tiers, and generating personalized pitch blueprints.
+                    </p>
+                  </div>
+                ) : replicationPlaybooks.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-700">
+                        Showing {replicationPlaybooks.length} Replicable Competitor Playbooks
+                      </span>
+                      <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-medium">
+                        Verified Live URLs &amp; Pitch Templates
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {replicationPlaybooks.map((p, i) => {
+                        const isCopied = copiedPitchIndex === i;
+                        const fullPitchText = `Subject: ${p.replication_strategy?.outreach_subject_line || ""}\n\n${p.replication_strategy?.outreach_pitch_body || ""}\n\nFollow-Up (3 days):\n${p.replication_strategy?.follow_up_sequence || ""}`;
+
+                        return (
+                          <div
+                            key={i}
+                            className="bg-white border border-neutral-200 rounded-xl p-5 shadow-xs space-y-4 hover:border-neutral-300 transition-all flex flex-col justify-between"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                  <span>Competitor:</span>
+                                  <span className="font-mono">{p.competitor_domain}</span>
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border capitalize ${
+                                    p.difficulty_to_acquire === 'easy'
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : p.difficulty_to_acquire === 'moderate'
+                                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                                  }`}>
+                                    {p.difficulty_to_acquire}
+                                  </span>
+                                  <span className="text-xs font-mono font-semibold text-neutral-700 bg-neutral-50 border border-neutral-200 px-2 py-0.5 rounded">
+                                    DA: {p.source_authority}/100
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider">
+                                  Referring Site &amp; Format
+                                </div>
+                                <div className="flex items-center justify-between mt-0.5">
+                                  <h4 className="font-semibold text-sm text-neutral-900">{p.referring_site}</h4>
+                                  <a
+                                    href={p.referring_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 font-medium"
+                                  >
+                                    <span>Visit Site</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                </div>
+                                <span className="text-[11px] font-medium text-neutral-500 mt-0.5 block">
+                                  Format: <strong className="text-neutral-700">{p.link_type}</strong> · Turnaround: <strong className="text-neutral-700">{p.estimated_turnaround}</strong>
+                                </span>
+                              </div>
+
+                              <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-3 text-xs space-y-1">
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-900 block">
+                                  Why Competitor Got This Link
+                                </span>
+                                <p className="text-neutral-700 leading-relaxed text-[11px]">{p.how_competitor_got_it}</p>
+                              </div>
+
+                              {/* 3-Step Acquisition Plan */}
+                              {p.replication_strategy?.step_by_step_acquisition && (
+                                <div className="bg-indigo-50/40 border border-indigo-100 rounded-lg p-3 text-xs space-y-2">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-900 block">
+                                    3-Step Replication Blueprint
+                                  </span>
+                                  <div className="space-y-1">
+                                    {p.replication_strategy.step_by_step_acquisition.map((step: string, sIdx: number) => (
+                                      <div key={sIdx} className="flex items-start gap-1.5 text-neutral-700 leading-relaxed text-[11px]">
+                                        <span className="text-indigo-600 font-bold shrink-0">{sIdx + 1}.</span>
+                                        <span>{step.replace(/^\d+\.\s*/, "")}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Ready-to-Send Email Pitch */}
+                              {p.replication_strategy?.outreach_pitch_body && (
+                                <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-xs space-y-2">
+                                  <div className="flex items-center justify-between border-b border-neutral-200 pb-1.5">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-700">
+                                      Ready-to-Send Outreach Pitch
+                                    </span>
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(fullPitchText);
+                                        setCopiedPitchIndex(i);
+                                        setTimeout(() => setCopiedPitchIndex(null), 2500);
+                                      }}
+                                      className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 transition-colors"
+                                    >
+                                      {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                      <span>{isCopied ? "Copied!" : "Copy Pitch"}</span>
+                                    </button>
+                                  </div>
+
+                                  <div className="text-[11px] text-neutral-600">
+                                    <strong className="text-neutral-800">Subject: </strong>
+                                    {p.replication_strategy.outreach_subject_line}
+                                  </div>
+                                  <p className="text-[11px] text-neutral-700 leading-relaxed whitespace-pre-wrap font-sans bg-white p-2.5 rounded border border-neutral-200/80">
+                                    {p.replication_strategy.outreach_pitch_body}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-xs mt-3">
+                              <a
+                                href={p.contact_submission_url || p.referring_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-neutral-600 hover:text-neutral-900 text-[11px] font-medium flex items-center gap-1 transition-colors"
+                              >
+                                <span>Open Pitch Endpoint</span>
+                                <ArrowUpRight className="w-3 h-3" />
+                              </a>
+                              <button
+                                onClick={() => handleDraftOutreach({
+                                  domain: p.referring_site,
+                                  url: p.referring_url,
+                                  category: "competitor_gap",
+                                  opportunity_title: `Replicate ${p.competitor_domain} Backlink on ${p.referring_site}`,
+                                  opportunity_angle: p.replication_strategy?.value_proposition,
+                                  pitch_hook: p.replication_strategy?.outreach_pitch_body,
+                                  linkable_asset: p.replication_strategy?.exact_page_section,
+                                })}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                              >
+                                <Mail className="w-3 h-3" />
+                                <span>Personalize in Modal</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : competitorIntel.length === 0 ? (
                   <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-4 max-w-lg mx-auto shadow-xs">
@@ -521,11 +721,11 @@ export default function BacklinksPage() {
                     <div>
                       <h3 className="text-base font-semibold text-neutral-900">No Competitor Backlinks Spied Yet</h3>
                       <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                        Launch a competitor scan to uncover referral sources and replicate valuable backlinks.
+                        Enter any competitor domain above to reverse-engineer their backlink strategy and acquire identical placements.
                       </p>
                     </div>
                     <button
-                      onClick={fetchCompetitorIntel}
+                      onClick={() => fetchCompetitorIntel()}
                       disabled={spyingCompetitors}
                       className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2 shadow-xs"
                     >

@@ -57,8 +57,26 @@ export async function POST(request: Request) {
       // silent fallback
     }
 
+    const competitor_domain = body.competitor_domain ? String(body.competitor_domain).trim() : null;
+
     const agent = new BacklinkAgent();
     const intel = await agent.spyCompetitorBacklinks(website.domain, nicheTopic, knownCompetitors, siteType);
+
+    let replication = null;
+    const targetCompetitor = competitor_domain || knownCompetitors[0];
+    if (targetCompetitor) {
+      try {
+        const { CompetitorBacklinkReplicator } = await import('@/lib/agent/competitorBacklinkReplicator');
+        replication = await CompetitorBacklinkReplicator.replicateCompetitorBacklinks({
+          customerDomain: website.domain,
+          competitorDomain: targetCompetitor,
+          niche: nicheTopic,
+          siteType: siteType,
+        });
+      } catch (repErr) {
+        console.error('[Competitor Backlinks POST] Replicator error:', repErr);
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -66,6 +84,7 @@ export async function POST(request: Request) {
       site_type: siteType,
       competitors: knownCompetitors,
       intel,
+      replication,
     });
   } catch (error: any) {
     console.error('[Competitor Backlinks POST] Error:', error);

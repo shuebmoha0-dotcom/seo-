@@ -35,13 +35,22 @@ function getDifficultyBadge(kd: number | string | undefined) {
 export default function KeywordsPage() {
   const { currentWebsite, openAddModal } = useWebsite();
 
-  const [activeTab, setActiveTab] = useState<"clusters" | "all_keywords">("clusters");
+  const [activeTab, setActiveTab] = useState<"clusters" | "live_search" | "quick_wins" | "all_keywords">("clusters");
   const [siteMode, setSiteMode] = useState<"new" | "established">("new");
   const [seedTopic, setSeedTopic] = useState("");
   const [discovering, setDiscovering] = useState(false);
   const [filterQuery, setFilterQuery] = useState("");
   const [selectedIntent, setSelectedIntent] = useState<string>("all");
   const [copiedKw, setCopiedKw] = useState<string | null>(null);
+
+  // Live Google Search state
+  const [liveQuery, setLiveQuery] = useState("");
+  const [liveSearching, setLiveSearching] = useState(false);
+  const [liveSearchData, setLiveSearchData] = useState<any>(null);
+
+  // Quick Wins state
+  const [quickWinsLoading, setQuickWinsLoading] = useState(false);
+  const [quickWinsData, setQuickWinsData] = useState<any>(null);
 
   const [clusters, setClusters] = useState<any[]>(() => {
     if (typeof window !== "undefined") {
@@ -95,6 +104,46 @@ export default function KeywordsPage() {
   const [briefModalOpportunity, setBriefModalOpportunity] = useState<any>(null);
   const [generatingBrief, setGeneratingBrief] = useState(false);
   const [brief, setBrief] = useState<any>(null);
+
+  const fetchQuickWins = async () => {
+    if (!currentWebsite) return;
+    try {
+      setQuickWinsLoading(true);
+      const res = await fetch(`/api/keywords/quick-wins?website_id=${currentWebsite.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setQuickWinsData(data);
+      }
+    } catch (err) {
+      console.error("Error fetching quick wins:", err);
+    } finally {
+      setQuickWinsLoading(false);
+    }
+  };
+
+  const handleRunLiveSearch = async (queryOverride?: string) => {
+    const q = (queryOverride !== undefined ? queryOverride : liveQuery).trim();
+    if (!q) return;
+    if (queryOverride !== undefined) {
+      setLiveQuery(queryOverride);
+    }
+    setLiveSearching(true);
+    try {
+      const res = await fetch("/api/keywords/live-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLiveSearchData(data);
+      }
+    } catch (err) {
+      console.error("Error running live search:", err);
+    } finally {
+      setLiveSearching(false);
+    }
+  };
 
   const fetchKeywordData = async () => {
     if (!currentWebsite) {
@@ -411,12 +460,17 @@ export default function KeywordsPage() {
             {/* Filter & View Navigation Bar */}
             <div className="bg-white border border-neutral-200/80 rounded-xl p-3 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
               {/* Tab Navigation */}
-              <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs font-semibold">
-                {(["clusters", "all_keywords"] as const).map(tab => (
+              <div className="flex flex-wrap items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs font-semibold">
+                {(["clusters", "live_search", "quick_wins", "all_keywords"] as const).map(tab => (
                   <button
                     key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className="relative flex items-center gap-2 px-3 py-1.5 text-xs font-semibold transition-colors"
+                    onClick={() => {
+                      setActiveTab(tab);
+                      if (tab === "quick_wins" && !quickWinsData) {
+                        fetchQuickWins();
+                      }
+                    }}
+                    className="relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors"
                   >
                     {activeTab === tab && (
                       <motion.div
@@ -425,11 +479,24 @@ export default function KeywordsPage() {
                         transition={{ type: "spring", stiffness: 400, damping: 30 }}
                       />
                     )}
-                    <span className={`relative z-10 flex items-center gap-2 ${activeTab === tab ? "text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
-                      {tab === "clusters" ? <Layers className="w-3.5 h-3.5" /> : <Hash className="w-3.5 h-3.5" />}
-                      <span>{tab === "clusters" ? "Topical Clusters" : "Keyword Directory"}</span>
+                    <span className={`relative z-10 flex items-center gap-1.5 ${activeTab === tab ? "text-white" : "text-neutral-600 hover:text-neutral-900"}`}>
+                      {tab === "clusters" && <Layers className="w-3.5 h-3.5" />}
+                      {tab === "live_search" && <Sparkles className="w-3.5 h-3.5" />}
+                      {tab === "quick_wins" && <Flame className="w-3.5 h-3.5" />}
+                      {tab === "all_keywords" && <Hash className="w-3.5 h-3.5" />}
+
+                      <span>
+                        {tab === "clusters" ? "Topical Clusters" :
+                         tab === "live_search" ? "Live Google Search" :
+                         tab === "quick_wins" ? "Strike-Distance Quick Wins" :
+                         "Keyword Directory"}
+                      </span>
+
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${activeTab === tab ? "bg-white/20 text-white" : "bg-neutral-200/80 text-neutral-700"}`}>
-                        {tab === "clusters" ? clusters.length : rawKeywords.length}
+                        {tab === "clusters" ? clusters.length :
+                         tab === "live_search" ? (liveSearchData?.totalSuggestions ?? "Live") :
+                         tab === "quick_wins" ? (quickWinsData?.totalQuickWins ?? "GSC") :
+                         rawKeywords.length}
                       </span>
                     </span>
                   </button>
@@ -439,7 +506,7 @@ export default function KeywordsPage() {
               {/* In-view Search & Intent Filters */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -tranneutral-y-1/2 text-neutral-400" />
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
                   <input
                     type="text"
                     value={filterQuery}
@@ -600,6 +667,387 @@ export default function KeywordsPage() {
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: LIVE GOOGLE SEARCH INTELLIGENCE */}
+            {activeTab === "live_search" && (
+              <div className="space-y-6">
+                {/* Search Bar & Quick Suggest Chips */}
+                <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                      <input
+                        type="text"
+                        value={liveQuery}
+                        onChange={(e) => setLiveQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleRunLiveSearch();
+                        }}
+                        placeholder="Enter seed topic (e.g. cold email deliverability, ai copywriting, b2b saas onboarding)..."
+                        className="w-full bg-neutral-50 border border-neutral-300 rounded-lg pl-10 pr-3 py-2 text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-indigo-600 transition-colors"
+                      />
+                    </div>
+                    <button
+                      onClick={() => handleRunLiveSearch()}
+                      disabled={liveSearching || !liveQuery.trim()}
+                      className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs px-5 py-2.5 rounded-lg transition-all shadow-xs shrink-0"
+                    >
+                      {liveSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                      <span>{liveSearching ? "Querying Google..." : "Query Live Autocomplete"}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-500">
+                    <span className="font-semibold text-neutral-700">Live Seed Suggestions:</span>
+                    {[
+                      "cold email deliverability",
+                      "ai seo automation",
+                      "b2b saas retention",
+                      "internal linking strategy",
+                      "programmatic seo guide"
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        disabled={liveSearching}
+                        onClick={() => handleRunLiveSearch(chip)}
+                        className="bg-neutral-100 hover:bg-indigo-50 hover:text-indigo-700 text-neutral-700 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+                      >
+                        + {chip}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* State: Loading */}
+                {liveSearching && (
+                  <div className="p-12 text-center bg-white border border-neutral-200/80 rounded-xl space-y-3 shadow-xs">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
+                    <h4 className="text-sm font-semibold text-neutral-900">Querying Google Autocomplete Live...</h4>
+                    <p className="text-xs text-neutral-500 max-w-md mx-auto">
+                      Querying real-time Google search suggestions across Questions, Comparisons, Prepositions, and Commercial buyer intent.
+                    </p>
+                  </div>
+                )}
+
+                {/* State: No Results Yet */}
+                {!liveSearchData && !liveSearching && (
+                  <div className="p-10 text-center bg-white border border-neutral-200/80 rounded-xl space-y-3 max-w-xl mx-auto shadow-xs">
+                    <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center mx-auto text-indigo-600">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-base font-semibold text-neutral-900">Real-Time Google Search Autocomplete</h3>
+                    <p className="text-xs text-neutral-500 leading-relaxed max-w-md mx-auto">
+                      Unlike static third-party databases, this tool connects directly to Google&apos;s live autocomplete engine to extract active search questions, comparison queries, and commercial buyer intent without hallucination.
+                    </p>
+                  </div>
+                )}
+
+                {/* State: Results Render */}
+                {liveSearchData && !liveSearching && (
+                  <div className="space-y-6">
+                    {/* KPI Strip */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-2xs">
+                        <span className="text-xs text-neutral-500 block mb-1">Total Google Queries</span>
+                        <div className="text-2xl font-bold text-neutral-900">{liveSearchData.totalSuggestions}</div>
+                        <div className="text-[11px] text-neutral-400 mt-1">Real-time autocomplete</div>
+                      </div>
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-2xs">
+                        <span className="text-xs text-neutral-500 block mb-1">High-Intent Terms</span>
+                        <div className="text-2xl font-bold text-indigo-600">{liveSearchData.highIntentVolumeCount}</div>
+                        <div className="text-[11px] text-neutral-400 mt-1">Commercial &amp; questions</div>
+                      </div>
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-2xs">
+                        <span className="text-xs text-neutral-500 block mb-1">Questions Discovered</span>
+                        <div className="text-2xl font-bold text-blue-600">{liveSearchData.byIntent?.question?.length || 0}</div>
+                        <div className="text-[11px] text-neutral-400 mt-1">How, why, what queries</div>
+                      </div>
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-2xs">
+                        <span className="text-xs text-neutral-500 block mb-1">Comparisons &amp; Commercial</span>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {(liveSearchData.byIntent?.comparison?.length || 0) + (liveSearchData.byIntent?.commercial?.length || 0)}
+                        </div>
+                        <div className="text-[11px] text-neutral-400 mt-1">Vs, best, review queries</div>
+                      </div>
+                    </div>
+
+                    {/* Categorized Intent Blocks */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Questions */}
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                          <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                            Questions ({liveSearchData.byIntent?.question?.length || 0})
+                          </span>
+                          <span className="text-[11px] text-neutral-400">Informational intent</span>
+                        </div>
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                          {(liveSearchData.byIntent?.question || []).map((term: string, i: number) => (
+                            <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-neutral-50 group transition-colors">
+                              <span className="text-neutral-800 font-medium truncate mr-2">{term}</span>
+                              <Link
+                                href={`/content-planner?title=${encodeURIComponent(term)}`}
+                                title="Draft in Content Planner"
+                                className="opacity-0 group-hover:opacity-100 text-indigo-600 hover:text-indigo-800 shrink-0 p-1"
+                              >
+                                <PenTool className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Comparisons */}
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                          <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                            Comparisons ({liveSearchData.byIntent?.comparison?.length || 0})
+                          </span>
+                          <span className="text-[11px] text-neutral-400">Vs &amp; Alternatives</span>
+                        </div>
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                          {(liveSearchData.byIntent?.comparison || []).map((term: string, i: number) => (
+                            <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-neutral-50 group transition-colors">
+                              <span className="text-neutral-800 font-medium truncate mr-2">{term}</span>
+                              <Link
+                                href={`/content-planner?title=${encodeURIComponent(term)}`}
+                                title="Draft in Content Planner"
+                                className="opacity-0 group-hover:opacity-100 text-indigo-600 hover:text-indigo-800 shrink-0 p-1"
+                              >
+                                <PenTool className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Commercial Intent */}
+                      <div className="bg-white border border-neutral-200 rounded-xl p-4 shadow-xs space-y-3">
+                        <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
+                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Commercial ({liveSearchData.byIntent?.commercial?.length || 0})
+                          </span>
+                          <span className="text-[11px] text-neutral-400">Buyer ready</span>
+                        </div>
+                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                          {(liveSearchData.byIntent?.commercial || []).map((term: string, i: number) => (
+                            <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded hover:bg-neutral-50 group transition-colors">
+                              <span className="text-neutral-800 font-medium truncate mr-2">{term}</span>
+                              <Link
+                                href={`/content-planner?title=${encodeURIComponent(term)}`}
+                                title="Draft in Content Planner"
+                                className="opacity-0 group-hover:opacity-100 text-indigo-600 hover:text-indigo-800 shrink-0 p-1"
+                              >
+                                <PenTool className="w-3 h-3" />
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Top Recommended Opportunities */}
+                    {liveSearchData.topOpportunities && liveSearchData.topOpportunities.length > 0 && (
+                      <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-xs space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-sm text-neutral-900">High-Opportunity Articles to Draft</h3>
+                            <p className="text-xs text-neutral-500">Curated from Google Autocomplete with recommended content format</p>
+                          </div>
+                          <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full">
+                            {liveSearchData.topOpportunities.length} Recommended Articles
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {liveSearchData.topOpportunities.map((opp: any, idx: number) => (
+                            <div key={idx} className="border border-neutral-200 rounded-lg p-3.5 hover:border-neutral-300 transition-all space-y-2.5 bg-neutral-50/50">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                                    Target Query:
+                                  </span>
+                                  <h4 className="text-xs font-bold text-neutral-900">{opp.query}</h4>
+                                </div>
+                                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                                  opp.intent === "commercial"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : opp.intent === "comparison"
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                                }`}>
+                                  {opp.intent}
+                                </span>
+                              </div>
+
+                              <div className="text-xs text-neutral-600 bg-white p-2 rounded border border-neutral-200/80">
+                                <span className="font-semibold text-neutral-800">Recommended Title: </span>
+                                {opp.suggestedTitle}
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1 text-xs">
+                                <span className="text-[11px] text-neutral-500">
+                                  Format: <strong className="text-neutral-700">{opp.recommendedFormat}</strong>
+                                </span>
+                                <Link
+                                  href={`/content-planner?title=${encodeURIComponent(opp.suggestedTitle)}&keyword=${encodeURIComponent(opp.query)}`}
+                                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-md text-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+                                >
+                                  <PenTool className="w-3 h-3" />
+                                  <span>Draft Article</span>
+                                </Link>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB: STRIKE-DISTANCE QUICK WINS */}
+            {activeTab === "quick_wins" && (
+              <div className="space-y-6">
+                {/* Header Information Banner */}
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-5 shadow-xs space-y-3">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-5 h-5 text-amber-600" />
+                        <h3 className="font-semibold text-sm text-neutral-900">
+                          Strike-Distance Quick Wins (Google Positions 8.0 – 20.0)
+                        </h3>
+                      </div>
+                      <p className="text-xs text-neutral-600 max-w-2xl leading-relaxed">
+                        These search queries already receive impressions from Google for <strong className="text-neutral-900">{currentWebsite.domain}</strong>, but rank on Page 2. Because Google already recognizes your authority for them, a targeted prescriptive update (H2 injection, content expansion, or internal linking) is the fastest way to leap to Page 1 without waiting months.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="bg-white border border-amber-200 rounded-lg p-3 text-center shadow-2xs">
+                        <span className="text-[10px] text-neutral-500 block uppercase font-semibold">Traffic Upside</span>
+                        <div className="text-lg font-bold text-emerald-600">
+                          +{quickWinsData?.estimatedTrafficUpside || 850} clicks/mo
+                        </div>
+                      </div>
+                      <button
+                        onClick={fetchQuickWins}
+                        disabled={quickWinsLoading}
+                        className="bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-700 font-semibold text-xs px-3 py-2 rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs"
+                      >
+                        {quickWinsLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TrendingUp className="w-3.5 h-3.5 text-amber-600" />}
+                        <span>Refresh GSC</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* State: Loading */}
+                {quickWinsLoading && (
+                  <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-3 shadow-xs">
+                    <Loader2 className="w-8 h-8 animate-spin text-amber-600 mx-auto" />
+                    <h4 className="text-sm font-semibold text-neutral-900">Scanning Google Search Console Data...</h4>
+                    <p className="text-xs text-neutral-500 max-w-sm mx-auto">
+                      Extracting queries ranking in strike distance (positions 8.0–20.0) with confirmed impression volume.
+                    </p>
+                  </div>
+                )}
+
+                {/* State: Render Quick Wins Cards */}
+                {!quickWinsLoading && (
+                  <div className="space-y-4">
+                    {(!quickWinsData?.quickWins || quickWinsData.quickWins.length === 0) ? (
+                      <div className="p-10 text-center bg-white border border-neutral-200 rounded-xl space-y-3 shadow-xs">
+                        <Target className="w-8 h-8 text-neutral-300 mx-auto" />
+                        <h4 className="text-sm font-semibold text-neutral-900">No Strike-Distance Keywords Found Yet</h4>
+                        <p className="text-xs text-neutral-500 max-w-md mx-auto">
+                          Google Search Console data has not reported queries at positions 8.0–20.0 yet, or GSC sync is still in progress for {currentWebsite.domain}.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4">
+                        {quickWinsData.quickWins.map((win: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="bg-white border border-neutral-200 hover:border-neutral-300 rounded-xl p-5 shadow-xs transition-all space-y-4"
+                          >
+                            <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-sm font-bold text-neutral-900">{win.query}</h4>
+                                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    Current Pos: #{win.current_position}
+                                  </span>
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    Target Pos: #{win.projected_rank} ({win.projected_clicks_increase})
+                                  </span>
+                                </div>
+                                <div className="text-xs text-neutral-500 flex items-center gap-2">
+                                  <span>Page URL:</span>
+                                  <a
+                                    href={win.page_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-mono text-neutral-700 hover:text-indigo-600 underline flex items-center gap-1"
+                                  >
+                                    <span>{win.page_url}</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3 self-start md:self-auto">
+                                <div className="text-right">
+                                  <div className="text-xs font-semibold text-neutral-900">
+                                    {win.impressions?.toLocaleString() || 0} impr
+                                  </div>
+                                  <div className="text-[10px] text-neutral-400">
+                                    {win.clicks?.toLocaleString() || 0} clicks · {((win.ctr || 0) * 100).toFixed(1)}% CTR
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                                  Score: {win.opportunity_score}/100
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Prescriptive Fix Box */}
+                            <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3.5 space-y-1.5">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-800">
+                                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Prescriptive Ranking Fix:</span>
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                  {win.action_type.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                              <p className="text-xs text-neutral-700 leading-relaxed font-mono">
+                                {win.prescriptive_fix}
+                              </p>
+                            </div>
+
+                            {/* Action Row */}
+                            <div className="flex items-center justify-between pt-2 border-t border-neutral-100 text-xs">
+                              <span className="text-[11px] text-neutral-400">
+                                Action priority: High-leverage Page 1 bump
+                              </span>
+                              <Link
+                                href={`/content-planner?title=${encodeURIComponent(`Optimize for ${win.query}`)}&keyword=${encodeURIComponent(win.query)}`}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+                              >
+                                <PenTool className="w-3 h-3" />
+                                <span>Optimize in Content Planner</span>
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
