@@ -88,8 +88,8 @@ export class AutopilotExecutor {
       let projectMemory = '';
       let websiteAudience = `Audience interested in ${website_domain}`;
       let contentRules = {
-        word_count_min: 1200,
-        word_count_max: 1600,
+        word_count_min: 1100,
+        word_count_max: 1500,
         language: 'U.S. English',
         tone: 'Authoritative, practical, practitioner-first',
         audience: websiteAudience,

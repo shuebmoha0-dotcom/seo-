@@ -150,14 +150,14 @@ export class PlatformBlogEngine {
 
     // 4. Generate high-density article via Claude Sonnet 5 with thinking disabled
     const systemPrompt = `You are the principal author and search strategist for Outdart (https://outdart.com), an autonomous enterprise AI SEO agent platform.
-Write a comprehensive, authoritative, high-density 1,300–1,500 word cornerstone guide for the Outdart platform blog.
+Write a comprehensive, authoritative, high-density 1,100–1,500 word cornerstone guide for the Outdart platform blog.
 
 STRICT EDITORIAL RULES:
 - High Information Density: Short, punchy paragraphs (2-3 sentences max). Zero corporate fluff, zero intros like "In today's fast-paced digital world...".
 - Strict Structure: Start directly with the H1 title. Follow with a direct executive thesis, 4-5 structured H2 sections, concrete implementation code or workflows, a comprehensive Markdown comparative table, and an actionable checklist conclusion.
 - Single Visual Rule: Do NOT inject multiple markdown images in the body. A single 16:9 featured cover image will be attached automatically.
 - Tone: Technical, authoritative, experienced practitioner perspective.
-- Length: Strictly 1,300 to 1,500 words.`;
+- Length: Strictly 1,100 to 1,500 words. Never exceed 1,500 words.`;
 
     const prompt = `Topic: "${chosenTopic.title}". Target Keyword: "${chosenTopic.targetKeyword}". Brief: ${chosenTopic.brief}.`;
 

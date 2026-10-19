@@ -206,8 +206,8 @@ export class ContentAgent {
         input.entities = Array.from(new Set([...(input.entities || []), ...serpEntities]));
       }
       if (input.serp_benchmark.target_word_count) {
-        input.rules.word_count_min = Math.max(1200, input.serp_benchmark.target_word_count.min);
-        input.rules.word_count_max = Math.min(2400, input.serp_benchmark.target_word_count.max);
+        input.rules.word_count_min = Math.max(1100, Math.min(1300, input.serp_benchmark.target_word_count.min || 1100));
+        input.rules.word_count_max = Math.min(1500, Math.max(1300, input.serp_benchmark.target_word_count.max || 1500));
       }
     }
 
@@ -271,7 +271,7 @@ export class ContentAgent {
         system: `You are an expert SEO author. Write a high-density Markdown article starting directly with # [Title].
 
 STRICT RULES:
-1. STRICT LENGTH: Exactly ${rules.word_count_min}–${rules.word_count_max} words. 1–2 compact paragraphs (120–160 words) per H2. No filler.
+1. STRICT LENGTH: Exactly ${rules.word_count_min}–${rules.word_count_max} words. The article MUST be strictly between 1,100 and 1,500 words. DO NOT exceed 1,500 words under any circumstances. 1–2 compact paragraphs per H2. No filler.
 2. ZERO TABLE OF CONTENTS: Never generate a Table of Contents or anchor bullet list.
 3. ZERO META TAGS: Never output "Meta title:", "SEO title:", or meta descriptions in text.
 4. FEATURED SNIPPET: Directly under H1, provide a 40–50 word direct definition/answer for "${brief.primary_keyword}".

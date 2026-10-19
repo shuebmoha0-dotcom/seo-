@@ -18,7 +18,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - **Zero Thinking Tokens**: Anthropic API calls on `claude-sonnet-5` MUST ALWAYS have extended thinking DISABLED: `providerOptions: { anthropic: { thinking: { type: 'disabled' } } }`. Never enable thinking tokens as it burns 2,000–4,000 hidden tokens per call.
 - **Zero Prompt Duplication**: Never inject project memory, instructions, or knowledge banks twice (do not duplicate between `system` and `prompt`). Single-pass injection only.
 - **Zero Discarded Reflection Blocks**: Never ask the model to generate intermediate `<reflection>` or scratchpad blocks before drafting. The model must write directly to the output.
-- **Word Count Discipline**: Articles must strictly adhere to the requested word count (1,200–1,600 words) without filler or fluff.
+- **Word Count Discipline**: Articles must strictly adhere to the requested word count: **1,100–1,500 words maximum** (never exceed 1,500 words) without filler or fluff.
 
 ## 3. ZERO TABLE OF CONTENTS (STRICTLY PROHIBITED)
 - **MANDATE**: Never generate or render a "Table of Contents", "## Table of Contents", or bullet lists of anchor links.

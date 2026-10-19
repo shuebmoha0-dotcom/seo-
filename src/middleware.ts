@@ -19,6 +19,9 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/auth/callback',
   '/privacy',
   '/terms',
+  '/sitemap.xml',
+  '/sitemap',
+  '/robots.txt',
 ]);
 
 const PUBLIC_PAGE_PREFIXES = [
