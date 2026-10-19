@@ -155,8 +155,7 @@ Write a comprehensive, authoritative, high-density 1,300–1,500 word cornerston
 STRICT EDITORIAL RULES:
 - High Information Density: Short, punchy paragraphs (2-3 sentences max). Zero corporate fluff, zero intros like "In today's fast-paced digital world...".
 - Strict Structure: Start directly with the H1 title. Follow with a direct executive thesis, 4-5 structured H2 sections, concrete implementation code or workflows, a comprehensive Markdown comparative table, and an actionable checklist conclusion.
-- PROHIBITION: NEVER render a Table of Contents ("Table of Contents", "## Table of Contents", or bullet lists of anchor links). Flow directly from H1 and intro into the first H2.
-- In-Body Graphics: Integrate 1-2 relevant technical graphics with markdown syntax: ![Architecture Diagram](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80 "Execution Architecture")
+- Single Visual Rule: Do NOT inject multiple markdown images in the body. A single 16:9 featured cover image will be attached automatically.
 - Tone: Technical, authoritative, experienced practitioner perspective.
 - Length: Strictly 1,300 to 1,500 words.`;
 
