@@ -5,7 +5,7 @@ import {
   Globe, Search, BarChart2, Layers, GitBranch, FileCode, CheckCircle2,
   AlertCircle, ShieldAlert, RefreshCw, Loader2, ArrowRight, Shield, Zap,
   DollarSign, CheckSquare, XCircle, Info, ExternalLink, Cpu, Key, HelpCircle,
-  Code2, Check, Settings2, Download, Smartphone, Send
+  Code2, Check, Settings2, Download, Smartphone, Send, Copy, Sparkles
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -32,12 +32,12 @@ const DEFAULT_INTEGRATIONS: IntegrationItem[] = [
   {
     id: "int-gsc",
     provider: "google_search_console",
-    display_name: "Google Search Console",
+    display_name: "Google Search Console & Indexing",
     icon: "",
-    description: "Search performance metrics: queries, pages, CTR, impressions, and average position.",
+    description: "Search performance metrics (queries, CTR, positions) and instant Google Indexing API submissions for newly published articles.",
     status: "disconnected",
     status_message: "Not connected",
-    capabilities: ["GET_SEARCH_ANALYTICS", "READ_ANALYTICS"],
+    capabilities: ["GET_SEARCH_ANALYTICS", "READ_ANALYTICS", "INSTANT_INDEXING", "URL_INSPECTION"],
     config: {},
   },
   {
@@ -136,7 +136,7 @@ export default function IntegrationsPage() {
 
   // Google Search Console Modal State
   const [showGscModal, setShowGscModal] = useState(false);
-  const [gscAuthMode, setGscAuthMode] = useState<"service_account" | "oauth">("service_account");
+  const [gscAuthMode, setGscAuthMode] = useState<"platform" | "oauth" | "custom_sa">("platform");
   const [gscPropertyUrl, setGscPropertyUrl] = useState(
     currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "")
   );
@@ -149,6 +149,54 @@ export default function IntegrationsPage() {
   const [gscIntegrationId, setGscIntegrationId] = useState("");
   const [gscApiDisabled, setGscApiDisabled] = useState(false);
   const [gscActivationUrl, setGscActivationUrl] = useState("https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=1036462372466");
+  const [platformSaEmail, setPlatformSaEmail] = useState("agent-398@gen-lang-client-0938255671.iam.gserviceaccount.com");
+  const [copiedSaEmail, setCopiedSaEmail] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/integrations/gsc/service-account")
+      .then(res => res.json())
+      .then(d => {
+        if (d?.client_email) setPlatformSaEmail(d.client_email);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleCopySaEmail = () => {
+    navigator.clipboard.writeText(platformSaEmail);
+    setCopiedSaEmail(true);
+    setTimeout(() => setCopiedSaEmail(false), 2000);
+  };
+
+  const handleConnectPlatformAccount = async () => {
+    if (!gscPropertyUrl) return;
+    setGscConnecting(true);
+    setGscFeedback(null);
+    try {
+      const res = await fetch("/api/integrations/gsc/service-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite?.id,
+          property_url: gscPropertyUrl.trim(),
+          use_platform_account: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to verify connection.");
+      }
+      setGscFeedback({ ok: true, message: data.message || "Connected and verified successfully! Google Search Console & Instant Indexing are now active." });
+      setTimeout(() => {
+        setShowGscModal(false);
+        setGscFeedback(null);
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      setGscFeedback({ ok: false, message: err.message || "Connection failed." });
+    } finally {
+      setGscConnecting(false);
+    }
+  };
 
   const handleConnectGscServiceAccount = async () => {
     if (!gscPropertyUrl || !gscServiceAccountJson) return;
@@ -159,6 +207,7 @@ export default function IntegrationsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          website_id: currentWebsite?.id,
           property_url: gscPropertyUrl.trim(),
           service_account_json: gscServiceAccountJson.trim(),
         }),
@@ -1110,28 +1159,39 @@ export default function IntegrationsPage() {
             </div>
 
             {/* Method selection tabs */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setGscAuthMode("service_account")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold text-center border transition-all ${
-                  gscAuthMode === "service_account"
-                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                onClick={() => setGscAuthMode("platform")}
+                className={`py-2 px-2 rounded-xl text-xs font-bold text-center border transition-all ${
+                  gscAuthMode === "platform"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
                     : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
                 }`}
               >
-                Service Account (Recommended)
+                Platform Agent (Instant)
               </button>
               <button
                 type="button"
                 onClick={() => setGscAuthMode("oauth")}
-                className={`py-2 px-3 rounded-xl text-xs font-bold text-center border transition-all ${
+                className={`py-2 px-2 rounded-xl text-xs font-bold text-center border transition-all ${
                   gscAuthMode === "oauth"
-                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
                     : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
                 }`}
               >
-                Sign in with Google (OAuth)
+                Sign in with Google
+              </button>
+              <button
+                type="button"
+                onClick={() => setGscAuthMode("custom_sa")}
+                className={`py-2 px-2 rounded-xl text-xs font-bold text-center border transition-all ${
+                  gscAuthMode === "custom_sa"
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700 shadow-2xs"
+                    : "bg-neutral-50 border-neutral-200 text-neutral-600 hover:bg-neutral-100"
+                }`}
+              >
+                Custom Key (JSON)
               </button>
             </div>
 
@@ -1146,11 +1206,88 @@ export default function IntegrationsPage() {
               </div>
             )}
 
-            {gscAuthMode === "service_account" ? (
+            {gscAuthMode === "platform" ? (
+              <div className="space-y-3.5 text-xs">
+                <div className="p-3.5 bg-indigo-50/70 rounded-2xl border border-indigo-200/80 text-[11px] text-indigo-950 space-y-2">
+                  <div className="font-bold flex items-center gap-1.5 text-indigo-900">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Instant Google Indexing &amp; Real-Time Search Analytics</span>
+                  </div>
+                  <p className="text-neutral-600 leading-relaxed">
+                    Add our verified platform agent to your Google Search Console once. All newly published articles will automatically be submitted to Google for instant crawling the exact second they are published.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-[11px] space-y-2">
+                  <div className="font-bold text-neutral-800">Step 1: Copy Platform Agent Email</div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={platformSaEmail}
+                      className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-1.5 text-[11px] font-mono text-neutral-700 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopySaEmail}
+                      className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-[11px] font-semibold shrink-0 transition-colors inline-flex items-center gap-1"
+                    >
+                      {copiedSaEmail ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSaEmail ? "Copied" : "Copy"}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-[11px] space-y-2">
+                  <div className="font-bold text-neutral-800">Step 2: Add as Owner in Search Console</div>
+                  <p className="text-neutral-600">
+                    Open your property in Google Search Console, go to <strong>Settings → Users and permissions</strong>, click <strong>Add User</strong>, paste the email above, and select <strong>Owner</strong> permission.
+                  </p>
+                  <a
+                    href={`https://search.google.com/search-console/users${gscPropertyUrl ? `?resource_id=${encodeURIComponent(gscPropertyUrl)}` : ""}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-indigo-600 font-bold hover:underline"
+                  >
+                    <span>Open Google Search Console Users &amp; Permissions</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                    Search Console Property URL / Domain
+                  </label>
+                  <input
+                    type="text"
+                    value={gscPropertyUrl}
+                    onChange={e => setGscPropertyUrl(e.target.value)}
+                    placeholder="https://yourdomain.com/ or sc-domain:yourdomain.com"
+                    className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-3 py-2 text-neutral-800 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-neutral-400 mt-1">Must match your property URL or sc-domain exactly.</p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100">
+                  <button type="button" onClick={() => setShowGscModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold text-neutral-600 hover:bg-neutral-100">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConnectPlatformAccount}
+                    disabled={!gscPropertyUrl || gscConnecting}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                  >
+                    {gscConnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>{gscConnecting ? "Verifying Ownership..." : "Verify & Connect Indexing"}</span>
+                  </button>
+                </div>
+              </div>
+            ) : gscAuthMode === "custom_sa" ? (
               <div className="space-y-3 text-xs">
                 <div className="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 text-[11px] text-neutral-600 space-y-1">
-                  <div className="font-bold text-neutral-800">Quick 2-Step Setup:</div>
-                  <div>1. Open <a href="https://search.google.com/search-console/users" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline inline-flex items-center gap-0.5">Google Search Console Users <ExternalLink className="w-2.5 h-2.5" /></a> and add your service account email with <strong>Full</strong> permission.</div>
+                  <div className="font-bold text-neutral-800">Custom Google Cloud Service Account:</div>
+                  <div>1. Add your service account email as an <strong>Owner</strong> in Google Search Console.</div>
                   <div>2. Paste the Property URL and your Service Account JSON Key below.</div>
                 </div>
 

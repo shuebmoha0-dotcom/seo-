@@ -254,6 +254,37 @@ export default function KeywordsPage() {
     }
   };
 
+  const [discoveringTrends, setDiscoveringTrends] = useState(false);
+
+  const handleDiscoverTrends = async () => {
+    if (!currentWebsite?.id) {
+      openAddModal();
+      return;
+    }
+    setDiscoveringTrends(true);
+    try {
+      const res = await fetch("/api/keywords/trends", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          limit: 10,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to scan search trends");
+      }
+      alert(`Discovered ${data.count || 0} Trending Opportunities for ${currentWebsite.domain}!\n\n${(data.trends || []).map((t: any) => `• ${t.keyword} (${t.category}) - ${t.search_volume}/mo (KD: ${t.difficulty})`).join('\n')}`);
+      await fetchKeywordData();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Trend Scan Notice:\n${err.message || "Failed to scan search trends"}`);
+    } finally {
+      setDiscoveringTrends(false);
+    }
+  };
+
   const handleGenerateBrief = async (kw: any) => {
     setBriefModalOpportunity(kw);
     setGeneratingBrief(true);
@@ -378,6 +409,16 @@ export default function KeywordsPage() {
                   </button>
                 ))}
               </div>
+
+              <button
+                onClick={() => handleDiscoverTrends()}
+                disabled={discoveringTrends || !currentWebsite}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700 shadow-2xs transition-colors hover:bg-neutral-50 hover:text-indigo-600 disabled:pointer-events-none disabled:opacity-60"
+                title="Scan real-time Google search velocity for breakout queries in your niche"
+              >
+                {discoveringTrends ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <Flame className="w-3.5 h-3.5 text-orange-500" />}
+                <span>{discoveringTrends ? "Scanning Trends…" : "Discover Trends"}</span>
+              </button>
 
               <button
                 onClick={() => handleDiscover()}

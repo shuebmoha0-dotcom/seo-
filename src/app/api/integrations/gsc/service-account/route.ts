@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { encryptCredential } from '@/lib/utils/encryption';
+import { GoogleIndexingService } from '@/lib/connectors/googleIndexing';
 import { google } from 'googleapis';
+
+export async function GET() {
+  const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+  return NextResponse.json({
+    success: true,
+    client_email: platformCreds?.client_email || 'agent-398@gen-lang-client-0938255671.iam.gserviceaccount.com',
+  });
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { website_id, property_url, service_account_json, client_email, private_key } = body;
+    const { website_id, property_url, service_account_json, client_email, private_key, use_platform_account } = body;
 
     if (!property_url) {
       return NextResponse.json({ success: false, error: 'Property URL or Domain (e.g. https://example.com or sc-domain:example.com) is required.' }, { status: 400 });
@@ -15,7 +24,17 @@ export async function POST(request: Request) {
     let parsedEmail = client_email;
     let parsedKey = private_key;
 
-    if (service_account_json) {
+    if (use_platform_account) {
+      const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+      if (!platformCreds?.client_email || !platformCreds?.private_key) {
+        return NextResponse.json({
+          success: false,
+          error: 'Platform service account credentials are not configured on the server. Please contact support or provide a custom Service Account key.',
+        }, { status: 500 });
+      }
+      parsedEmail = platformCreds.client_email;
+      parsedKey = platformCreds.private_key;
+    } else if (service_account_json) {
       try {
         const json = typeof service_account_json === 'string' ? JSON.parse(service_account_json) : service_account_json;
         parsedEmail = json.client_email || parsedEmail;
@@ -34,7 +53,10 @@ export async function POST(request: Request) {
       const auth = new google.auth.JWT({
         email: parsedEmail,
         key: parsedKey,
-        scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        scopes: [
+          'https://www.googleapis.com/auth/webmasters.readonly',
+          'https://www.googleapis.com/auth/indexing',
+        ],
       });
 
       const sc = google.searchconsole({ version: 'v1', auth });
@@ -51,7 +73,7 @@ export async function POST(request: Request) {
       if (authErr.message?.includes('User does not have sufficient permissions') || authErr.code === 403) {
         return NextResponse.json({
           success: false,
-          error: `Google Search Console permission error: Please add "${parsedEmail}" as a User (Full or Owner permission) inside your Google Search Console property settings for "${property_url}".`,
+          error: `Google Search Console permission error: Please add "${parsedEmail}" as an Owner in your Google Search Console settings (Settings > Users and permissions) for "${property_url}".`,
         }, { status: 403 });
       }
     }
@@ -73,7 +95,7 @@ export async function POST(request: Request) {
         auth_type: 'service_account',
         client_email: parsedEmail,
       },
-      capabilities: ['GET_SEARCH_ANALYTICS', 'READ_ANALYTICS'],
+      capabilities: ['GET_SEARCH_ANALYTICS', 'READ_ANALYTICS', 'INDEX_URLS', 'URL_INSPECTION'],
       last_tested_at: new Date().toISOString(),
       last_success_at: new Date().toISOString(),
       last_synced_at: new Date().toISOString(),

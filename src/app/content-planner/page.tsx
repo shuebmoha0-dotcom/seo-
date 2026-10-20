@@ -671,6 +671,35 @@ export default function ContentPlannerPage() {
     }
   };
 
+  const [batchIndexing, setBatchIndexing] = useState(false);
+
+  const handleBatchIndexing = async () => {
+    if (!currentWebsite?.id) return;
+    setBatchIndexing(true);
+    try {
+      const res = await fetch("/api/indexing/verify-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          limit: 100,
+          force_resubmit: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Batch indexing failed");
+      }
+      const verified = data.report?.verifiedCount || data.report?.results?.length || drafts.filter(d => d.status === "published").length;
+      alert(`Google Indexing Dispatched for ${currentWebsite.domain}!\n\nSubmitted ${verified} published articles directly to the Google Search Console Indexing API and IndexNow.`);
+    } catch (err: any) {
+      console.error("Batch indexing error:", err);
+      alert(`Batch Indexing Notice:\n${err.message || "Failed to batch submit"}`);
+    } finally {
+      setBatchIndexing(false);
+    }
+  };
+
   const handleApproval = async (action: "approve" | "reject" | "revise") => {
     if (!selectedDraft) return;
     setApproving(action);
@@ -1619,25 +1648,39 @@ export default function ContentPlannerPage() {
                   </div>
 
                   {/* Filter Pills */}
-                  <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
-                    {(["all", "draft", "published"] as const).map(tab => (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-neutral-100 p-0.5 rounded-lg text-xs">
+                      {(["all", "draft", "published"] as const).map(tab => (
+                        <button
+                          key={tab}
+                          onClick={() => setFilterStatus(tab)}
+                          className="relative px-3 py-1 text-[11px] font-medium transition-colors"
+                        >
+                          {filterStatus === tab && (
+                            <motion.div
+                              layoutId="contentPlannerFilterPill"
+                              className="absolute inset-0 bg-white rounded-md shadow-xs"
+                              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            />
+                          )}
+                          <span className={`relative z-10 ${filterStatus === tab ? "text-neutral-900 font-semibold" : "text-neutral-500 hover:text-neutral-700"}`}>
+                            {tab === "all" ? `All (${drafts.length})` : tab === "draft" ? `Drafts (${drafts.filter(d => d.status !== "published").length})` : `Published (${drafts.filter(d => d.status === "published").length})`}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {drafts.some(d => d.status === "published") && (
                       <button
-                        key={tab}
-                        onClick={() => setFilterStatus(tab)}
-                        className="relative px-3 py-1 text-[11px] font-medium transition-colors"
+                        onClick={handleBatchIndexing}
+                        disabled={batchIndexing}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-lg transition-all shadow-2xs"
+                        title="Submit all published articles for this domain to Google Indexing API and IndexNow"
                       >
-                        {filterStatus === tab && (
-                          <motion.div
-                            layoutId="contentPlannerFilterPill"
-                            className="absolute inset-0 bg-white rounded-md shadow-xs"
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                          />
-                        )}
-                        <span className={`relative z-10 ${filterStatus === tab ? "text-neutral-900 font-semibold" : "text-neutral-500 hover:text-neutral-700"}`}>
-                          {tab === "all" ? `All (${drafts.length})` : tab === "draft" ? `Drafts (${drafts.filter(d => d.status !== "published").length})` : `Published (${drafts.filter(d => d.status === "published").length})`}
-                        </span>
+                        {batchIndexing ? <Loader2 className="w-3 h-3 animate-spin text-indigo-600" /> : <Sparkles className="w-3 h-3 text-indigo-600" />}
+                        <span>{batchIndexing ? "Submitting All to Google..." : "Submit All to Google Indexing"}</span>
                       </button>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>
@@ -1705,6 +1748,19 @@ export default function ContentPlannerPage() {
                           </td>
                           <td className="py-3.5 px-5 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              {d.status === "published" && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRequestIndexing(d);
+                                  }}
+                                  disabled={requestingIndex === d.id}
+                                  className="p-1.5 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                  title="Request Google Indexing & Ping Bots"
+                                >
+                                  {requestingIndex === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> : <Sparkles className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
                               {d.wordpress_post_url && (
                                 <a
                                   href={d.wordpress_post_url}
