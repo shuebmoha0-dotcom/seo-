@@ -129,10 +129,10 @@ export async function POST(request: Request) {
             const cleanKw = (draft.primary_keyword || '').replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '').trim();
 
             let featuredImg: string | undefined = undefined;
-            if (draft.revision_notes && typeof draft.revision_notes === 'string') {
+            if (draft.revision_notes) {
               try {
-                const parsedNotes = JSON.parse(draft.revision_notes);
-                if (parsedNotes.featured_image_url) featuredImg = parsedNotes.featured_image_url;
+                const parsedNotes = typeof draft.revision_notes === 'string' ? JSON.parse(draft.revision_notes) : draft.revision_notes;
+                if (parsedNotes?.featured_image_url) featuredImg = parsedNotes.featured_image_url;
               } catch (_) {}
             }
             if (!featuredImg && draft.content_body) {

@@ -120,8 +120,87 @@ export async function POST(request: Request) {
             console.warn('[Outbound Report] Auto-indexing notice:', idxErr);
           }
         }
+
+        // GUARANTEE FEATURED IMAGE: Check if newly published WordPress post has a valid thumbnail
+        const createdPostId = result?.post_id;
+        const heroUrl = job.payload?.featured_image_url || job.payload?.image_url;
+        if (createdPostId && heroUrl && typeof heroUrl === 'string' && heroUrl.startsWith('http')) {
+          try {
+            const siteUrl = site.site_url.replace(/\/+$/, '');
+            let hasThumbnail = false;
+            try {
+              const wpCheck = await fetch(`${siteUrl}/wp-json/wp/v2/posts/${createdPostId}`, {
+                signal: AbortSignal.timeout(4000),
+              });
+              if (wpCheck.ok) {
+                const wpData = await wpCheck.json();
+                if (wpData.featured_media && wpData.featured_media > 0) {
+                  hasThumbnail = true;
+                }
+              }
+            } catch (_) {}
+
+            if (!hasThumbnail) {
+              console.log(`[Outbound Report] Post #${createdPostId} is missing featured media. Auto-healing via upload_media pipeline...`);
+              const imgRes = await fetch(heroUrl, { signal: AbortSignal.timeout(8000) });
+              if (imgRes.ok) {
+                const buffer = await imgRes.arrayBuffer();
+                const base64Data = Buffer.from(buffer).toString('base64');
+                const slug = job.payload?.slug || `post-${createdPostId}`;
+                await supabase.from('wordpress_jobs').insert({
+                  site_id: site.id,
+                  website_id: job.website_id,
+                  job_type: 'upload_media',
+                  status: 'pending',
+                  payload: {
+                    file_name: `${slug}-featured.webp`,
+                    file_data: base64Data,
+                    alt_text: job.payload?.title || slug,
+                    target_post_id: createdPostId,
+                  },
+                  idempotency_key: `upload_feat_${createdPostId}_${Date.now()}`,
+                });
+
+                // Wake WordPress to process the upload immediately
+                fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+                fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+              }
+            }
+          } catch (featErr) {
+            console.warn('[Outbound Report] Featured image auto-heal check error:', featErr);
+          }
+        }
       } catch (draftUpdErr) {
         console.warn('[Outbound Report] Draft status update error:', draftUpdErr);
+      }
+    }
+
+    // Step 2: Handle upload_media completion with target_post_id
+    if (isSuccess && job.job_type === 'upload_media' && job.payload?.target_post_id) {
+      try {
+        const mediaId = result?.media_id || result?.attachment_id;
+        const targetPostId = job.payload.target_post_id;
+        if (mediaId && targetPostId) {
+          console.log(`[Outbound Report] Media #${mediaId} uploaded for post #${targetPostId}. Dispatching update_post to attach thumbnail...`);
+          await supabase.from('wordpress_jobs').insert({
+            site_id: site.id,
+            website_id: job.website_id,
+            job_type: 'update_post',
+            status: 'pending',
+            payload: {
+              post_id: targetPostId,
+              featured_media: mediaId,
+            },
+            idempotency_key: `update_feat_${targetPostId}_${mediaId}_${Date.now()}`,
+          });
+
+          // Wake WordPress
+          const siteUrl = site.site_url.replace(/\/+$/, '');
+          fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+          fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+        }
+      } catch (mediaErr) {
+        console.warn('[Outbound Report] Error queueing update_post from upload_media:', mediaErr);
       }
     }
 

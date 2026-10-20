@@ -123,6 +123,7 @@ export class WordPressConnector implements IConnector {
         slug: payload.slug,
         category_ids: payload.category_ids || [],
         tag_ids: payload.tag_ids || [],
+        featured_media: payload.featured_media,
         seo_title: payload.seo_title,
         meta_description: payload.meta_description,
         canonical_url: payload.canonical_url,

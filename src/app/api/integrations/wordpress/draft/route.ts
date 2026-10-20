@@ -47,7 +47,30 @@ export async function POST(request: Request) {
       seoPlugin: integration.config?.seo_plugin || 'none',
     });
 
-    // 4. Create post (enforces 'draft' unless explicitly configured)
+    // 4. Resolve featured media (auto-upload if URL provided)
+    let resolvedMediaId = featured_media;
+    const heroImgUrl = body.featured_image_url || body.image_url;
+    if (!resolvedMediaId && heroImgUrl && typeof heroImgUrl === 'string' && heroImgUrl.startsWith('http')) {
+      try {
+        const imgRes = await fetch(heroImgUrl, { signal: AbortSignal.timeout(6000) });
+        if (imgRes.ok) {
+          const buf = await imgRes.arrayBuffer();
+          const uploadRes = await client.uploadMedia({
+            buffer: Buffer.from(buf),
+            filename: `${slug || 'featured'}-hero.webp`,
+            title,
+            altText: title,
+          });
+          if (uploadRes?.id) {
+            resolvedMediaId = uploadRes.id;
+          }
+        }
+      } catch (mediaErr) {
+        console.warn('[WP Draft Route] Media upload fallback error:', mediaErr);
+      }
+    }
+
+    // 5. Create post (enforces 'draft' unless explicitly configured)
     const post = await client.createPost({
       title,
       content,
@@ -56,7 +79,7 @@ export async function POST(request: Request) {
       status: status === 'publish' ? 'publish' : 'draft',
       category_ids,
       tag_ids,
-      featured_media,
+      featured_media: resolvedMediaId,
       seo_title,
       meta_description,
     });

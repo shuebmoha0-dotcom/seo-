@@ -113,9 +113,10 @@ export async function POST(request: Request) {
 
     const jobPayload = { ...(claimedJob.payload || {}) };
 
-    // GUARANTEE FEATURED IMAGES: If job payload has a remote HTTP featured_image_url and no direct featured_media,
-    // convert it to a Base64 Data URI on our high-speed server. This triggers WordPress plugin Case A (local wp_upload_bits)
-    // and eliminates failure on shared hosts (like Hostinger) that block or fail outbound cURL requests in media_sideload_image.
+    // FEATURED IMAGE RESILIENCE: If job payload has a remote HTTP featured_image_url and no direct featured_media,
+    // verify the image is reachable and provide featured_image_data_uri alongside the standard HTTP featured_image_url.
+    // Keeping featured_image_url as a valid HTTP URL ensures older plugin versions pass filter_var(..., FILTER_VALIDATE_URL),
+    // while newer versions can use featured_image_data_uri. Any failure to set thumbnail is automatically self-healed by report/route.ts.
     if (
       jobPayload.featured_image_url &&
       typeof jobPayload.featured_image_url === 'string' &&
@@ -125,9 +126,9 @@ export async function POST(request: Request) {
       try {
         const imgRes = await fetch(jobPayload.featured_image_url, { signal: AbortSignal.timeout(6000) });
         if (imgRes.ok) {
-          const contentType = imgRes.headers.get('content-type') || 'image/webp';
+          const contentType = (imgRes.headers.get('content-type') || 'image/webp').split(';')[0].trim();
           const buffer = await imgRes.arrayBuffer();
-          jobPayload.featured_image_url = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+          jobPayload.featured_image_data_uri = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
         }
       } catch (imgErr) {
         console.warn(`[Outbound Poll] Failed to inline featured image for job ${claimedJob.id}:`, imgErr);

@@ -239,6 +239,41 @@ export async function POST(request: Request) {
 
               const formattedHtmlContent = markdownToWordPressHtml(updatedDraft.content_body);
 
+              // Auto-upload featured image if present
+              let directFeaturedMediaId: number | undefined = undefined;
+              let directHeroUrl = '';
+              if (updatedDraft.revision_notes) {
+                try {
+                  const pNotes = typeof updatedDraft.revision_notes === 'string' ? JSON.parse(updatedDraft.revision_notes) : updatedDraft.revision_notes;
+                  if (pNotes?.featured_image_url) directHeroUrl = pNotes.featured_image_url;
+                } catch (_) {}
+              }
+              if (!directHeroUrl && updatedDraft.content_body) {
+                const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+                if (imgMatch) directHeroUrl = imgMatch[1];
+              }
+
+              if (directHeroUrl) {
+                try {
+                  const imgRes = await fetch(directHeroUrl, { signal: AbortSignal.timeout(6000) });
+                  if (imgRes.ok) {
+                    const buf = await imgRes.arrayBuffer();
+                    const mediaUpload = await client.uploadMedia({
+                      buffer: Buffer.from(buf),
+                      filename: `${updatedDraft.url_slug || 'hero'}-featured.webp`,
+                      title: updatedDraft.working_title,
+                      altText: updatedDraft.working_title,
+                    });
+                    if (mediaUpload?.id) {
+                      directFeaturedMediaId = mediaUpload.id;
+                      console.log(`[Content Approval] Direct REST media upload succeeded: ID ${mediaUpload.id}`);
+                    }
+                  }
+                } catch (mediaErr) {
+                  console.warn('[Content Approval] Direct REST media upload failed:', mediaErr);
+                }
+              }
+
               const post = await client.createPost({
                 title: updatedDraft.working_title,
                 content: formattedHtmlContent,
@@ -246,6 +281,7 @@ export async function POST(request: Request) {
                 status: 'publish',
                 seo_title: cleanMetaString(updatedDraft.seo_title || updatedDraft.working_title),
                 meta_description: cleanMetaString(updatedDraft.meta_description || ''),
+                featured_media: directFeaturedMediaId,
               });
 
               wpPostResult = {
@@ -285,8 +321,18 @@ export async function POST(request: Request) {
             .replace(/^(?:Write|Create|Draft)?\s*(?:an?|one)?\s*(?:SEO\s+)?(?:blog\s+post|article|guide)\s*(?:about|on|for)?\s*/i, '')
             .trim();
 
-          // Extract featured image from draft or first image in markdown
-          let featuredImageUrl = updatedDraft.featured_image_url || '';
+          // Extract featured image from revision notes or first image in markdown content body
+          let featuredImageUrl = '';
+          if (updatedDraft.revision_notes) {
+            try {
+              const parsedNotes = typeof updatedDraft.revision_notes === 'string'
+                ? JSON.parse(updatedDraft.revision_notes)
+                : updatedDraft.revision_notes;
+              if (parsedNotes?.featured_image_url) {
+                featuredImageUrl = parsedNotes.featured_image_url;
+              }
+            } catch (_) {}
+          }
           if (!featuredImageUrl && updatedDraft.content_body) {
             const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
             if (imgMatch) {
