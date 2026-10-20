@@ -24,8 +24,11 @@ export interface IndexVerificationSummary {
   total_posts_checked: number;
   indexed_count: number;
   unindexed_submitted_count: number;
+  blocked_count: number;
   already_indexed_urls: string[];
   submitted_urls: string[];
+  blocked_urls: Array<{ url: string; title: string; reason: string }>;
+  blocker_alert?: string;
   posts: PostIndexingStatus[];
   formatted_markdown: string;
 }
@@ -199,6 +202,8 @@ export class PostIndexVerificationService {
     const posts: PostIndexingStatus[] = [];
     const alreadyIndexedUrls: string[] = [];
     const submittedUrls: string[] = [];
+    const blockedUrls: Array<{ url: string; title: string; reason: string }> = [];
+    let primaryBlocker: string | undefined = undefined;
 
     // 4. Iterate and verify each post
     for (const [url, item] of urlMap.entries()) {
@@ -257,19 +262,35 @@ export class PostIndexVerificationService {
         }
       }
 
-      // B. If NOT confirmed indexed (or forced), automatically submit to Google & IndexNow!
+      // B. If NOT confirmed indexed (or forced), attempt submission to Google & IndexNow!
       let subResult: IndexingResult | undefined = undefined;
       if (!isIndexed || forceResubmitAll) {
-        console.log(`[PostIndexVerificationService] Post "${item.title}" (${url}) is not indexed. Auto-submitting to Google & IndexNow...`);
         try {
           subResult = await GoogleIndexingService.requestIndexing({
             url,
             websiteId,
             type: 'URL_UPDATED',
           });
-          submittedUrls.push(url);
-        } catch (subErr) {
+          if (subResult.google?.submitted || subResult.indexNow?.submitted) {
+            submittedUrls.push(url);
+          } else {
+            const reason = subResult.blocker?.message || subResult.google?.error || 'Indexing API rejected submission';
+            blockedUrls.push({
+              url,
+              title: item.title,
+              reason,
+            });
+            if (subResult.blocker?.actionRequired && !primaryBlocker) {
+              primaryBlocker = subResult.blocker.actionRequired;
+            }
+          }
+        } catch (subErr: any) {
           console.error(`[PostIndexVerificationService] Submission failed for ${url}:`, subErr);
+          blockedUrls.push({
+            url,
+            title: item.title,
+            reason: subErr.message || 'Submission request threw an error',
+          });
         }
       } else {
         alreadyIndexedUrls.push(url);
@@ -292,7 +313,7 @@ export class PostIndexVerificationService {
 
       posts.push(postStatus);
 
-      // C. Update database indexability metadata
+      // C. Update database indexability metadata with verified empirical truth
       try {
         if (item.pageId) {
           await supabase.from('pages').update({
@@ -302,7 +323,8 @@ export class PostIndexVerificationService {
               coverage_state: coverageState,
               last_crawl_time: lastCrawlTime,
               last_indexed_check: new Date().toISOString(),
-              auto_submitted_at: subResult?.success ? new Date().toISOString() : undefined,
+              auto_submitted_at: (subResult?.google?.submitted || subResult?.indexNow?.submitted) ? new Date().toISOString() : undefined,
+              indexing_blocker: subResult?.blocker?.type,
             },
             updated_at: new Date().toISOString(),
           }).eq('id', item.pageId);
@@ -314,7 +336,8 @@ export class PostIndexVerificationService {
             indexing_verdict: verdict,
             coverage_state: coverageState,
             last_indexed_check: new Date().toISOString(),
-            last_submitted_for_indexing: subResult?.success ? new Date().toISOString() : undefined,
+            last_submitted_for_indexing: (subResult?.google?.submitted || subResult?.indexNow?.submitted) ? new Date().toISOString() : undefined,
+            indexing_blocker: subResult?.blocker?.actionRequired,
           };
           await supabase.from('content_drafts').update({
             revision_notes: JSON.stringify(notesObj),
@@ -325,7 +348,7 @@ export class PostIndexVerificationService {
       }
     }
 
-    // 5. Batch IndexNow submission for all unindexed URLs at once
+    // 5. Batch IndexNow submission for all validly unindexed URLs at once
     if (submittedUrls.length > 0) {
       try {
         const host = new URL(siteBaseUrl).host;
@@ -344,22 +367,39 @@ export class PostIndexVerificationService {
       } catch (_) {}
     }
 
-    // 6. Format comprehensive grounded markdown summary
+    // 6. Format comprehensive, honest, and grounded markdown summary (Rule 9)
     let md = `🔍 *Google Indexing Verification Report for \`${domain}\`*\n`;
     md += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     md += `📊 *Total Published Posts Checked:* *${posts.length}*\n`;
     md += `🟢 *Confirmed Indexed on Google:* *${alreadyIndexedUrls.length}*\n`;
-    md += `🚀 *Unindexed / Submitted for Priority Indexing:* *${submittedUrls.length}*\n\n`;
+    md += `🚀 *Successfully Pushed for Priority Indexing:* *${submittedUrls.length}*\n`;
+    md += `⚠️ *Unindexed / Blocked by Permissions:* *${blockedUrls.length}*\n\n`;
 
-    if (submittedUrls.length > 0) {
-      md += `*Newly Dispatched for Indexing (Google Indexing API + IndexNow):*\n`;
-      for (const p of posts.filter(p => !p.is_indexed).slice(0, 8)) {
+    if (primaryBlocker || blockedUrls.length > 0) {
+      md += `🚨 *CRITICAL INDEXING ACTION REQUIRED:*\n`;
+      if (primaryBlocker) {
+        md += `• *Google Search Console Permission Block:* ${primaryBlocker}\n`;
+      }
+      md += `• *Why this matters:* Without GSC Owner permission, Google Indexing API rejects real-time push submissions (HTTP 403) and Google falls back to slow passive crawler cycles.\n\n`;
+    }
+
+    if (blockedUrls.length > 0) {
+      md += `*Unindexed Posts Awaiting Owner Verification:*\n`;
+      for (const p of blockedUrls.slice(0, 8)) {
         md += `• *"${p.title}"*\n`;
         md += `  ↳ URL: \`${p.url}\`\n`;
-        md += `  ↳ Google SERP Status: \`${p.coverage_state}\` → 🚀 *Submitted*\n`;
+        md += `  ↳ Status: ⚠️ \`${p.reason.slice(0, 80)}...\`\n`;
       }
-      if (submittedUrls.length > 8) {
-        md += `  _...and ${submittedUrls.length - 8} more posts submitted._\n`;
+      if (blockedUrls.length > 8) {
+        md += `  _...and ${blockedUrls.length - 8} more unindexed posts._\n`;
+      }
+      md += `\n`;
+    }
+
+    if (submittedUrls.length > 0) {
+      md += `*Dispatched to Search Engine Queues:*\n`;
+      for (const u of submittedUrls.slice(0, 5)) {
+        md += `• 🟢 \`${u}\`\n`;
       }
       md += `\n`;
     }
@@ -369,13 +409,19 @@ export class PostIndexVerificationService {
       for (const p of posts.filter(p => p.is_indexed).slice(0, 5)) {
         md += `• *"${p.title}"* — 🟢 \`${p.coverage_state}\`${p.last_crawl_time ? ` (Crawled: ${p.last_crawl_time.split('T')[0]})` : ''}\n`;
       }
-      if (alreadyIndexedUrls.length > 5) {
-        md += `  _...and ${alreadyIndexedUrls.length - 5} more confirmed live._\n`;
-      }
       md += `\n`;
     }
 
-    md += `_The agent continuously audits every post and immediately triggers multi-engine indexing whenever unindexed content is detected._`;
+    // Save audit summary to project_memory so all agents and dashboard can query it
+    try {
+      await supabase.from('project_memory').insert({
+        website_id: websiteId,
+        category: 'seo_indexing_audit',
+        content: md,
+        source: 'system_indexing_auditor',
+        confidence: 'high',
+      });
+    } catch (_) {}
 
     return {
       website_id: websiteId,
@@ -383,8 +429,11 @@ export class PostIndexVerificationService {
       total_posts_checked: posts.length,
       indexed_count: alreadyIndexedUrls.length,
       unindexed_submitted_count: submittedUrls.length,
+      blocked_count: blockedUrls.length,
       already_indexed_urls: alreadyIndexedUrls,
       submitted_urls: submittedUrls,
+      blocked_urls: blockedUrls,
+      blocker_alert: primaryBlocker,
       posts,
       formatted_markdown: md,
     };

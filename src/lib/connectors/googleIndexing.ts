@@ -16,6 +16,11 @@ import path from 'path';
 export interface IndexingResult {
   success: boolean;
   url: string;
+  blocker?: {
+    type: 'GSC_OWNER_REQUIRED' | 'INDEXNOW_KEY_MISSING' | 'API_DISABLED' | 'AUTH_ERROR';
+    message: string;
+    actionRequired: string;
+  };
   google?: {
     submitted: boolean;
     notifyTime?: string;
@@ -275,7 +280,21 @@ export class GoogleIndexingService {
       urls: pingedUrls,
     };
 
-    result.success = googleSubmitted || indexNowSubmitted || sitemapPinged;
+    result.success = googleSubmitted || indexNowSubmitted;
+
+    if (!googleSubmitted && googleError?.includes('Owner Verification Required')) {
+      result.blocker = {
+        type: 'GSC_OWNER_REQUIRED',
+        message: googleError,
+        actionRequired: `Add service account "${serviceAccountEmail || 'agent'}" as Owner in Google Search Console under Settings -> Users and permissions.`,
+      };
+    } else if (!indexNowSubmitted && indexNowError?.includes('403')) {
+      result.blocker = {
+        type: 'INDEXNOW_KEY_MISSING',
+        message: indexNowError,
+        actionRequired: 'IndexNow key verification file missing from site root.',
+      };
+    }
 
     // Build user-facing Markdown summary
     const parts = [];
@@ -296,6 +315,10 @@ export class GoogleIndexingService {
 
     if (sitemapPinged) {
       parts.push(`🟢 *Sitemap Re-crawl Ping:* Dispatched to Google & Bing crawlers`);
+    }
+
+    if (result.blocker) {
+      parts.push(`\n🚨 *Action Required:* ${result.blocker.actionRequired}`);
     }
 
     result.summary = parts.join('\n');
