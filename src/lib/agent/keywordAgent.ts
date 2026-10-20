@@ -241,6 +241,8 @@ ${availableCategories.length > 0 ? availableCategories.map(c => `     • ${c}`)
    - If the site already has articles on a specific subtopic, avoid that subtopic and focus on under-served categories.
 3. WITHIN-CLUSTER LONG-TAIL VARIETY:
    - Secondary keywords within each cluster must target distinct specific problems, questions, comparisons, and workflows rather than minor phrasing permutations of the primary keyword.
+4. REAL-TIME SEARCH TRENDS & FIRST-MOVER ADVANTAGE:
+   - Dedicate at least 1 cluster to emerging 2026 breakout search trends (e.g. 2026 email spam/authentication shifts, signal-led outbound, LinkedIn prospecting algorithm updates, new AI agent sales workflows, emerging software alternatives) so the client ranks before slow competitors even discover the trend.
 
 Generate 4 to 6 strategic, high-converting TOPICAL CLUSTERS strictly within "${primaryNiche}".
 For each cluster:

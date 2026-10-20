@@ -22,6 +22,7 @@ export interface SiteInventory {
   coveredKeywords: string[];
   categories: Array<{ id?: number; name: string; slug: string; count?: number }>;
   thinCategories: string[];
+  saturatedCategories: string[];
 }
 
 export interface ContentGapOpportunity {
@@ -243,9 +244,18 @@ export class SiteContentGapDetector {
     const coveredTitles = coveredItems.map(i => i.title);
     const coveredKeywords = coveredItems.map(i => i.primary_keyword).filter(Boolean) as string[];
 
-    // Identify thin categories (< 3 published articles)
+    // Calculate category article distribution & detect saturated vs under-served categories
+    const counts = categories.map(c => c.count || 0).sort((a, b) => a - b);
+    const medianCount = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 3;
+
+    // Saturated categories: have significantly more articles than median (e.g. >= 15 posts and >= 2x median)
+    const saturatedCategories = categories
+      .filter(c => (c.count || 0) >= 15 && (c.count || 0) >= medianCount * 2)
+      .map(c => c.name);
+
+    // Thin categories: have fewer than or equal to median articles and not saturated
     const thinCategories = categories
-      .filter(c => (c.count || 0) < 3)
+      .filter(c => (c.count || 0) <= Math.max(medianCount, 6) && !saturatedCategories.includes(c.name))
       .map(c => c.name);
 
     return {
@@ -256,6 +266,7 @@ export class SiteContentGapDetector {
       coveredKeywords,
       categories,
       thinCategories,
+      saturatedCategories,
     };
   }
 
@@ -335,7 +346,8 @@ ${projectInstructions ? `Instructions: ${projectInstructions.slice(0, 200)}` : '
 
 STRICT TOPIC DIVERSITY & EDITORIAL TITLE QUALITY MANDATE:
 1. COMPLETE CATEGORY DIVERSITY: Every single proposed gap MUST belong to a DIFFERENT category or content pillar. NEVER return multiple gaps focused on the same subtopic or category.
-2. ROTATE AWAY FROM SATURATED TOPICS: Look at the ALREADY PUBLISHED ARTICLES. If recent articles heavily cover one concept, all proposed gaps MUST explore the OTHER under-represented or thin categories (${inventory.thinCategories.join(', ') || 'categories with fewer posts'}).
+2. ROTATE EXCLUSIVELY INTO UNDER-REPRESENTED CATEGORIES:
+${inventory.saturatedCategories && inventory.saturatedCategories.length > 0 ? `   • SATURATED CATEGORIES LOCKED FROM NEW WRITING: [${inventory.saturatedCategories.join(', ')}] already have excessive articles. STRICTLY DO NOT propose topics in these saturated categories.\n` : ''}   • UNDER-REPRESENTED CATEGORIES TO PRIORITIZE: Focus 100% on: [${inventory.thinCategories.join(', ') || 'All other under-served pillars'}].
 3. DIVERSIFY SEARCH INTENT: Provide a balanced mix across categories (e.g. one tool review/comparison, one strategic framework, one channel execution guide, one troubleshooting/optimization guide).
 4. ZERO DUPLICATION: Never suggest a topic, angle, or keyword that overlaps with any published article above.
 5. ZERO GENERIC HEAD-TERM TITLES: working_title MUST NEVER be a bare 1-3 word keyword (e.g. NEVER "Lead Generation", "Sales", "Cold Email"). It MUST be a complete, engaging, publication-ready article title (50–65 characters) with a clear practitioner angle, framework, or subtitle (e.g. "B2B Lead Generation Strategies: A Practical Pipeline Playbook for Lean Teams").`,
@@ -441,16 +453,21 @@ STRICT TOPIC DIVERSITY & EDITORIAL TITLE QUALITY MANDATE:
 
       // Category diversity scoring
       if (cat) {
-        const wasRecentlyUsed = recentCategories.includes(cat);
-        if (wasRecentlyUsed) {
-          score -= 30; // Rotate away from recently written category
-        } else {
-          score += 50; // Boost fresh category
+        const isSaturated = (inventory.saturatedCategories || []).some(sc => sc.toLowerCase() === cat || cat.includes(sc.toLowerCase()));
+        if (isSaturated) {
+          score -= 120; // HEAVILY PENALIZE SATURATED CATEGORIES
         }
 
-        const isThin = inventory.thinCategories.some(tc => tc.toLowerCase() === cat);
+        const wasRecentlyUsed = recentCategories.includes(cat);
+        if (wasRecentlyUsed) {
+          score -= 50; // Rotate away from recently written category
+        } else {
+          score += 60; // Boost fresh category
+        }
+
+        const isThin = inventory.thinCategories.some(tc => tc.toLowerCase() === cat || cat.includes(tc.toLowerCase()));
         if (isThin) {
-          score += 40; // Boost thin category
+          score += 80; // HEAVILY BOOST THIN CATEGORY
         }
       }
 
