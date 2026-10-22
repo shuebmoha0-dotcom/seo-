@@ -124,7 +124,8 @@ export async function POST(request: Request) {
         // GUARANTEE FEATURED IMAGE: Check if newly published WordPress post has a valid thumbnail
         const createdPostId = result?.post_id;
         const heroUrl = job.payload?.featured_image_url || job.payload?.image_url;
-        if (createdPostId && heroUrl && typeof heroUrl === 'string' && heroUrl.startsWith('http')) {
+        const dataUri = job.payload?.featured_image_data_uri;
+        if (createdPostId && (heroUrl || dataUri)) {
           try {
             const siteUrl = site.site_url.replace(/\/+$/, '');
             let hasThumbnail = false;
@@ -142,10 +143,20 @@ export async function POST(request: Request) {
 
             if (!hasThumbnail) {
               console.log(`[Outbound Report] Post #${createdPostId} is missing featured media. Auto-healing via upload_media pipeline...`);
-              const imgRes = await fetch(heroUrl, { signal: AbortSignal.timeout(8000) });
-              if (imgRes.ok) {
-                const buffer = await imgRes.arrayBuffer();
-                const base64Data = Buffer.from(buffer).toString('base64');
+              let base64Data = '';
+              if (dataUri && typeof dataUri === 'string' && dataUri.includes(';base64,')) {
+                base64Data = dataUri.split(';base64,')[1];
+              } else if (typeof heroUrl === 'string' && heroUrl.startsWith('data:image/')) {
+                base64Data = heroUrl.split(';base64,')[1];
+              } else if (typeof heroUrl === 'string' && heroUrl.startsWith('http')) {
+                const imgRes = await fetch(heroUrl, { signal: AbortSignal.timeout(8000) });
+                if (imgRes.ok) {
+                  const buffer = await imgRes.arrayBuffer();
+                  base64Data = Buffer.from(buffer).toString('base64');
+                }
+              }
+
+              if (base64Data) {
                 const slug = job.payload?.slug || `post-${createdPostId}`;
                 await supabase.from('wordpress_jobs').insert({
                   site_id: site.id,

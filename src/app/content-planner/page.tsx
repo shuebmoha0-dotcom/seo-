@@ -7,7 +7,7 @@ import {
   CheckCircle2, XCircle, Eye, GitPullRequest, Settings, Plus, History,
   Tag, Target, Layers, ArrowRight, Save, RotateCcw, Info, ListChecks,
   PenLine, Cpu, Globe, Zap, Brain, ExternalLink, ArrowLeft, Copy, CheckCheck,
-  BarChart2, ShieldCheck, Activity, Award, ArrowUpRight, Search
+  BarChart2, ShieldCheck, Activity, Award, ArrowUpRight, Search, Calendar, Trash2, CalendarDays
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useWebsite } from "@/lib/context/WebsiteContext";
@@ -174,6 +174,104 @@ export default function ContentPlannerPage() {
   const [serpScore, setSerpScore] = useState<any | null>(null);
   const [analyzingSerp, setAnalyzingSerp] = useState(false);
   const [showCompetitorList, setShowCompetitorList] = useState(false);
+
+  // Autopilot Content Roadmap Queue state
+  interface QueueItem {
+    id: string;
+    working_title: string;
+    primary_keyword: string;
+    category: string;
+    search_volume: number;
+    difficulty: number;
+    scheduled_date: string;
+    status: string;
+  }
+  const [autopilotQueue, setAutopilotQueue] = useState<QueueItem[]>([]);
+  const [loadingQueue, setLoadingQueue] = useState(false);
+  const [swappingId, setSwappingId] = useState<string | null>(null);
+  const [showAddQueueModal, setShowAddQueueModal] = useState(false);
+  const [newQueueTitle, setNewQueueTitle] = useState("");
+  const [newQueueKeyword, setNewQueueKeyword] = useState("");
+  const [newQueueCategory, setNewQueueCategory] = useState("LinkedIn Outreach");
+
+  const fetchAutopilotQueue = async () => {
+    if (!currentWebsite?.id) return;
+    try {
+      setLoadingQueue(true);
+      const res = await fetch(`/api/agent/autopilot/queue?website_id=${currentWebsite.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.queue) setAutopilotQueue(data.queue);
+      }
+    } catch (err) {
+      console.error("Error fetching autopilot queue:", err);
+    } finally {
+      setLoadingQueue(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentWebsite?.id) {
+      fetchAutopilotQueue();
+    }
+  }, [currentWebsite?.id]);
+
+  const handleSwapQueueTopic = async (id: string) => {
+    setSwappingId(id);
+    try {
+      const res = await fetch("/api/agent/autopilot/queue", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, swap: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.item) {
+          setAutopilotQueue(prev => prev.map(item => item.id === id ? { ...item, ...data.item } : item));
+        }
+      }
+    } catch (e) {
+      console.error("Failed to swap queue topic:", e);
+    } finally {
+      setSwappingId(null);
+    }
+  };
+
+  const handleDeleteQueueTopic = async (id: string) => {
+    try {
+      const res = await fetch(`/api/agent/autopilot/queue?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setAutopilotQueue(prev => prev.filter(item => item.id !== id));
+      }
+    } catch (e) {
+      console.error("Failed to delete queue topic:", e);
+    }
+  };
+
+  const handleAddCustomQueueTopic = async () => {
+    if (!currentWebsite?.id || !newQueueTitle || !newQueueKeyword) return;
+    try {
+      const res = await fetch("/api/agent/autopilot/queue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          working_title: newQueueTitle,
+          primary_keyword: newQueueKeyword,
+          category: newQueueCategory,
+          scheduled_date: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+        }),
+      });
+      if (res.ok) {
+        setShowAddQueueModal(false);
+        setNewQueueTitle("");
+        setNewQueueKeyword("");
+        fetchAutopilotQueue();
+      }
+    } catch (e) {
+      console.error("Failed to add custom queue topic:", e);
+    }
+  };
 
   const handleAnalyzeSerp = async (targetDraft?: ContentDraft) => {
     const draft = targetDraft || selectedDraft;
@@ -1619,8 +1717,173 @@ export default function ContentPlannerPage() {
 
             </div>
           ) : (
-            /* ── DRAFT QUEUE TABLE (ALL ARTICLES INVENTORY VIEW) ── */
-            <div className="bg-white border border-neutral-200/80 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
+            <div className="space-y-6">
+              {/* ── AUTOPILOT UPCOMING 7-DAY CONTENT ROADMAP ── */}
+              <div className="bg-white border border-neutral-200/80 rounded-xl p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)] space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-neutral-100">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      <h3 className="text-sm font-bold text-neutral-900 tracking-tight">Autopilot Content Roadmap (Upcoming Topics)</h3>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        {autopilotQueue.length} Days Planned
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-neutral-500">
+                      Planned articles scheduled for automated drafting &amp; publication. Review, swap, or curate topics before autopilot writes them.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      onClick={fetchAutopilotQueue}
+                      disabled={loadingQueue}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-neutral-700 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 rounded-lg transition-colors"
+                      title="Refresh or replenish upcoming 7-day queue"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingQueue ? "animate-spin" : ""}`} />
+                      <span>{loadingQueue ? "Replenishing…" : "Refresh Roadmap"}</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAddQueueModal(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Topic</span>
+                    </button>
+                  </div>
+                </div>
+
+                {loadingQueue && autopilotQueue.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-neutral-500 flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                    <span>Analyzing site gaps &amp; generating multi-pillar topic roadmap…</span>
+                  </div>
+                ) : autopilotQueue.length === 0 ? (
+                  <div className="py-6 text-center text-xs text-neutral-500">
+                    <p>No upcoming topics in the roadmap.</p>
+                    <button onClick={fetchAutopilotQueue} className="mt-2 text-indigo-600 font-semibold underline">
+                      Generate 7-Day Topic Queue
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {autopilotQueue.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        className="p-3.5 rounded-xl border border-neutral-200/80 bg-neutral-50/40 hover:bg-white hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-2.5 relative group"
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 flex items-center gap-1">
+                              <Calendar className="w-2.5 h-2.5 text-indigo-500" />
+                              <span>Day {idx + 1}</span>
+                            </span>
+                            <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider truncate max-w-[120px]">
+                              {item.category}
+                            </span>
+                          </div>
+                          <div className="font-semibold text-xs text-neutral-900 leading-snug line-clamp-2" title={item.working_title}>
+                            {item.working_title}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-neutral-200/60 text-[11px]">
+                          <div className="flex items-center justify-between text-neutral-500 font-mono text-[10px]">
+                            <span className="truncate max-w-[140px]" title={item.primary_keyword}>{item.primary_keyword}</span>
+                            <span className="text-neutral-400 shrink-0">{item.search_volume}/mo</span>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 text-xs">
+                            <span className="text-[10px] text-neutral-400 font-mono">
+                              {item.scheduled_date}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleSwapQueueTopic(item.id)}
+                                disabled={swappingId === item.id}
+                                className="p-1 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                title="Swap with alternative topic in another pillar"
+                              >
+                                {swappingId === item.id ? <Loader2 className="w-3 h-3 animate-spin text-indigo-600" /> : <RefreshCw className="w-3 h-3" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteQueueTopic(item.id)}
+                                className="p-1 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Remove from roadmap"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ── ADD CUSTOM TOPIC MODAL ── */}
+              {showAddQueueModal && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl border border-neutral-200">
+                    <div className="flex items-center justify-between pb-3 border-b border-neutral-100">
+                      <h4 className="font-bold text-sm text-neutral-900">Add Topic to Upcoming Autopilot Queue</h4>
+                      <button onClick={() => setShowAddQueueModal(false)} className="text-neutral-400 hover:text-neutral-700">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <label className="block font-semibold text-neutral-700 mb-1">Article Title</label>
+                        <input
+                          type="text"
+                          value={newQueueTitle}
+                          onChange={e => setNewQueueTitle(e.target.value)}
+                          placeholder="e.g. LinkedIn Outreach Automation: A Modern Guide"
+                          className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-neutral-700 mb-1">Target Keyword</label>
+                        <input
+                          type="text"
+                          value={newQueueKeyword}
+                          onChange={e => setNewQueueKeyword(e.target.value)}
+                          placeholder="e.g. LinkedIn outreach automation"
+                          className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-neutral-700 mb-1">Pillar / Category</label>
+                        <input
+                          type="text"
+                          value={newQueueCategory}
+                          onChange={e => setNewQueueCategory(e.target.value)}
+                          placeholder="e.g. LinkedIn Outreach"
+                          className="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-neutral-900"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-3 border-t border-neutral-100">
+                      <button
+                        onClick={() => setShowAddQueueModal(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 rounded-lg"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddCustomQueueTopic}
+                        disabled={!newQueueTitle || !newQueueKeyword}
+                        className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-lg shadow-xs"
+                      >
+                        Add to Roadmap
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── DRAFT QUEUE TABLE (ALL ARTICLES INVENTORY VIEW) ── */}
+              <div className="bg-white border border-neutral-200/80 rounded-xl shadow-[0_1px_2px_rgba(0,0,0,0.03)] overflow-hidden">
               <div className="p-5 border-b border-neutral-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -1793,7 +2056,8 @@ export default function ContentPlannerPage() {
                 </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
         </div>
       </main>

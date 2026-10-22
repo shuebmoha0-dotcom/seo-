@@ -277,6 +277,7 @@ export async function createWordPressJob(params: {
     }
 
     // Pre-encode remote HTTP featured image as base64 Data URI to eliminate remote cURL failures on WordPress hosts
+    // Store in featured_image_data_uri while keeping featured_image_url as a valid HTTP URL
     if (
       payload.featured_image_url &&
       typeof payload.featured_image_url === 'string' &&
@@ -288,7 +289,7 @@ export async function createWordPressJob(params: {
         if (imgRes.ok) {
           const contentType = imgRes.headers.get('content-type') || 'image/webp';
           const buffer = await imgRes.arrayBuffer();
-          payload.featured_image_url = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+          payload.featured_image_data_uri = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
         }
       } catch (imgErr) {
         // Non-blocking: poll endpoint will retry conversion at worker claim time

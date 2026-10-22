@@ -634,7 +634,31 @@ export class FullAutopilotEngine {
         }
       }
 
-      console.log(`[FullAutopilotEngine] Found ${candidateGaps.length} verified non-duplicate candidate topic(s) to process.`);
+      // ── STEP 2.5: PRIORITIZE SCHEDULED ROADMAP QUEUE (NO BLIND POSTING) ──
+      // If the user has planned/scheduled topics in the Content Roadmap queue (status: 'brief_pending'),
+      // execute that exact queued topic instead of picking randomly from internal gaps!
+      const { data: queuedItem } = await supabase
+        .from('content_drafts')
+        .select('id, working_title, primary_keyword, search_intent, content_type')
+        .eq('website_id', websiteId)
+        .eq('status', 'brief_pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (queuedItem) {
+        console.log(`[FullAutopilotEngine] Found planned roadmap topic in queue: "${queuedItem.working_title}" (${queuedItem.primary_keyword}). Prioritizing for publication!`);
+        candidateGaps.unshift({
+          keyword: queuedItem.primary_keyword,
+          working_title: queuedItem.working_title,
+          target_category: 'Scheduled Roadmap',
+          estimated_volume: 1200,
+          estimated_kd: 25,
+          draft_id: queuedItem.id,
+        });
+      }
+
+      console.log(`[FullAutopilotEngine] Found ${candidateGaps.length} verified candidate topic(s) to process.`);
 
       // ── STEP 3: AUTONOMOUS WRITING VIA CLAUDE SONNET 5 (WITH DUPLICATE ADVANCEMENT LOOP) ──
       const candidateInternalLinks = inventory.coveredItems
@@ -681,27 +705,38 @@ export class FullAutopilotEngine {
           continue;
         }
 
-        // Pre-insert draft ticket so user sees it in Content Planner
-        const { data: preDraft } = await supabase
-          .from('content_drafts')
-          .insert({
-            website_id: websiteId,
-            working_title: candidate.working_title,
-            primary_keyword: candidate.keyword,
-            search_intent: 'informational',
-            content_type: 'article',
-            target_audience: 'B2B audience',
-            current_version: 1,
-            status: 'writing',
-            url_slug: (candidate.keyword.split(/\s+/).length >= 3
-              ? candidate.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-              : DuplicateArticleChecker.toSlug(candidate.working_title).slice(0, 50).replace(/-+$/, '')),
-            created_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
+        // Use existing queued draft ID or pre-insert draft ticket so user sees it in Content Planner
+        let currentDraftId = candidate.draft_id;
+        if (currentDraftId) {
+          await supabase
+            .from('content_drafts')
+            .update({
+              status: 'writing',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', currentDraftId);
+        } else {
+          const { data: preDraft } = await supabase
+            .from('content_drafts')
+            .insert({
+              website_id: websiteId,
+              working_title: candidate.working_title,
+              primary_keyword: candidate.keyword,
+              search_intent: 'informational',
+              content_type: 'article',
+              target_audience: 'B2B audience',
+              current_version: 1,
+              status: 'writing',
+              url_slug: (candidate.keyword.split(/\s+/).length >= 3
+                ? candidate.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+                : DuplicateArticleChecker.toSlug(candidate.working_title).slice(0, 50).replace(/-+$/, '')),
+              created_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
 
-        const currentDraftId = preDraft?.id;
+          currentDraftId = preDraft?.id;
+        }
 
         try {
           articleOutput = await contentAgent.runFullPipeline({
@@ -813,6 +848,25 @@ export class FullAutopilotEngine {
         isPublishedLive = true;
       }
 
+      // MANDATORY AUTO-INDEXING CONTRACT (Rule 12):
+      // Immediately dispatch instant Google Indexing API submission & search crawler pings
+      let indexingSummary = '';
+      if (isPublishedLive && livePostUrl) {
+        try {
+          const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+          console.log(`[FullAutopilotEngine] Immediately dispatching Google Indexing API for live URL: ${livePostUrl}...`);
+          const indexRes = await GoogleIndexingService.requestIndexing({
+            url: livePostUrl,
+            websiteId,
+            type: 'URL_UPDATED',
+          });
+          indexingSummary = indexRes.summary;
+          console.log(`[FullAutopilotEngine] Live indexing dispatched for ${livePostUrl}:`, indexRes.summary);
+        } catch (idxErr: any) {
+          console.warn(`[FullAutopilotEngine] Post-publish auto-indexing notice for ${livePostUrl}:`, idxErr.message || idxErr);
+        }
+      }
+
       // Update draft in database
       const finalDraftStatus = isPublishedLive ? 'published' : 'ready_for_approval';
       if (draftId) {
@@ -833,6 +887,8 @@ export class FullAutopilotEngine {
               featured_image_alt: articleOutput.featured_image_alt,
               wordpress_post_url: livePostUrl,
               autopilot_cycle_id: cycleId,
+              indexed_at: indexingSummary ? new Date().toISOString() : undefined,
+              indexing_status: indexingSummary || undefined,
             }),
             updated_at: new Date().toISOString(),
           })
