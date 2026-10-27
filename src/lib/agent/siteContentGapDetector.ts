@@ -245,18 +245,117 @@ export class SiteContentGapDetector {
     const coveredKeywords = coveredItems.map(i => i.primary_keyword).filter(Boolean) as string[];
 
     // Calculate category article distribution & detect saturated vs under-served categories
-    const counts = categories.map(c => c.count || 0).sort((a, b) => a - b);
-    const medianCount = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 3;
+    let finalCategories = [...categories];
+    let saturatedCategories: string[] = [];
+    let thinCategories: string[] = [];
 
-    // Saturated categories: have significantly more articles than median (e.g. >= 15 posts and >= 2x median)
-    const saturatedCategories = categories
-      .filter(c => (c.count || 0) >= 15 && (c.count || 0) >= medianCount * 2)
-      .map(c => c.name);
+    if (finalCategories.length === 0 && coveredTitles.length > 0) {
+      // DEDUCE TOPIC PILLARS FROM ARTICLE TITLES TO PREVENT TUNNEL-VISION OVER-SATURATION
+      const topicBuckets: Record<string, number> = {
+        'Cold Email & Deliverability': 0,
+        'LinkedIn Outreach': 0,
+        'Lead Research & Prospecting': 0,
+        'Sales Automation & CRM': 0,
+        'General B2B Sales & Growth': 0,
+      };
 
-    // Thin categories: have fewer than or equal to median articles and not saturated
-    const thinCategories = categories
-      .filter(c => (c.count || 0) <= Math.max(medianCount, 6) && !saturatedCategories.includes(c.name))
-      .map(c => c.name);
+      for (const t of coveredTitles) {
+        const lower = t.toLowerCase();
+        if (
+          lower.includes('email') ||
+          lower.includes('inbox') ||
+          lower.includes('spam') ||
+          lower.includes('warm') ||
+          lower.includes('bounce') ||
+          lower.includes('dkim') ||
+          lower.includes('spf') ||
+          lower.includes('postmaster')
+        ) {
+          topicBuckets['Cold Email & Deliverability']++;
+        } else if (lower.includes('linkedin') || lower.includes('inmail') || lower.includes('social selling')) {
+          topicBuckets['LinkedIn Outreach']++;
+        } else if (
+          lower.includes('lead') ||
+          lower.includes('prospect') ||
+          lower.includes('list') ||
+          lower.includes('research') ||
+          lower.includes('scraping') ||
+          lower.includes('icp')
+        ) {
+          topicBuckets['Lead Research & Prospecting']++;
+        } else if (
+          lower.includes('crm') ||
+          lower.includes('automation') ||
+          lower.includes('pipeline') ||
+          lower.includes('cadence')
+        ) {
+          topicBuckets['Sales Automation & CRM']++;
+        } else {
+          topicBuckets['General B2B Sales & Growth']++;
+        }
+      }
+
+      finalCategories = Object.entries(topicBuckets).map(([name, count]) => ({
+        id: 0,
+        name,
+        slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        count,
+      }));
+
+      // A category is saturated if it holds >= 12 articles or >= 35% of all titles
+      saturatedCategories = finalCategories
+        .filter(c => (c.count || 0) >= 12 || (coveredTitles.length >= 10 && (c.count || 0) / coveredTitles.length >= 0.35))
+        .map(c => c.name);
+
+      thinCategories = finalCategories
+        .filter(c => !saturatedCategories.includes(c.name))
+        .map(c => c.name);
+    } else {
+      const counts = finalCategories.map(c => c.count || 0).sort((a, b) => a - b);
+      const medianCount = counts.length > 0 ? counts[Math.floor(counts.length / 2)] : 3;
+
+      // Saturated categories: have significantly more articles than median (e.g. >= 15 posts and >= 2x median)
+      saturatedCategories = finalCategories
+        .filter(c => (c.count || 0) >= 15 && (c.count || 0) >= medianCount * 2)
+        .map(c => c.name);
+
+      // Theme-level saturation check: If any broad stem (e.g. 'email') accounts for >= 40% of all articles,
+      // lock all sub-categories belonging to that stem to prevent repetitive tunnel vision
+      const stemCounts: Record<string, number> = {};
+      for (const cat of finalCategories) {
+        const catNameLower = cat.name.toLowerCase();
+        for (const stem of ['email', 'seo', 'crypto', 'real estate', 'wordpress']) {
+          if (catNameLower.includes(stem)) {
+            stemCounts[stem] = (stemCounts[stem] || 0) + (cat.count || 0);
+          }
+        }
+      }
+
+      for (const [stem, totalCount] of Object.entries(stemCounts)) {
+        if (totalCount >= 15 && totalCount / Math.max(1, coveredTitles.length) >= 0.4) {
+          for (const cat of finalCategories) {
+            if (cat.name.toLowerCase().includes(stem) && !saturatedCategories.includes(cat.name)) {
+              saturatedCategories.push(cat.name);
+            }
+          }
+        }
+      }
+
+      // Ensure thin categories are truly non-saturated
+      thinCategories = finalCategories
+        .filter(c => !saturatedCategories.includes(c.name))
+        .map(c => c.name);
+
+      // If key complementary B2B sales pillars are missing entirely, inject them as top-priority thin pillars
+      const domainLower = domain.toLowerCase();
+      if (domainLower.includes('sales') || domainLower.includes('outreach') || domainLower.includes('biz') || domainLower.includes('genius') || domainLower.includes('lead')) {
+        for (const missingPillar of ['LinkedIn Outreach', 'Lead Research & Prospecting', 'Sales Automation & CRM']) {
+          if (!saturatedCategories.includes(missingPillar) && !thinCategories.includes(missingPillar)) {
+            thinCategories.unshift(missingPillar);
+          }
+        }
+      }
+    }
 
     return {
       domain,
@@ -264,7 +363,7 @@ export class SiteContentGapDetector {
       coveredItems,
       coveredTitles,
       coveredKeywords,
-      categories,
+      categories: finalCategories,
       thinCategories,
       saturatedCategories,
     };
@@ -283,6 +382,25 @@ export class SiteContentGapDetector {
     limit?: number;
   }): Promise<ContentGapOpportunity[]> {
     const { inventory, websiteId, projectMemory, projectInstructions, limit = 5 } = params;
+
+    let activeMemory = projectMemory || '';
+    if (!activeMemory && websiteId) {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin');
+        const supabase = createAdminClient();
+        const { data: mems } = await supabase
+          .from('project_memory')
+          .select('key, content, value')
+          .eq('website_id', websiteId)
+          .limit(10);
+        if (mems && mems.length > 0) {
+          activeMemory = mems
+            .map(m => m.content || (typeof m.value === 'string' ? m.value : JSON.stringify(m.value)))
+            .filter(Boolean)
+            .join('\n');
+        }
+      } catch (_) {}
+    }
 
     let profile = params.siteProfile;
     if (!profile) {
@@ -308,7 +426,7 @@ export class SiteContentGapDetector {
     try {
       const { object } = await LLMProvider.generateObject({
         agent: 'KeywordAgent',
-        complexity: 'simple',
+        complexity: 'complex',
         schema: z.object({
           gaps: z.array(z.object({
             keyword: z.string(),
@@ -341,7 +459,7 @@ ${categoryList || '• General Industry Topics'}
 ALREADY PUBLISHED ARTICLES (DO NOT DUPLICATE OR CANNIBALIZE):
 ${coveredTitlesSample.length > 0 ? coveredTitlesSample.map(t => `- "${t}"`).join('\n') : '• No published articles detected yet.'}
 
-${projectMemory ? `CLIENT BRAND MEMORY:\n${projectMemory.slice(0, 400)}\n` : ''}
+${activeMemory ? `CLIENT BRAND MEMORY & STRATEGY RULES:\n${activeMemory.slice(0, 1000)}\n` : ''}
 ${projectInstructions ? `Instructions: ${projectInstructions.slice(0, 200)}` : ''}
 
 STRICT TOPIC DIVERSITY & EDITORIAL TITLE QUALITY MANDATE:

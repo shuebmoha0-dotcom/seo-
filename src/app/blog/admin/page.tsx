@@ -24,6 +24,10 @@ import {
   X,
   BookOpen,
   Image as ImageIcon,
+  Zap,
+  Copy,
+  Check,
+  ShieldCheck,
 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/blog/MarkdownRenderer";
 
@@ -46,6 +50,8 @@ interface AdminPost {
   featured?: boolean;
   published_at?: string;
   created_at?: string;
+  indexing_status?: string;
+  last_submitted_for_indexing?: string;
 }
 
 const CATEGORIES = ["AI Agents", "Content Strategy", "Technical SEO", "Growth", "Case Studies"];
@@ -82,6 +88,81 @@ export default function PlatformBlogAdminPage() {
   const [formFeatured, setFormFeatured] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editorTab, setEditorTab] = useState<"write" | "preview">("write");
+
+  // Google Indexing state
+  const [isIndexingAll, setIsIndexingAll] = useState(false);
+  const [indexingSlug, setIndexingSlug] = useState<string | null>(null);
+  const [indexingFeedback, setIndexingFeedback] = useState<{ type: "success" | "warning" | "error"; text: string } | null>(null);
+  const [copiedSa, setCopiedSa] = useState(false);
+  const platformSaEmail = "agent-398@gen-lang-client-0938255671.iam.gserviceaccount.com";
+
+  const handleCopySa = () => {
+    navigator.clipboard.writeText(platformSaEmail);
+    setCopiedSa(true);
+    setTimeout(() => setCopiedSa(false), 2500);
+  };
+
+  const handleIndexAll = async () => {
+    try {
+      setIsIndexingAll(true);
+      setIndexingFeedback(null);
+      const res = await fetch("/api/platform/blog/indexing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to trigger indexing");
+
+      if (data.gsc_owner_required) {
+        setIndexingFeedback({
+          type: "warning",
+          text: `IndexNow submitted (${data.indexnow_success_count}/${data.total_requested}). Google Indexing requires adding the Service Account as Owner in Google Search Console for outdart.com.`,
+        });
+      } else {
+        setIndexingFeedback({
+          type: "success",
+          text: `Successfully dispatched Googlebot & IndexNow crawlers to all ${data.total_requested} published articles.`,
+        });
+      }
+      await fetchPosts();
+    } catch (err: any) {
+      setIndexingFeedback({ type: "error", text: `Indexing failed: ${err.message}` });
+    } finally {
+      setIsIndexingAll(false);
+    }
+  };
+
+  const handleIndexSingle = async (slug: string) => {
+    try {
+      setIndexingSlug(slug);
+      setIndexingFeedback(null);
+      const res = await fetch("/api/platform/blog/indexing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to trigger indexing");
+
+      if (data.gsc_owner_required) {
+        setIndexingFeedback({
+          type: "warning",
+          text: `IndexNow accepted /blog/${slug}. Google Indexing requires Owner permission for "${platformSaEmail}" in Search Console.`,
+        });
+      } else {
+        setIndexingFeedback({
+          type: "success",
+          text: `Googlebot & IndexNow notified for /blog/${slug}.`,
+        });
+      }
+      await fetchPosts();
+    } catch (err: any) {
+      setIndexingFeedback({ type: "error", text: `Indexing failed: ${err.message}` });
+    } finally {
+      setIndexingSlug(null);
+    }
+  };
 
   // Fetch all platform blog posts (for verified admins)
   const fetchPosts = async () => {
@@ -339,6 +420,20 @@ export default function PlatformBlogAdminPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={handleIndexAll}
+              disabled={isIndexingAll}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-all hover:shadow-emerald-500/20"
+            >
+              {isIndexingAll ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <Zap className="w-4 h-4 text-emerald-200" />
+              )}
+              <span>{isIndexingAll ? "Indexing Google..." : "Submit All to Google Indexing"}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setAiTopic("");
                 setGeneratorError("");
@@ -363,6 +458,75 @@ export default function PlatformBlogAdminPage() {
 
         {/* Content Body */}
         <div className="p-8 space-y-6 max-w-7xl w-full mx-auto">
+          {/* Indexing Feedback Banner */}
+          {indexingFeedback && (
+            <div
+              className={`p-4 rounded-2xl border text-xs flex items-start justify-between gap-3 ${
+                indexingFeedback.type === "success"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : indexingFeedback.type === "warning"
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-red-50 border-red-200 text-red-800"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span className="font-medium leading-relaxed">{indexingFeedback.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIndexingFeedback(null)}
+                className="text-neutral-400 hover:text-neutral-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Google Search Console Service Account Notice */}
+          <div className="bg-gradient-to-r from-indigo-50/70 via-white to-neutral-50 p-4 rounded-2xl border border-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-neutral-900">
+                    Google Indexing API Service Account
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                    Auto-Indexing Active
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500 mt-0.5">
+                  Must be added as an <strong className="text-neutral-800">Owner</strong> in Google Search Console for <code className="font-mono text-indigo-700">outdart.com</code> to grant instant Googlebot crawl rights.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopySa}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-neutral-200 hover:border-neutral-300 rounded-xl text-xs font-mono text-neutral-700 hover:bg-neutral-50 transition-all shadow-2xs"
+                title="Click to copy Service Account email"
+              >
+                {copiedSa ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-neutral-400" />}
+                <span className="text-[11px]">{copiedSa ? "Copied Service Account!" : "Copy GSC Service Account"}</span>
+              </button>
+
+              <a
+                href="https://search.google.com/search-console/users"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-[11px] font-bold transition-all"
+              >
+                <span>Open GSC Users</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          </div>
+
           {/* Metrics Overview */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-5 rounded-2xl border border-neutral-200 shadow-2xs space-y-1">
@@ -472,6 +636,7 @@ export default function PlatformBlogAdminPage() {
                       <th className="py-3 px-4">Category</th>
                       <th className="py-3 px-4">Reading Time</th>
                       <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Google Indexing</th>
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
@@ -527,7 +692,46 @@ export default function PlatformBlogAdminPage() {
                           </button>
                         </td>
 
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          {post.status === "published" ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>Googlebot Pinged</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleIndexSingle(post.slug)}
+                                disabled={indexingSlug === post.slug}
+                                className="p-1 text-neutral-400 hover:text-emerald-600 rounded hover:bg-neutral-100 transition-colors"
+                                title="Re-submit this URL to Google Indexing API & IndexNow"
+                              >
+                                {indexingSlug === post.slug ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                                ) : (
+                                  <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-neutral-400 font-medium">Pending Publish</span>
+                          )}
+                        </td>
+
                         <td className="py-4 px-4 text-right whitespace-nowrap space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleIndexSingle(post.slug)}
+                            disabled={indexingSlug === post.slug || post.status !== "published"}
+                            className="p-1.5 text-emerald-600 hover:text-emerald-700 disabled:opacity-40 rounded-lg hover:bg-emerald-50 inline-flex items-center transition-colors"
+                            title="Submit to Google Indexing"
+                          >
+                            {indexingSlug === post.slug ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                            ) : (
+                              <Zap className="w-4 h-4" />
+                            )}
+                          </button>
                           <Link
                             href={`/blog/${post.slug}`}
                             target="_blank"

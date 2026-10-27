@@ -242,8 +242,7 @@ export class SiteNicheProfiler {
 
     try {
       const { object } = await LLMProvider.generateObject({
-        agent: 'DiagnosticAgent',
-        complexity: 'simple',
+        agent: 'DiagnosticAgent', complexity: 'complex',
         schema: z.object({
           site_type: z.enum(['blog', 'saas', 'ecommerce', 'agency', 'local_service']).describe('Exact classification: "blog" for editorial publishers, content sites, informational blogs, guides; "saas" for software products/apps; "ecommerce" for physical/digital stores; "agency" for marketing/consulting firms; "local_service" for local/regional services.'),
           site_type_rationale: z.string().describe('1 sentence explaining why this classification was chosen from evidence'),

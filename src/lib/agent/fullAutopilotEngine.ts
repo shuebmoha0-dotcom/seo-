@@ -844,8 +844,37 @@ export class FullAutopilotEngine {
           fetch(`${siteApiUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
         ]).catch(() => {});
       } else if (autoPublish && !wpSite) {
-        livePostUrl = `${siteUrl.replace(/\/$/, '')}/${articleSlug}/`;
+        // For Outdart or native platform blog sites, live URL resides under /blog/{slug}
+        const isPlatformBlog = website.domain?.toLowerCase().includes('outdart') || (website as any).platform === 'other';
+        livePostUrl = isPlatformBlog
+          ? `${siteUrl.replace(/\/$/, '')}/blog/${articleSlug}`
+          : `${siteUrl.replace(/\/$/, '')}/${articleSlug}/`;
+
         isPublishedLive = true;
+
+        if (isPlatformBlog) {
+          try {
+            await supabase.from('platform_blog_posts').upsert({
+              slug: articleSlug,
+              title: articleOutput.working_title,
+              excerpt: articleOutput.meta_description || articleOutput.working_title,
+              content: articleOutput.content_body,
+              category: 'AI Agents',
+              author_name: 'Editorial Team',
+              author_role: 'SEO Intelligence & Engineering',
+              reading_time: `${articleOutput.reading_time_minutes || 6} min read`,
+              cover_image: articleOutput.featured_image_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
+              cover_image_alt: articleOutput.working_title,
+              meta_title: articleOutput.seo_title || articleOutput.working_title,
+              meta_description: articleOutput.meta_description || articleOutput.working_title,
+              keywords: [selectedGap.keyword, ...(articleOutput.secondary_keywords || [])],
+              status: 'published',
+              published_at: new Date().toISOString(),
+            });
+          } catch (platErr) {
+            console.warn('[FullAutopilotEngine] Platform blog upsert notice:', platErr);
+          }
+        }
       }
 
       // MANDATORY AUTO-INDEXING CONTRACT (Rule 12):
