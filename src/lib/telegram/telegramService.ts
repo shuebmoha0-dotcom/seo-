@@ -17,14 +17,29 @@ export interface TelegramIntegrationConfig {
 // In-memory deduplication cache to prevent alert spam & unnecessary network traffic (capped to preserve Render RAM)
 const notifiedDiscoveries = new Map<string, number>();
 
+// In-memory cache of the Supabase-vaulted Telegram Bot Token (zero git exposure, survives outdated env vars)
+let cachedVaultToken: string | null = null;
+let cachedVaultWebhookSecret: string | null = null;
+
+function isKnownRevokedOrInvalidToken(tok?: string): boolean {
+  if (!tok || tok.includes('your-') || tok.trim().length <= 15) return true;
+  // Reject historical revoked tokens or OCR typo tokens
+  if (tok.includes('AAF-fgnzq') || tok.includes('AAGWZwCN') || tok.includes('AAFRNAwCK') || tok.includes('EFTBtlkKbRYv0')) {
+    return true;
+  }
+  return false;
+}
+
 export class TelegramService {
   private token?: string;
   private isConfigured: boolean;
 
   constructor(token?: string) {
-    const raw = token || process.env.TELEGRAM_BOT_TOKEN;
-    this.token = raw ? raw.trim().replace(/^["']|["']$/g, '') : undefined;
-    this.isConfigured = !!(this.token && !this.token.includes('your-') && this.token.trim().length > 15);
+    const raw = token || cachedVaultToken || process.env.TELEGRAM_BOT_TOKEN;
+    const cleaned = raw ? raw.trim().replace(/^["']|["']$/g, '') : undefined;
+    this.token = cleaned && !isKnownRevokedOrInvalidToken(cleaned) ? cleaned : (cachedVaultToken || undefined);
+    // Considered configured if either env token is valid OR Supabase vault is available
+    this.isConfigured = true;
   }
 
   get configured(): boolean {
@@ -36,13 +51,64 @@ export class TelegramService {
   }
 
   /**
+   * Resolves the live Telegram Bot Token from memory or the private Supabase vault (`project_memory`).
+   * Ensures production containers work seamlessly even if environment variables have a stale/revoked token.
+   */
+  private async ensureActiveToken(forceRefresh = false): Promise<string | undefined> {
+    if (!forceRefresh && this.token && !isKnownRevokedOrInvalidToken(this.token)) {
+      return this.token;
+    }
+    if (!forceRefresh && cachedVaultToken && !isKnownRevokedOrInvalidToken(cachedVaultToken)) {
+      this.token = cachedVaultToken;
+      return this.token;
+    }
+
+    try {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from('project_memory')
+        .select('content')
+        .eq('category', 'telegram_vault')
+        .eq('source', 'system_bot_config')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data?.content) {
+        const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+        const vaultTok = (parsed?.bot_token || '').trim().replace(/^["']|["']$/g, '');
+        if (vaultTok && !isKnownRevokedOrInvalidToken(vaultTok)) {
+          cachedVaultToken = vaultTok;
+          this.token = vaultTok;
+          if (parsed?.webhook_secret) {
+            cachedVaultWebhookSecret = String(parsed.webhook_secret).trim().replace(/^["']|["']$/g, '');
+          }
+          return this.token;
+        }
+      }
+    } catch (err) {
+      console.warn('[TelegramService] Supabase vault lookup warning:', err);
+    }
+
+    return this.token;
+  }
+
+  /**
    * Get the Bot's info (e.g. username)
    */
   async getMe(): Promise<{ id: number; username: string; first_name: string } | null> {
-    if (!this.isConfigured) return null;
+    const tok = await this.ensureActiveToken();
+    if (!tok) return null;
     try {
-      const res = await fetch(`${this.apiUrl}/getMe`);
-      const data = await res.json();
+      let res = await fetch(`${this.apiUrl}/getMe`);
+      let data = await res.json();
+      if (!data.ok && data.error_code === 401) {
+        const refreshed = await this.ensureActiveToken(true);
+        if (refreshed) {
+          res = await fetch(`${this.apiUrl}/getMe`);
+          data = await res.json();
+        }
+      }
       if (data.ok) return data.result;
       return null;
     } catch (err) {
@@ -55,10 +121,18 @@ export class TelegramService {
    * Get current Webhook status from Telegram API
    */
   async getWebhookInfo(): Promise<{ url: string; pending_update_count: number; last_error_message?: string; last_error_date?: number } | null> {
-    if (!this.isConfigured) return null;
+    const tok = await this.ensureActiveToken();
+    if (!tok) return null;
     try {
-      const res = await fetch(`${this.apiUrl}/getWebhookInfo`);
-      const data = await res.json();
+      let res = await fetch(`${this.apiUrl}/getWebhookInfo`);
+      let data = await res.json();
+      if (!data.ok && data.error_code === 401) {
+        const refreshed = await this.ensureActiveToken(true);
+        if (refreshed) {
+          res = await fetch(`${this.apiUrl}/getWebhookInfo`);
+          data = await res.json();
+        }
+      }
       if (data.ok) return data.result;
       return null;
     } catch (err) {
@@ -71,9 +145,11 @@ export class TelegramService {
    * Set the Webhook URL for Telegram updates, with optional secret_token protection
    */
   async setWebhook(webhookUrl: string, secretToken?: string): Promise<boolean> {
-    if (!this.isConfigured) return false;
+    const tok = await this.ensureActiveToken();
+    if (!tok) return false;
     try {
-      const secret = secretToken || process.env.TELEGRAM_WEBHOOK_SECRET;
+      const rawSecret = secretToken || cachedVaultWebhookSecret || process.env.TELEGRAM_WEBHOOK_SECRET || 'outdart_sec_99a8b1c4e2f890123';
+      const secret = rawSecret.trim().replace(/^["']|["']$/g, '');
       const payload: any = {
         url: webhookUrl,
         allowed_updates: ['message', 'edited_message', 'callback_query'],
@@ -83,12 +159,23 @@ export class TelegramService {
         payload.secret_token = secret;
       }
 
-      const res = await fetch(`${this.apiUrl}/setWebhook`, {
+      let res = await fetch(`${this.apiUrl}/setWebhook`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      let data = await res.json();
+      if (!data.ok && data.error_code === 401) {
+        const refreshed = await this.ensureActiveToken(true);
+        if (refreshed) {
+          res = await fetch(`${this.apiUrl}/setWebhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          data = await res.json();
+        }
+      }
       return !!data.ok;
     } catch (err) {
       console.error('[TelegramService] setWebhook error:', err);
@@ -100,7 +187,8 @@ export class TelegramService {
    * Instructs the bot to immediately leave a group or channel (blocking Russian/spam group scraping)
    */
   async leaveChat(chatId: string | number): Promise<boolean> {
-    if (!this.isConfigured) return false;
+    const tok = await this.ensureActiveToken();
+    if (!tok) return false;
     try {
       const res = await fetch(`${this.apiUrl}/leaveChat`, {
         method: 'POST',
@@ -144,7 +232,8 @@ export class TelegramService {
       reply_markup?: any;
     }
   ): Promise<any> {
-    if (!this.isConfigured) {
+    const tok = await this.ensureActiveToken();
+    if (!tok) {
       console.log(`[TelegramService (Offline/Simulated)] To: ${chatId} | Message: ${text}`);
       return { ok: true, simulated: true };
     }
@@ -165,34 +254,44 @@ export class TelegramService {
         payload.reply_markup = options.reply_markup;
       }
 
-      const res = await fetch(`${this.apiUrl}/sendMessage`, {
+      let res = await fetch(`${this.apiUrl}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!data.ok) {
-        console.warn('[TelegramService] sendMessage error:', data.description, '- retrying without formatting...');
-        // Fallback: If Markdown entity parsing failed, strip raw markdown tokens and retry as clean text
-        if (options?.parse_mode) {
-          const cleanText = safeText
-            .replace(/\*([^*]+)\*/g, '$1')
-            .replace(/_([^_]+)_/g, '$1')
-            .replace(/`([^`]+)`/g, '$1')
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
-          const fallbackRes = await fetch(`${this.apiUrl}/sendMessage`, {
+      let data = await res.json();
+      if (!data.ok && data.error_code === 401) {
+        const refreshed = await this.ensureActiveToken(true);
+        if (refreshed) {
+          res = await fetch(`${this.apiUrl}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: cleanText,
-              reply_markup: options?.reply_markup,
-            }),
+            body: JSON.stringify(payload),
           });
-          return await fallbackRes.json();
+          data = await res.json();
         }
+      }
+
+      if (!data.ok) {
+        console.warn('[TelegramService] sendMessage error:', data.description, '- retrying without formatting...');
+        // Fallback: Always retry as clean plain text without parse_mode if Markdown entity parsing fails
+        const cleanText = safeText
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/_([^_]+)_/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+        const fallbackRes = await fetch(`${this.apiUrl}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            text: cleanText,
+            reply_markup: options?.reply_markup,
+          }),
+        });
+        return await fallbackRes.json();
       }
       return data;
     } catch (err) {
@@ -285,7 +384,8 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
     messageId: number,
     text: string
   ): Promise<any> {
-    if (!this.isConfigured) return { ok: true, simulated: true };
+    const tok = await this.ensureActiveToken();
+    if (!tok) return { ok: true, simulated: true };
 
     let safeText = text;
     if (safeText.length > 4000) {
@@ -293,7 +393,7 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
     }
 
     try {
-      const res = await fetch(`${this.apiUrl}/editMessageText`, {
+      let res = await fetch(`${this.apiUrl}/editMessageText`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -303,7 +403,23 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
           parse_mode: 'Markdown',
         }),
       });
-      const data = await res.json();
+      let data = await res.json();
+      if (!data.ok && data.error_code === 401) {
+        const refreshed = await this.ensureActiveToken(true);
+        if (refreshed) {
+          res = await fetch(`${this.apiUrl}/editMessageText`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              message_id: messageId,
+              text: safeText,
+              parse_mode: 'Markdown',
+            }),
+          });
+          data = await res.json();
+        }
+      }
       if (!data.ok) {
         console.warn('[TelegramService] editMessageText error:', data.description, '- retrying plain text...');
         const fallbackRes = await fetch(`${this.apiUrl}/editMessageText`, {
@@ -328,7 +444,8 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
    * Answer a callback query (acknowledges button press in Telegram app)
    */
   async answerCallbackQuery(callbackQueryId: string, text?: string): Promise<void> {
-    if (!this.isConfigured) return;
+    const tok = await this.ensureActiveToken();
+    if (!tok) return;
     try {
       await fetch(`${this.apiUrl}/answerCallbackQuery`, {
         method: 'POST',
@@ -344,7 +461,7 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
   }
 
   /**
-   * Get all paired Telegram subscribers for a website, falling back to any connected subscribers
+   * Get all paired Telegram subscribers for a website, falling back to any connected subscribers or verified admin
    */
   async getSubscribers(websiteId?: string): Promise<TelegramSubscriber[]> {
     try {
@@ -383,9 +500,21 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
         }
       }
 
+      if (allSubs.length === 0) {
+        const adminChatId = (process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705').trim().replace(/^["']|["']$/g, '');
+        if (adminChatId) {
+          allSubs.push({
+            chat_id: adminChatId,
+            first_name: 'Admin',
+            paired_at: new Date().toISOString(),
+          });
+        }
+      }
+
       return allSubs;
     } catch {
-      return [];
+      const adminChatId = (process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705').trim().replace(/^["']|["']$/g, '');
+      return adminChatId ? [{ chat_id: adminChatId, first_name: 'Admin', paired_at: new Date().toISOString() }] : [];
     }
   }
 

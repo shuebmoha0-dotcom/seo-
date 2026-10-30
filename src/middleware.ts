@@ -32,6 +32,7 @@ const PUBLIC_PAGE_PREFIXES = [
 const PUBLIC_API_PREFIXES = [
   '/api/auth/',
   '/api/telegram/webhook',
+  '/api/telegram/health',
   '/api/cron/trigger',
   '/api/webhooks/',
   '/api/integrations/wordpress/plugin',
@@ -55,6 +56,14 @@ function isPublicApi(pathname: string, method: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  const method = request.method;
+
+  // Fast-path public webhook/connector APIs so external callers (Telegram, WordPress, Cron) never wait on cookie auth
+  if (pathname.startsWith('/api/') && isPublicApi(pathname, method) && !pathname.startsWith('/api/platform/blog')) {
+    return NextResponse.next();
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -91,10 +100,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const method = request.method;
-
-  // 1. API Route Protection Gate
   // 1. API Route Protection Gate
   if (pathname.startsWith('/api/')) {
     if (!isPublicApi(pathname, method) && !user) {
