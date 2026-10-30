@@ -246,7 +246,7 @@ export class SiteNicheProfiler {
         schema: z.object({
           site_type: z.enum(['blog', 'saas', 'ecommerce', 'agency', 'local_service']).describe('Exact classification: "blog" for editorial publishers, content sites, informational blogs, guides; "saas" for software products/apps; "ecommerce" for physical/digital stores; "agency" for marketing/consulting firms; "local_service" for local/regional services.'),
           site_type_rationale: z.string().describe('1 sentence explaining why this classification was chosen from evidence'),
-          primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "B2B Cold Email Outreach & Sales Automation", "Dental Implants Clinic", "AI Video Editing SaaS")'),
+          primary_niche: z.string().describe('Exact, highly specific industry and niche of this website (e.g. "Dental Implants Clinic", "AI Video Editing SaaS", "Cybersecurity Compliance Platform")'),
           core_offerings: z.array(z.string()).describe('3-5 core products, services, or solutions this website provides'),
           target_audience: z.string().describe('Specific buyer persona or reader audience who uses this website'),
           content_pillars: z.array(z.string()).describe('4-7 foundational content pillars representing the full breadth of the site. If verified categories exist, map them to these categories to ensure diverse coverage across all topics.'),
@@ -325,7 +325,13 @@ STRICT GROUNDING & MULTI-TENANT DIVERSITY MANDATE:
     // 7. Cache in project_memory for fast subsequent retrieval
     if (websiteId) {
       try {
-        await supabase.from('project_memory').upsert({
+        await supabase
+          .from('project_memory')
+          .delete()
+          .eq('website_id', websiteId)
+          .eq('source', 'site_niche_profiler');
+
+        await supabase.from('project_memory').insert({
           website_id: websiteId,
           source: 'site_niche_profiler',
           category: 'site_niche_profile',

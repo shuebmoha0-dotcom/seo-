@@ -17,13 +17,18 @@ export interface DuplicateCheckResult {
 
 export class DuplicateArticleChecker {
   /**
-   * Stop words to ignore during title & keyword similarity comparisons
+   * Stop words & generic editorial framing words to ignore during title & keyword similarity comparisons
+   * so similarity is measured strictly on core subject nouns and concepts.
    */
   private static STOP_WORDS = new Set([
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
     'how', 'in', 'is', 'it', 'of', 'on', 'or', 'that', 'the', 'this',
     'to', 'was', 'what', 'when', 'where', 'which', 'who', 'will', 'with',
-    'the', 'your', 'you', 'our', 'we', 'more', 'get', 'best', 'top'
+    'your', 'you', 'our', 'we', 'more', 'get', 'best', 'top', 'why',
+    'guide', 'practical', 'playbook', 'strategy', 'strategies', 'complete',
+    'checklist', 'teams', 'team', 'lean', 'b2b', 'saas', 'small', 'business',
+    'build', 'choose', 'right', 'setup', 'compare', 'picks', 'hours', 'save',
+    'turn', 'into', 'step', 'steps', 'plan', 'system', 'repeatable', 'better'
   ]);
 
   /**
@@ -110,8 +115,12 @@ export class DuplicateArticleChecker {
     const subsetA = intersection / stemmedA.size;
     const subsetB = intersection / stemmedB.size;
 
-    // 1. High overlap criteria: >= 75% Jaccard or virtually all core words match (>= 85% bidirectional)
-    if (jaccard >= 0.75 || (subsetA >= 0.85 && subsetB >= 0.85)) {
+    // 1. High overlap criteria on core subject stems: >= 55% Jaccard, >= 75% bidirectional subset, or >= 75% subset when sharing >= 2 core subject words
+    if (
+      jaccard >= 0.55 ||
+      (subsetA >= 0.75 && subsetB >= 0.75) ||
+      (stemmedA.size >= 2 && stemmedB.size >= 2 && intersection >= 2 && Math.max(subsetA, subsetB) >= 0.75)
+    ) {
       return {
         isDuplicate: true,
         reason: `High topical overlap (${Math.round(Math.max(jaccard, subsetA, subsetB) * 100)}%) with "${existing}"`,
@@ -119,12 +128,11 @@ export class DuplicateArticleChecker {
       };
     }
 
-    // 2. Direct phrase containment ONLY if the contained phrase is comprehensive (>= 4 core words AND >= 85% containment)
-    // NEVER trigger on 1-3 word generic phrases (like "cold email" or "seo")
-    if (normA.length >= 25 && normB.length >= 25 && (normA.includes(normB) || normB.includes(normA))) {
+    // 2. Direct phrase containment ONLY if the contained phrase is comprehensive (>= 3 core words AND >= 80% containment)
+    if (normA.length >= 20 && normB.length >= 20 && (normA.includes(normB) || normB.includes(normA))) {
       const minCoreWords = Math.min(stemmedA.size, stemmedB.size);
       const maxSubset = Math.max(subsetA, subsetB);
-      if (minCoreWords >= 4 && maxSubset >= 0.85) {
+      if (minCoreWords >= 3 && maxSubset >= 0.80) {
         return {
           isDuplicate: true,
           reason: `Direct phrase containment with "${existing}"`,
@@ -170,7 +178,7 @@ export class DuplicateArticleChecker {
       fallbackTitle: string
     ) => {
       if (!matchResult.isDuplicate) return { isDuplicate: false, overlap: matchResult.overlap };
-      
+
       const resolvedUrl = resolveUrl(matchedItem);
       const draftId = matchedItem?.id;
 
@@ -250,15 +258,14 @@ export class DuplicateArticleChecker {
   }): Promise<DuplicateCheckResult> {
     const supabase = createAdminClient();
     const targetKw = this.normalize(params.primary_keyword);
-    const targetTitle = this.normalize(params.working_title);
     const targetSlug = this.toSlug(params.url_slug || params.primary_keyword || params.working_title);
-    const targetWords = this.extractCoreWords(`${params.working_title || ''} ${params.primary_keyword || ''}`);
 
     // 1. Query existing content_drafts (ONLY completed/published or ready drafts — NEVER writing or failed drafts!)
     let draftsQuery = supabase
       .from('content_drafts')
-      .select('id, working_title, primary_keyword, url_slug, status, website_id, revision_notes')
-      .in('status', ['published', 'ready_for_approval', 'approved']);
+      .select('id, working_title, primary_keyword, url_slug, status, website_id, revision_notes, created_at')
+      .in('status', ['published', 'ready_for_approval', 'approved'])
+      .order('created_at', { ascending: false });
 
     if (params.exclude_draft_id) {
       draftsQuery = draftsQuery.neq('id', params.exclude_draft_id);
@@ -268,7 +275,7 @@ export class DuplicateArticleChecker {
       draftsQuery = draftsQuery.eq('website_id', params.website_id);
     }
 
-    const { data: drafts } = await draftsQuery;
+    const { data: drafts } = await draftsQuery.limit(100);
 
     if (drafts && drafts.length > 0) {
       for (const d of drafts) {
@@ -286,7 +293,6 @@ export class DuplicateArticleChecker {
         }
 
         const dKw = this.normalize(d.primary_keyword);
-        const dTitle = this.normalize(d.working_title);
         const dSlug = this.toSlug(d.url_slug || d.primary_keyword || d.working_title);
 
         // Exact keyword match
@@ -430,7 +436,7 @@ export class DuplicateArticleChecker {
   }
 
   /**
-   * Retrieves a clean list of all currently covered topics on a website
+   * Retrieves a clean list of all currently covered topics on a website (newest first)
    * to inject as negative constraints into Autonomous/Autopilot prompts.
    */
   public static async getCoveredTopics(website_id?: string): Promise<string[]> {
@@ -439,9 +445,15 @@ export class DuplicateArticleChecker {
     const supabase = createAdminClient();
     const topics = new Set<string>();
 
-    // 1. From content_drafts
-    const query = supabase.from('content_drafts').select('working_title, primary_keyword').eq('website_id', website_id);
-    const { data: drafts } = await query;
+    // 1. From content_drafts (newest first)
+    const { data: drafts } = await supabase
+      .from('content_drafts')
+      .select('working_title, primary_keyword')
+      .eq('website_id', website_id)
+      .in('status', ['published', 'ready_for_approval', 'approved'])
+      .order('created_at', { ascending: false })
+      .limit(60);
+
     (drafts || []).forEach(d => {
       if (d.working_title) topics.add(d.working_title.trim());
       if (d.primary_keyword) topics.add(d.primary_keyword.trim());
@@ -459,6 +471,6 @@ export class DuplicateArticleChecker {
       });
     }
 
-    return Array.from(topics).filter(Boolean).slice(0, 50);
+    return Array.from(topics).filter(Boolean).slice(0, 60);
   }
 }

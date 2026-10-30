@@ -689,7 +689,7 @@ export class FullAutopilotEngine {
       ];
 
       // Pre-filter candidate gaps against live DuplicateArticleChecker
-      const candidateGaps: any[] = [];
+      const filteredGaps: any[] = [];
       for (const gap of combinedRawGaps) {
         const dupCheck = await DuplicateArticleChecker.check({
           website_id: websiteId,
@@ -699,11 +699,14 @@ export class FullAutopilotEngine {
         });
 
         if (!dupCheck.isDuplicate) {
-          candidateGaps.push(gap);
+          filteredGaps.push(gap);
         } else {
           console.warn(`[FullAutopilotEngine] Filtered out duplicate gap candidate: "${gap.working_title}" (${dupCheck.reason})`);
         }
       }
+
+      // Rank candidates by topical diversity (penalizes recent stems & saturated categories, boosts thin pillars)
+      const candidateGaps: any[] = SiteContentGapDetector.rankCandidatesByDiversity(filteredGaps, inventory);
 
       // If all gaps were filtered out or list was empty, synthesize distinct candidates from thin categories
       if (candidateGaps.length === 0) {
@@ -712,10 +715,10 @@ export class FullAutopilotEngine {
           : inventory.categories.map(c => c.name).filter(c => c.toLowerCase() !== 'uncategorized');
 
         const fallbackPillars = [
-          'Implementation Playbook',
-          'Comprehensive Architecture & Best Practices',
+          'Step-by-Step Implementation & Benchmarks',
+          'Architecture, Evaluation & Best Practices',
           'Troubleshooting and Optimization Guide',
-          'Strategic Framework for High-Growth Teams'
+          'Strategic Framework & ROI Breakdown'
         ];
 
         for (let i = 0; i < Math.max(3, availableCategories.length); i++) {
@@ -743,9 +746,9 @@ export class FullAutopilotEngine {
         }
       }
 
-      // ── STEP 2.5: PRIORITIZE SCHEDULED ROADMAP QUEUE (NO BLIND POSTING) ──
+      // ── STEP 2.5: PRIORITIZE SCHEDULED ROADMAP QUEUE (WITH DIVERSITY GUARD) ──
       // If the user has planned/scheduled topics in the Content Roadmap queue (status: 'brief_pending'),
-      // execute that exact queued topic instead of picking randomly from internal gaps!
+      // verify it does not duplicate recent posts before executing it.
       const { data: queuedItem } = await supabase
         .from('content_drafts')
         .select('id, working_title, primary_keyword, search_intent, content_type')
@@ -756,18 +759,31 @@ export class FullAutopilotEngine {
         .maybeSingle();
 
       if (queuedItem) {
-        console.log(`[FullAutopilotEngine] Found planned roadmap topic in queue: "${queuedItem.working_title}" (${queuedItem.primary_keyword}). Prioritizing for publication!`);
-        candidateGaps.unshift({
-          keyword: queuedItem.primary_keyword,
+        const queuedDup = await DuplicateArticleChecker.check({
+          website_id: websiteId,
+          primary_keyword: queuedItem.primary_keyword,
           working_title: queuedItem.working_title,
-          target_category: 'Scheduled Roadmap',
-          estimated_volume: 1200,
-          estimated_kd: 25,
-          draft_id: queuedItem.id,
+          exclude_draft_id: queuedItem.id,
+          site_url: siteUrl,
         });
+
+        if (queuedDup.isDuplicate) {
+          console.warn(`[FullAutopilotEngine] Removing repetitive queued item "${queuedItem.working_title}" (${queuedDup.reason}). Rotating to fresh pillar.`);
+          await supabase.from('content_drafts').delete().eq('id', queuedItem.id);
+        } else {
+          console.log(`[FullAutopilotEngine] Found verified roadmap topic in queue: "${queuedItem.working_title}" (${queuedItem.primary_keyword}). Prioritizing for publication!`);
+          candidateGaps.unshift({
+            keyword: queuedItem.primary_keyword,
+            working_title: queuedItem.working_title,
+            target_category: 'Scheduled Roadmap',
+            estimated_volume: 1200,
+            estimated_kd: 25,
+            draft_id: queuedItem.id,
+          });
+        }
       }
 
-      console.log(`[FullAutopilotEngine] Found ${candidateGaps.length} verified candidate topic(s) to process.`);
+      console.log(`[FullAutopilotEngine] Found ${candidateGaps.length} verified, diversity-ranked candidate topic(s) to process.`);
 
       // ── STEP 3: AUTONOMOUS WRITING VIA CLAUDE SONNET 5 (WITH DUPLICATE ADVANCEMENT LOOP) ──
       const candidateInternalLinks = inventory.coveredItems
@@ -1055,24 +1071,54 @@ export class FullAutopilotEngine {
 
       // ── STEP 4.5: AUTONOMOUS MULTI-DAY ROADMAP QUEUE SELF-REPLENISHMENT ───
       // Ensure the user always has a visible forward-looking queue of at least 4 upcoming topics in Content Planner
+      // across DISTINCT categories and pillars with zero topical overlap.
       try {
-        const { count: remainingQueued } = await supabase
+        const { data: existingQueueRows } = await supabase
           .from('content_drafts')
-          .select('id', { count: 'exact', head: true })
+          .select('id, working_title, primary_keyword, revision_notes')
           .eq('website_id', websiteId)
           .eq('status', 'brief_pending');
 
-        const currentQueueSize = remainingQueued ?? 0;
+        const currentQueue = existingQueueRows || [];
+        const currentQueueSize = currentQueue.length;
         if (currentQueueSize < 4) {
           const needed = 4 - currentQueueSize;
-          const unusedGaps = candidateGaps
-            .filter(
-              (g) =>
-                !g.draft_id &&
-                g.keyword.toLowerCase() !== selectedGap.keyword.toLowerCase() &&
-                g.working_title.toLowerCase() !== selectedGap.working_title.toLowerCase()
-            )
-            .slice(0, needed);
+          const usedCategories = new Set<string>();
+          if (selectedGap.target_category) usedCategories.add(selectedGap.target_category.toLowerCase());
+          const usedWordSets: Set<string>[] = [
+            DuplicateArticleChecker.extractCoreWords(`${selectedGap.working_title} ${selectedGap.keyword}`),
+          ];
+
+          for (const q of currentQueue) {
+            usedWordSets.push(DuplicateArticleChecker.extractCoreWords(`${q.working_title} ${q.primary_keyword}`));
+            try {
+              const notes = q.revision_notes ? JSON.parse(q.revision_notes) : {};
+              if (notes.target_category) usedCategories.add(String(notes.target_category).toLowerCase());
+            } catch (_) {}
+          }
+
+          const unusedGaps: any[] = [];
+          for (const g of candidateGaps) {
+            if (unusedGaps.length >= needed) break;
+            if (g.draft_id) continue;
+            if (g.keyword.toLowerCase() === selectedGap.keyword.toLowerCase()) continue;
+            if (g.working_title.toLowerCase() === selectedGap.working_title.toLowerCase()) continue;
+
+            const gWords = DuplicateArticleChecker.extractCoreWords(`${g.working_title} ${g.keyword}`);
+            const overlapsExisting = usedWordSets.some(
+              (ws) => DuplicateArticleChecker.calculateOverlap(gWords, ws) >= 0.35
+            );
+            if (overlapsExisting) continue;
+
+            const gCat = (g.target_category || '').toLowerCase();
+            if (gCat && usedCategories.has(gCat) && candidateGaps.length > needed + 2) {
+              continue; // Rotate across different categories first
+            }
+
+            unusedGaps.push(g);
+            usedWordSets.push(gWords);
+            if (gCat) usedCategories.add(gCat);
+          }
 
           for (const nextGap of unusedGaps) {
             await supabase.from('content_drafts').insert({
@@ -1081,7 +1127,7 @@ export class FullAutopilotEngine {
               primary_keyword: nextGap.keyword,
               search_intent: nextGap.search_intent || 'informational',
               content_type: 'article',
-              target_audience: profile.targetAudience || 'B2B audience',
+              target_audience: profile.targetAudience || 'Target audience',
               current_version: 1,
               status: 'brief_pending',
               url_slug: DuplicateArticleChecker.toSlug(nextGap.working_title).slice(0, 50).replace(/-+$/, ''),
@@ -1096,7 +1142,7 @@ export class FullAutopilotEngine {
           }
           if (unusedGaps.length > 0) {
             console.log(
-              `[FullAutopilotEngine] Autonomously replenished upcoming Content Roadmap queue with ${unusedGaps.length} verified topic(s).`
+              `[FullAutopilotEngine] Autonomously replenished upcoming Content Roadmap queue with ${unusedGaps.length} diverse, non-overlapping topic(s).`
             );
           }
         }
