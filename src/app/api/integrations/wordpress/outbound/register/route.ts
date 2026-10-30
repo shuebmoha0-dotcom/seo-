@@ -71,7 +71,13 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    let user: any = null;
+    try {
+      const { createClient } = await import('@/lib/supabase/server');
+      const supabaseUser = await createClient();
+      const { data } = await supabaseUser.auth.getUser();
+      user = data?.user || null;
+    } catch {}
 
     // 2. Check if outbound site record exists
     let query = supabase.from('wordpress_outbound_sites').select('*').eq('site_url', normalizedUrl);

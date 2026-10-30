@@ -1,25 +1,29 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { MemoryAgent } from '@/lib/agent/memoryAgent';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 
 // GET all memories, project instructions, and knowledge bank
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    let website_id = searchParams.get('website_id');
+    const website_id = searchParams.get('website_id');
     const category = searchParams.get('category');
-    const task_type = searchParams.get('task_type');
     const include_outdated = searchParams.get('include_outdated') === 'true';
-
-    const supabase = createAdminClient();
 
     if (!website_id) {
       return NextResponse.json({ memories: [], instructions: '', knowledge_bank: '' });
     }
 
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
+
+    const supabase = createAdminClient();
+
     let query = supabase
       .from('project_memory')
       .select('*')
+      .neq('category', 'telegram_vault')
+      .neq('source', 'system_bot_config')
       .order('is_important', { ascending: false })
       .order('created_at', { ascending: false });
 
@@ -57,7 +61,11 @@ export async function GET(request: Request) {
 
     // Filter out internal system memory rows from the public list of individual memory items
     const displayMemories = (data || []).filter(
-      (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+      (m: any) =>
+        m.source !== 'project_custom_instructions' &&
+        m.source !== 'project_knowledge_bank' &&
+        m.category !== 'telegram_vault' &&
+        m.source !== 'system_bot_config'
     );
 
     return NextResponse.json({
@@ -80,7 +88,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    let {
+    const {
       website_id,
       type,
       instructions,
@@ -93,14 +101,16 @@ export async function POST(request: Request) {
       confidence,
       is_important,
       tags,
-      triggered_by,
     } = body;
-
-    const supabase = createAdminClient();
 
     if (!website_id) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
+
+    const supabase = createAdminClient();
 
     // 1. Save Human Custom Instructions
     if (type === 'instructions') {
@@ -300,6 +310,9 @@ export async function DELETE(request: Request) {
     if (!website_id) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 

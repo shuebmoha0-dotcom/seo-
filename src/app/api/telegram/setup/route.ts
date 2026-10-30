@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const websiteId = searchParams.get('website_id');
+
+    if (websiteId) {
+      const access = await verifyWebsiteAccess(websiteId);
+      if (!access.authorized && access.errorResponse) return access.errorResponse;
+    }
 
     const telegram = new TelegramService();
     const isConfigured = telegram.configured;
@@ -53,6 +59,9 @@ export async function POST(request: Request) {
     if (!website_id) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const telegram = new TelegramService();
     const supabase = createAdminClient();

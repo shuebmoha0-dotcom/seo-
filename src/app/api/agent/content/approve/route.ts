@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { CustomSaaSClient } from '@/lib/connectors/customSaaSClient';
 import { decryptCredential } from '@/lib/utils/encryption';
@@ -12,6 +13,9 @@ export async function POST(request: Request) {
     if (!action) {
       return NextResponse.json({ error: 'action is required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 
@@ -32,9 +36,17 @@ export async function POST(request: Request) {
     let updatedDraft: any = null;
 
     if (isUUID) {
+      const updatePayload: Record<string, any> = {
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      };
+      if (notes !== undefined && notes !== null && String(notes).trim() !== '') {
+        updatePayload.revision_notes = notes;
+      }
+
       const { data, error } = await supabase
         .from('content_drafts')
-        .update({ status: newStatus, revision_notes: notes || null, updated_at: new Date().toISOString() })
+        .update(updatePayload)
         .eq('id', draft_id)
         .select()
         .maybeSingle();

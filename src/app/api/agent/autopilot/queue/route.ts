@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 import { SiteContentGapDetector } from '@/lib/agent/siteContentGapDetector';
 
 export async function GET(req: Request) {
@@ -10,6 +11,9 @@ export async function GET(req: Request) {
     if (!websiteId) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(websiteId);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 
@@ -154,6 +158,9 @@ export async function POST(req: Request) {
     if (!website_id || !working_title || !primary_keyword) {
       return NextResponse.json({ error: 'website_id, working_title, and primary_keyword are required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
     const slug = primary_keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');

@@ -86,19 +86,18 @@ async function handleCronExecution(request: Request) {
     } else if (dueTasks && dueTasks.length > 0) {
       for (const task of dueTasks) {
         try {
-          // Resolve website from project
+          // Resolve website strictly from task.website_id or task.projects.websites (Rule 10: zero cross-tenant fallback)
           const website = task.projects?.websites?.[0] || null;
-          let websiteId = website?.id;
+          let websiteId = task.website_id || website?.id;
           let domain = website?.domain || '';
 
-          if (!websiteId) {
-            const { data: fallbackSite } = await supabase
+          if (websiteId && !domain) {
+            const { data: siteRow } = await supabase
               .from('websites')
               .select('id, domain')
-              .limit(1)
+              .eq('id', websiteId)
               .maybeSingle();
-            websiteId = fallbackSite?.id;
-            if (fallbackSite?.domain) domain = fallbackSite.domain;
+            if (siteRow?.domain) domain = siteRow.domain;
           }
 
           if (!websiteId) continue;

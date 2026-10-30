@@ -35,6 +35,7 @@ const PUBLIC_API_PREFIXES = [
   '/api/telegram/health',
   '/api/cron/trigger',
   '/api/webhooks/',
+  '/api/billing/paddle/webhook',
   '/api/integrations/wordpress/plugin',
   '/api/integrations/wordpress/outbound/',
   '/api/integrations/gsc/callback',
@@ -108,8 +109,9 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    // Strict Admin API Gate
-    if (pathname.startsWith('/api/admin/') || pathname.startsWith('/api/platform/blog')) {
+    // Strict Admin API Gate (allow public GET /api/platform/blog for blog readers)
+    const isPublicBlogRead = pathname === '/api/platform/blog' && method === 'GET';
+    if (pathname.startsWith('/api/admin/') || (pathname.startsWith('/api/platform/blog') && !isPublicBlogRead)) {
       if (!isPlatformAdmin(user?.email)) {
         return NextResponse.json(
           { error: 'Forbidden: Platform administrator privileges required.' },

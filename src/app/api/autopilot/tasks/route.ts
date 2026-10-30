@@ -6,6 +6,7 @@ import { TaskParser } from '@/lib/agent/taskParser';
 import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
 import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 
 function safeBackground(fn: () => Promise<void>) {
   setImmediate(async () => {
@@ -25,6 +26,9 @@ export async function GET(request: Request) {
     if (!websiteId) {
       return NextResponse.json({ tasks: [], executions: [] });
     }
+
+    const access = await verifyWebsiteAccess(websiteId);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 
@@ -169,6 +173,9 @@ export async function POST(request: Request) {
     if (!website_id || !prompt?.trim()) {
       return NextResponse.json({ error: 'website_id and prompt are required' }, { status: 400 });
     }
+
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 

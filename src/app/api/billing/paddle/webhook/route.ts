@@ -7,28 +7,35 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get('paddle-signature');
 
-    // Optional webhook signature verification
+    // Strict webhook signature verification when PADDLE_WEBHOOK_SECRET_KEY is configured
     const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET_KEY;
-    if (webhookSecret && signature) {
+    if (webhookSecret) {
+      if (!signature) {
+        console.warn('[Paddle Webhook] Missing paddle-signature header');
+        return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+      }
       try {
         const parts = signature.split(';');
         const tsMatch = parts.find(p => p.startsWith('ts='))?.split('=')[1];
         const h1Match = parts.find(p => p.startsWith('h1='))?.split('=')[1];
 
-        if (tsMatch && h1Match) {
-          const signedPayload = `${tsMatch}:${rawBody}`;
-          const expectedSig = crypto
-            .createHmac('sha256', webhookSecret)
-            .update(signedPayload)
-            .digest('hex');
+        if (!tsMatch || !h1Match) {
+          return NextResponse.json({ error: 'Malformed signature header' }, { status: 401 });
+        }
 
-          if (expectedSig !== h1Match) {
-            console.warn('[Paddle Webhook] Invalid signature mismatch');
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-          }
+        const signedPayload = `${tsMatch}:${rawBody}`;
+        const expectedSig = crypto
+          .createHmac('sha256', webhookSecret)
+          .update(signedPayload)
+          .digest('hex');
+
+        if (expectedSig !== h1Match) {
+          console.warn('[Paddle Webhook] Invalid signature mismatch');
+          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
       } catch (sigErr: any) {
         console.warn('[Paddle Webhook] Signature check warning:', sigErr.message);
+        return NextResponse.json({ error: 'Signature verification failed' }, { status: 401 });
       }
     }
 

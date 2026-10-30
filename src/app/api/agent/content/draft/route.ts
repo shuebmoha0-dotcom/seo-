@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { ContentAgent } from '@/lib/agent/contentAgent';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/admin';
 
 function safeBackground(fn: () => Promise<void>) {
   setImmediate(async () => {
@@ -22,6 +23,9 @@ export async function GET(request: Request) {
     if (!websiteId) {
       return NextResponse.json({ drafts: [] });
     }
+
+    const access = await verifyWebsiteAccess(websiteId);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
 
     const supabase = createAdminClient();
 
@@ -276,6 +280,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'website_id is required to create a content draft.' }, { status: 400 });
     }
 
+    const access = await verifyWebsiteAccess(website_id);
+    if (!access.authorized && access.errorResponse) return access.errorResponse;
+
     const agent = new ContentAgent();
 
     const defaultRules = {
@@ -315,7 +322,12 @@ export async function POST(request: Request) {
           const customInstrRow = memoryData.find((m: any) => m.source === 'project_custom_instructions');
           const knowledgeBankRow = memoryData.find((m: any) => m.source === 'project_knowledge_bank');
           const standardFacts = memoryData.filter(
-            (m: any) => m.source !== 'project_custom_instructions' && m.source !== 'project_knowledge_bank'
+            (m: any) =>
+              m.source !== 'project_custom_instructions' &&
+              m.source !== 'project_knowledge_bank' &&
+              m.category !== 'telegram_vault' &&
+              m.category !== 'workflow' &&
+              m.source !== 'system_bot_config'
           );
 
           if (!projectInstructions && customInstrRow?.content) {
