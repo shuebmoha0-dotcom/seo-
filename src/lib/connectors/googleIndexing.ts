@@ -57,15 +57,24 @@ export class GoogleIndexingService {
    * Loads Google Cloud Service Account credentials from environment variables or local files.
    */
   static getServiceAccountCredentials(): { client_email?: string; private_key?: string; project_id?: string } | null {
-    // 1. Raw JSON string in GOOGLE_SERVICE_ACCOUNT_KEY or GOOGLE_APPLICATION_CREDENTIALS_JSON
-    const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    // 1. Raw JSON string in GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SERVICE_ACCOUNT_KEY, or GOOGLE_APPLICATION_CREDENTIALS_JSON
+    const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     if (rawJson) {
       try {
         const parsed = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
         if (parsed?.client_email && parsed?.private_key) return parsed;
       } catch (e: any) {
-        console.warn('[GoogleIndexingService] Invalid JSON in GOOGLE_SERVICE_ACCOUNT_KEY:', e.message);
+        console.warn('[GoogleIndexingService] Invalid JSON in GOOGLE_SERVICE_ACCOUNT_KEY/JSON:', e.message);
       }
+    }
+
+    // 2. Direct individual env vars (e.g. GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+      return {
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        project_id: process.env.GOOGLE_PROJECT_ID,
+      };
     }
 
     // 2. File path in GOOGLE_APPLICATION_CREDENTIALS
