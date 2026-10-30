@@ -46,12 +46,22 @@ export async function GET(req: NextRequest) {
       console.warn("[PlatformBlog API] Warning fetching platform_blog_posts:", error.message);
     }
 
-    // Fetch published drafts for outdart.com from content_drafts
-    const { data: outdartDrafts } = await supabase
-      .from("content_drafts")
-      .select("id, working_title, url_slug, meta_description, content_body, reading_time_minutes, created_at, status, revision_notes, primary_keyword, secondary_keywords")
-      .eq("status", "published")
-      .order("created_at", { ascending: false });
+    // Fetch published drafts STRICTLY for outdart.com from content_drafts (NEVER pull client/test websites like bizaigenius.com!)
+    const { data: outdartSite } = await supabase
+      .from("websites")
+      .select("id")
+      .ilike("domain", "%outdart%")
+      .limit(1)
+      .maybeSingle();
+
+    const { data: outdartDrafts } = outdartSite?.id
+      ? await supabase
+          .from("content_drafts")
+          .select("id, working_title, url_slug, meta_description, content_body, reading_time_minutes, created_at, status, revision_notes, primary_keyword, secondary_keywords")
+          .eq("website_id", outdartSite.id)
+          .eq("status", "published")
+          .order("created_at", { ascending: false })
+      : { data: [] };
 
     // Static cornerstone posts from posts.ts
     const staticPosts = getAllBlogPosts();

@@ -20,6 +20,8 @@ interface PageProps {
   params: Promise<{ slug: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export async function generateStaticParams() {
   const posts = getAllBlogPosts();
   return posts.map((p) => ({ slug: p.slug }));

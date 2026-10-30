@@ -54,10 +54,20 @@ export async function POST(req: NextRequest) {
         .select("slug")
         .eq("status", "published");
 
-      const { data: drafts } = await supabase
-        .from("content_drafts")
-        .select("url_slug")
-        .eq("status", "published");
+      const { data: outdartSite } = await supabase
+        .from("websites")
+        .select("id")
+        .ilike("domain", "%outdart%")
+        .limit(1)
+        .maybeSingle();
+
+      const { data: drafts } = outdartSite?.id
+        ? await supabase
+            .from("content_drafts")
+            .select("url_slug")
+            .eq("website_id", outdartSite.id)
+            .eq("status", "published")
+        : { data: [] };
 
       const slugSet = new Set<string>([
         ...staticSlugs,

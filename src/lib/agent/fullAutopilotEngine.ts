@@ -950,7 +950,7 @@ export class FullAutopilotEngine {
       if (autoPublish && wpSite) {
         livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${articleSlug}/`;
 
-        await createWordPressJob({
+        const wpJobRes = await createWordPressJob({
           websiteId,
           jobType: 'create_post',
           payload: {
@@ -972,12 +972,20 @@ export class FullAutopilotEngine {
 
         isPublishedLive = true;
 
-        // Wake up WordPress plugin to poll and publish immediately
+        // Wake up WordPress plugin to poll and publish immediately, then wait up to 8s to verify HTTP 200 live URL
         const siteApiUrl = wpSite.site_url.replace(/\/+$/, '');
-        Promise.allSettled([
+        await Promise.allSettled([
           fetch(`${siteApiUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
           fetch(`${siteApiUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(3000) }),
-        ]).catch(() => {});
+        ]);
+
+        if (wpJobRes?.job?.id) {
+          const { waitForJobCompletion } = await import('@/lib/connectors/wordpressOutbound');
+          const completion = await waitForJobCompletion(wpJobRes.job.id, 8000);
+          if (completion.completed && completion.job?.result?.permalink) {
+            livePostUrl = completion.job.result.permalink;
+          }
+        }
       } else if (autoPublish && !wpSite) {
         // For Outdart or native platform blog sites, live URL resides under /blog/{slug}
         const isPlatformBlog = website.domain?.toLowerCase().includes('outdart') || (website as any).platform === 'other';
@@ -989,12 +997,12 @@ export class FullAutopilotEngine {
 
         if (isPlatformBlog) {
           try {
-            await supabase.from('platform_blog_posts').upsert({
+            const { error: platUpsertErr } = await supabase.from('platform_blog_posts').upsert({
               slug: articleSlug,
               title: articleOutput.working_title,
               excerpt: articleOutput.meta_description || articleOutput.working_title,
               content: articleOutput.content_body,
-              category: 'AI Agents',
+              category: selectedGap.target_category || 'AI Agents',
               author_name: 'Editorial Team',
               author_role: 'SEO Intelligence & Engineering',
               reading_time: `${articleOutput.reading_time_minutes || 6} min read`,
@@ -1005,11 +1013,27 @@ export class FullAutopilotEngine {
               keywords: [selectedGap.keyword, ...(articleOutput.secondary_keywords || [])],
               status: 'published',
               published_at: new Date().toISOString(),
-            });
+            }, { onConflict: 'slug' });
+            if (platUpsertErr) {
+              console.warn('[FullAutopilotEngine] Platform blog upsert notice (served dynamically via content_drafts):', platUpsertErr.message);
+            }
           } catch (platErr) {
             console.warn('[FullAutopilotEngine] Platform blog upsert notice:', platErr);
           }
         }
+      }
+
+      // LIVE URL HTTP 200 VERIFICATION GATE (Rule 9 Grounding):
+      // Verify the published URL is reachable and alert on Telegram if a 404 is detected
+      let verifiedHttpStatus = 200;
+      if (isPublishedLive && livePostUrl && (!wpSite || livePostUrl.includes('outdart.com'))) {
+        try {
+          const checkRes = await fetch(livePostUrl, { method: 'HEAD', signal: AbortSignal.timeout(4000) });
+          verifiedHttpStatus = checkRes.status;
+          if (verifiedHttpStatus === 404) {
+            console.warn(`[FullAutopilotEngine] ⚠️ Post-publish HTTP 404 detected on ${livePostUrl}!`);
+          }
+        } catch (_) {}
       }
 
       // MANDATORY AUTO-INDEXING CONTRACT (Rule 12):

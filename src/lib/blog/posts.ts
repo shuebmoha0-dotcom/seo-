@@ -574,37 +574,98 @@ export async function getLiveBlogPosts(): Promise<BlogPost[]> {
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin');
     const supabase = createAdminClient();
-    const { data: dbPosts, error } = await supabase
+    const { data: dbPosts } = await supabase
       .from('platform_blog_posts')
       .select('*')
       .eq('status', 'published')
       .order('published_at', { ascending: false });
 
-    if (error || !dbPosts || dbPosts.length === 0) {
-      return getAllBlogPosts();
+    const { data: outdartSite } = await supabase
+      .from('websites')
+      .select('id')
+      .ilike('domain', '%outdart%')
+      .limit(1)
+      .maybeSingle();
+
+    const { data: outdartDrafts } = outdartSite?.id
+      ? await supabase
+          .from('content_drafts')
+          .select('*')
+          .eq('website_id', outdartSite.id)
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
+      : { data: [] };
+
+    const postsMap = new Map<string, BlogPost>();
+
+    for (const sp of getAllBlogPosts()) {
+      postsMap.set(sp.slug, sp);
     }
 
-    return dbPosts.map((d: any) => ({
-      slug: d.slug,
-      title: d.title,
-      excerpt: d.excerpt,
-      content: d.content,
-      category: d.category as any,
-      author: {
-        name: d.author_name || 'Editorial Team',
-        role: d.author_role || 'SEO Intelligence & Engineering',
-        avatarUrl: d.author_avatar,
-      },
-      publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
-      updatedAt: d.updated_at,
-      readingTime: d.reading_time || '5 min read',
-      coverImage: d.cover_image,
-      coverImageAlt: d.cover_image_alt || d.title,
-      metaTitle: d.meta_title || d.title,
-      metaDescription: d.meta_description || d.excerpt,
-      keywords: d.keywords || [],
-      featured: Boolean(d.featured),
-    }));
+    for (const d of dbPosts || []) {
+      postsMap.set(d.slug, {
+        slug: d.slug,
+        title: d.title,
+        excerpt: d.excerpt,
+        content: d.content,
+        category: d.category as any,
+        author: {
+          name: d.author_name || 'Editorial Team',
+          role: d.author_role || 'SEO Intelligence & Engineering',
+          avatarUrl: d.author_avatar,
+        },
+        publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
+        updatedAt: d.updated_at,
+        readingTime: d.reading_time || '5 min read',
+        coverImage: d.cover_image,
+        coverImageAlt: d.cover_image_alt || d.title,
+        metaTitle: d.meta_title || d.title,
+        metaDescription: d.meta_description || d.excerpt,
+        keywords: d.keywords || [],
+        featured: Boolean(d.featured),
+      });
+    }
+
+    for (const draft of outdartDrafts || []) {
+      if (!draft.url_slug || !draft.content_body) continue;
+      let rev: any = {};
+      try {
+        rev = typeof draft.revision_notes === 'string' ? JSON.parse(draft.revision_notes || '{}') : (draft.revision_notes || {});
+      } catch (_) {}
+      const imgMatch = draft.content_body?.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/);
+      const cover = rev.featured_image_url || (imgMatch ? imgMatch[1] : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80');
+
+      let cat = 'AI Agents';
+      const tLower = (draft.working_title || '').toLowerCase();
+      if (tLower.includes('template') || tLower.includes('brief') || tLower.includes('cluster')) cat = 'Content Strategy';
+      else if (tLower.includes('report') || tLower.includes('technical')) cat = 'Technical SEO';
+      else if (tLower.includes('growth') || tLower.includes('tracking') || tLower.includes('playbook') || tLower.includes('strategy')) cat = 'Growth';
+
+      postsMap.set(draft.url_slug, {
+        slug: draft.url_slug,
+        title: draft.working_title,
+        excerpt: draft.meta_description || draft.working_title,
+        content: draft.content_body,
+        category: (rev.target_category || rev.category || cat) as any,
+        author: {
+          name: 'Editorial Team',
+          role: 'SEO Intelligence & Engineering',
+        },
+        publishedAt: draft.created_at ? draft.created_at.slice(0, 10) : '2026-03-01',
+        updatedAt: draft.updated_at,
+        readingTime: `${draft.reading_time_minutes || 6} min read`,
+        coverImage: cover,
+        coverImageAlt: rev.featured_image_alt || draft.working_title,
+        metaTitle: draft.seo_title || draft.working_title,
+        metaDescription: draft.meta_description || draft.working_title,
+        keywords: [draft.primary_keyword, ...(draft.secondary_keywords || [])].filter(Boolean),
+        featured: false,
+      });
+    }
+
+    return Array.from(postsMap.values()).sort(
+      (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
   } catch (err) {
     console.error('[BlogPosts] Error loading from db, using fallback:', err);
     return getAllBlogPosts();
@@ -623,41 +684,95 @@ export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | un
       .select('*')
       .eq('slug', slug)
       .eq('status', 'published')
-      .single();
+      .maybeSingle();
 
-    if (error || !d) {
-      return getBlogPostBySlug(slug);
+    if (!error && d) {
+      const staticPost = getBlogPostBySlug(slug);
+      // If the database has an older seed copy that lacks the embedded visual diagrams,
+      // prefer the enriched static content so visitors always see rich illustrations.
+      const contentToUse =
+        staticPost && !d.content?.includes("![") && staticPost.content?.includes("![")
+          ? staticPost.content
+          : d.content;
+
+      return {
+        slug: d.slug,
+        title: d.title,
+        excerpt: d.excerpt,
+        content: contentToUse,
+        category: d.category as any,
+        author: {
+          name: d.author_name || 'Editorial Team',
+          role: d.author_role || 'SEO Intelligence & Engineering',
+          avatarUrl: d.author_avatar,
+        },
+        publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
+        updatedAt: d.updated_at,
+        readingTime: d.reading_time || '5 min read',
+        coverImage: d.cover_image || staticPost?.coverImage,
+        coverImageAlt: d.cover_image_alt || d.title,
+        metaTitle: d.meta_title || d.title,
+        metaDescription: d.meta_description || d.excerpt,
+        keywords: d.keywords || [],
+        featured: Boolean(d.featured),
+      };
     }
 
-    const staticPost = getBlogPostBySlug(slug);
-    // If the database has an older seed copy that lacks the embedded visual diagrams,
-    // prefer the enriched static content so visitors always see rich illustrations.
-    const contentToUse =
-      staticPost && !d.content?.includes("![") && staticPost.content?.includes("![")
-        ? staticPost.content
-        : d.content;
+    // Fallback: Check outdart.com published content_drafts if not yet synced to platform_blog_posts
+    const { data: outdartSite } = await supabase
+      .from('websites')
+      .select('id')
+      .ilike('domain', '%outdart%')
+      .limit(1)
+      .maybeSingle();
 
-    return {
-      slug: d.slug,
-      title: d.title,
-      excerpt: d.excerpt,
-      content: contentToUse,
-      category: d.category as any,
-      author: {
-        name: d.author_name || 'Editorial Team',
-        role: d.author_role || 'SEO Intelligence & Engineering',
-        avatarUrl: d.author_avatar,
-      },
-      publishedAt: d.published_at ? d.published_at.slice(0, 10) : '2026-03-01',
-      updatedAt: d.updated_at,
-      readingTime: d.reading_time || '5 min read',
-      coverImage: d.cover_image || staticPost?.coverImage,
-      coverImageAlt: d.cover_image_alt || d.title,
-      metaTitle: d.meta_title || d.title,
-      metaDescription: d.meta_description || d.excerpt,
-      keywords: d.keywords || [],
-      featured: Boolean(d.featured),
-    };
+    if (outdartSite?.id) {
+      const { data: draft } = await supabase
+        .from('content_drafts')
+        .select('*')
+        .eq('website_id', outdartSite.id)
+        .eq('url_slug', slug)
+        .eq('status', 'published')
+        .maybeSingle();
+
+      if (draft && draft.content_body) {
+        let rev: any = {};
+        try {
+          rev = typeof draft.revision_notes === 'string' ? JSON.parse(draft.revision_notes || '{}') : (draft.revision_notes || {});
+        } catch (_) {}
+        const imgMatch = draft.content_body?.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/);
+        const cover = rev.featured_image_url || (imgMatch ? imgMatch[1] : 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80');
+
+        let cat = 'AI Agents';
+        const tLower = (draft.working_title || '').toLowerCase();
+        if (tLower.includes('template') || tLower.includes('brief') || tLower.includes('cluster')) cat = 'Content Strategy';
+        else if (tLower.includes('report') || tLower.includes('technical')) cat = 'Technical SEO';
+        else if (tLower.includes('growth') || tLower.includes('tracking') || tLower.includes('playbook')) cat = 'Growth';
+
+        return {
+          slug: draft.url_slug,
+          title: draft.working_title,
+          excerpt: draft.meta_description || draft.working_title,
+          content: draft.content_body,
+          category: (rev.target_category || rev.category || cat) as any,
+          author: {
+            name: 'Editorial Team',
+            role: 'SEO Intelligence & Engineering',
+          },
+          publishedAt: draft.created_at ? draft.created_at.slice(0, 10) : '2026-03-01',
+          updatedAt: draft.updated_at,
+          readingTime: `${draft.reading_time_minutes || 6} min read`,
+          coverImage: cover,
+          coverImageAlt: rev.featured_image_alt || draft.working_title,
+          metaTitle: draft.seo_title || draft.working_title,
+          metaDescription: draft.meta_description || draft.working_title,
+          keywords: [draft.primary_keyword, ...(draft.secondary_keywords || [])].filter(Boolean),
+          featured: false,
+        };
+      }
+    }
+
+    return getBlogPostBySlug(slug);
   } catch (err) {
     return getBlogPostBySlug(slug);
   }
