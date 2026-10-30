@@ -49,9 +49,37 @@ export async function GET(req: Request) {
 
         const candidateTopics = gaps.filter(g => !existingKeywords.has(g.keyword.toLowerCase()));
 
+        // Select diverse candidates across distinct categories first
+        const selectedForQueue: typeof candidateTopics = [];
+        const usedCats = new Set(
+          queue.map(q => {
+            try {
+              const n = typeof q.revision_notes === 'string' ? JSON.parse(q.revision_notes) : (q.revision_notes || {});
+              return String(n.target_category || n.category || '').toLowerCase();
+            } catch (_) {
+              return '';
+            }
+          }).filter(Boolean)
+        );
+
+        for (const cand of candidateTopics) {
+          if (selectedForQueue.length >= needed) break;
+          const catLower = (cand.target_category || '').toLowerCase();
+          if (!usedCats.has(catLower)) {
+            selectedForQueue.push(cand);
+            if (catLower) usedCats.add(catLower);
+          }
+        }
+        for (const cand of candidateTopics) {
+          if (selectedForQueue.length >= needed) break;
+          if (!selectedForQueue.includes(cand)) {
+            selectedForQueue.push(cand);
+          }
+        }
+
         // Insert new planned topics to bring the queue up to 7 days
-        for (let i = 0; i < Math.min(needed, candidateTopics.length); i++) {
-          const cand = candidateTopics[i];
+        for (let i = 0; i < selectedForQueue.length; i++) {
+          const cand = selectedForQueue[i];
           const scheduledDate = new Date();
           scheduledDate.setDate(scheduledDate.getDate() + (queue.length + i + 1));
           const dateStr = scheduledDate.toISOString().slice(0, 10);
@@ -69,8 +97,10 @@ export async function GET(req: Request) {
               revision_notes: JSON.stringify({
                 scheduled_date: dateStr,
                 category: cand.target_category || 'General',
+                target_category: cand.target_category || 'General',
                 search_volume: cand.estimated_volume || 1000,
                 difficulty: cand.estimated_kd || 30,
+                gap_rationale: cand.gap_rationale || '',
                 source: 'autopilot_queue_replenish',
               }),
             })
@@ -98,9 +128,9 @@ export async function GET(req: Request) {
         id: item.id,
         working_title: item.working_title,
         primary_keyword: item.primary_keyword,
-        category: notes.category || 'General',
-        search_volume: notes.search_volume || 1200,
-        difficulty: notes.difficulty || 28,
+        category: notes.category || notes.target_category || 'General',
+        search_volume: notes.search_volume || notes.estimated_volume || 1200,
+        difficulty: notes.difficulty || notes.estimated_kd || 28,
         scheduled_date: notes.scheduled_date || defaultDate.toISOString().slice(0, 10),
         status: 'scheduled',
       };

@@ -751,7 +751,7 @@ export class FullAutopilotEngine {
       // verify it does not duplicate recent posts before executing it.
       const { data: queuedItem } = await supabase
         .from('content_drafts')
-        .select('id, working_title, primary_keyword, search_intent, content_type')
+        .select('id, working_title, primary_keyword, search_intent, content_type, revision_notes')
         .eq('website_id', websiteId)
         .eq('status', 'brief_pending')
         .order('created_at', { ascending: true })
@@ -771,11 +771,19 @@ export class FullAutopilotEngine {
           console.warn(`[FullAutopilotEngine] Removing repetitive queued item "${queuedItem.working_title}" (${queuedDup.reason}). Rotating to fresh pillar.`);
           await supabase.from('content_drafts').delete().eq('id', queuedItem.id);
         } else {
-          console.log(`[FullAutopilotEngine] Found verified roadmap topic in queue: "${queuedItem.working_title}" (${queuedItem.primary_keyword}). Prioritizing for publication!`);
+          let queuedCategory = '';
+          try {
+            const notes = typeof queuedItem.revision_notes === 'string'
+              ? JSON.parse(queuedItem.revision_notes)
+              : (queuedItem.revision_notes || {});
+            queuedCategory = notes.target_category || notes.category || '';
+          } catch (_) {}
+
+          console.log(`[FullAutopilotEngine] Found verified roadmap topic in queue: "${queuedItem.working_title}" (${queuedItem.primary_keyword}) [Category: ${queuedCategory || 'Auto'}]. Prioritizing for publication!`);
           candidateGaps.unshift({
             keyword: queuedItem.primary_keyword,
             working_title: queuedItem.working_title,
-            target_category: 'Scheduled Roadmap',
+            target_category: queuedCategory || strategicDecision.target_category_or_pillar || 'Outreach Strategy',
             estimated_volume: 1200,
             estimated_kd: 25,
             draft_id: queuedItem.id,
@@ -955,6 +963,8 @@ export class FullAutopilotEngine {
             canonical_url: livePostUrl,
             focus_keyword: selectedGap.keyword,
             primary_keyword: selectedGap.keyword,
+            target_category: selectedGap.target_category,
+            category: selectedGap.target_category,
             featured_image_url: articleOutput.featured_image_url,
           },
           idempotencyKey: `full_autopilot_post_${draftId}_${Date.now()}`,
@@ -1049,6 +1059,8 @@ export class FullAutopilotEngine {
               featured_image_url: articleOutput.featured_image_url,
               featured_image_alt: articleOutput.featured_image_alt,
               wordpress_post_url: livePostUrl,
+              target_category: selectedGap.target_category,
+              category: selectedGap.target_category,
               autopilot_cycle_id: cycleId,
               indexed_at: indexingSummary ? new Date().toISOString() : undefined,
               indexing_status: indexingSummary || undefined,

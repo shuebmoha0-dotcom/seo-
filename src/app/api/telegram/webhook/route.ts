@@ -142,6 +142,18 @@ export async function POST(request: Request) {
             if (wpSite) {
               siteBaseUrl = wpSite.site_url;
               livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${draft.url_slug}/`;
+              let targetCategory = '';
+              try {
+                const parsedNotes = typeof draft.revision_notes === 'string' ? JSON.parse(draft.revision_notes) : (draft.revision_notes || {});
+                targetCategory = parsedNotes?.target_category || parsedNotes?.category || '';
+              } catch (_) {}
+              const { resolveWordPressCategoryIds } = await import('@/lib/connectors/wordpressOutbound');
+              const categoryIds = await resolveWordPressCategoryIds({
+                siteUrl: wpSite.site_url,
+                targetCategory,
+                title: draft.working_title,
+                keyword: cleanKw,
+              });
               await supabase.from('wordpress_jobs').insert({
                 site_id: wpSite.id,
                 website_id: draft.website_id,
@@ -156,6 +168,8 @@ export async function POST(request: Request) {
                   canonical_url: livePostUrl,
                   focus_keyword: cleanKw,
                   primary_keyword: cleanKw,
+                  target_category: targetCategory || undefined,
+                  ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
                   featured_image_url: featuredImg,
                 },
                 idempotency_key: `create_post_draft_${draft.id}_${Date.now()}`,

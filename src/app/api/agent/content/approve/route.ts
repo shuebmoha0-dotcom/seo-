@@ -323,6 +323,7 @@ export async function POST(request: Request) {
 
           // Extract featured image from revision notes or first image in markdown content body
           let featuredImageUrl = '';
+          let targetCategory = '';
           if (updatedDraft.revision_notes) {
             try {
               const parsedNotes = typeof updatedDraft.revision_notes === 'string'
@@ -330,6 +331,9 @@ export async function POST(request: Request) {
                 : updatedDraft.revision_notes;
               if (parsedNotes?.featured_image_url) {
                 featuredImageUrl = parsedNotes.featured_image_url;
+              }
+              if (parsedNotes?.target_category || parsedNotes?.category) {
+                targetCategory = parsedNotes.target_category || parsedNotes.category;
               }
             } catch (_) {}
           }
@@ -339,6 +343,14 @@ export async function POST(request: Request) {
               featuredImageUrl = imgMatch[1];
             }
           }
+
+          const { resolveWordPressCategoryIds } = await import('@/lib/connectors/wordpressOutbound');
+          const categoryIds = await resolveWordPressCategoryIds({
+            siteUrl: wpSite.site_url,
+            targetCategory,
+            title: updatedDraft.working_title,
+            keyword: cleanKw,
+          });
 
           await supabase.from('wordpress_jobs').insert({
             site_id: wpSite.id,
@@ -354,6 +366,8 @@ export async function POST(request: Request) {
               canonical_url: `${wpSite.site_url.replace(/\/$/, '')}/${updatedDraft.url_slug}/`,
               focus_keyword: cleanKw,
               primary_keyword: cleanKw,
+              target_category: targetCategory || undefined,
+              ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
               featured_image_url: featuredImageUrl || undefined,
             },
             idempotency_key: `create_post_draft_${updatedDraft.id}_${Date.now()}`,

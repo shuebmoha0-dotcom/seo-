@@ -194,6 +194,122 @@ export async function verifyOutboundRequest(request: Request, bodyText: string):
   return { valid: true, site };
 }
 
+export async function resolveWordPressCategoryIds(params: {
+  siteUrl: string;
+  targetCategory?: string;
+  title?: string;
+  keyword?: string;
+}): Promise<number[]> {
+  try {
+    const cleanUrl = (params.siteUrl || '').replace(/\/+$/, '');
+    if (!cleanUrl.startsWith('http')) return [];
+
+    const res = await fetch(`${cleanUrl}/wp-json/wp/v2/categories?per_page=50`, {
+      signal: AbortSignal.timeout(3500),
+      headers: { 'User-Agent': 'SEO-Autopilot-CategoryResolver/1.0' },
+    });
+    if (!res.ok) return [];
+
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return [];
+
+    const rawCats = await res.json();
+    if (!Array.isArray(rawCats) || rawCats.length === 0) return [];
+
+    const validCats = rawCats
+      .filter((c: any) => c && typeof c.id === 'number' && c.slug !== 'uncategorized' && c.name)
+      .map((c: any) => ({
+        id: c.id as number,
+        name: String(c.name).replace(/&amp;/g, '&').trim(),
+        slug: String(c.slug || '').trim().toLowerCase(),
+        count: Number(c.count || 0),
+      }));
+
+    if (validCats.length === 0) return [];
+
+    const targetCatLower = (params.targetCategory || '').trim().toLowerCase();
+    const combinedText = `${params.targetCategory || ''} ${params.title || ''} ${params.keyword || ''}`.toLowerCase();
+
+    // 1. Exact or substring match on targetCategory name or slug
+    if (targetCatLower) {
+      const exactMatch = validCats.find(
+        c => c.name.toLowerCase() === targetCatLower || c.slug === targetCatLower.replace(/[^a-z0-9]+/g, '-')
+      );
+      if (exactMatch) return [exactMatch.id];
+
+      const substringMatch = validCats.find(
+        c => targetCatLower.includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(targetCatLower)
+      );
+      if (substringMatch) return [substringMatch.id];
+    }
+
+    // 2. Token / topical overlap scoring across category names + common synonyms
+    const stem = (w: string) => w.replace(/ies$/, 'y').replace(/(es|s)$/, '');
+    const textTokens = new Set(
+      combinedText
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 2)
+        .map(stem)
+    );
+
+    let bestCat: { id: number; score: number; count: number } | null = null;
+
+    for (const cat of validCats) {
+      const catLower = cat.name.toLowerCase();
+      const catTokens = catLower
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 2)
+        .map(stem);
+
+      let score = 0;
+      for (const ct of catTokens) {
+        if (textTokens.has(ct)) {
+          // Give specific non-generic tokens higher weight than generic 'email', 'sales', or 'outreach'
+          score += (ct === 'email' || ct === 'sal' || ct === 'outreach') ? 1 : 6;
+        }
+      }
+
+      // If the title explicitly mentions 'cold email' and does NOT mention LinkedIn, sequences, tools/reviews, or deliverability, keep it in Cold Email
+      if (catLower === 'cold email' && combinedText.includes('cold email') && !combinedText.includes('linkedin') && !combinedText.includes('sequence') && !combinedText.includes('deliverability') && !combinedText.includes('tool') && !combinedText.includes('software') && !combinedText.includes('strategy')) {
+        score += 18;
+      }
+
+      // Semantic pillar boost so Lead Research, Prospecting, ABM, CRM, Qualification, and Playbooks map cleanly
+      if (catLower.includes('linkedin') && (combinedText.includes('linkedin') || combinedText.includes('inmail') || combinedText.includes('social selling') || combinedText.includes('sales navigator'))) {
+        score += 24;
+      }
+      if ((catLower.includes('strategy') || catLower.includes('outreach strategy')) &&
+          (combinedText.includes('lead research') || combinedText.includes('prospecting') || combinedText.includes('account-based') || combinedText.includes('abm') || combinedText.includes('qualification') || combinedText.includes('playbook') || combinedText.includes('pipeline') || combinedText.includes('lead generation') || combinedText.includes('icp') || combinedText.includes('buyer intent') || combinedText.includes('strategy') || combinedText.includes('workflows'))) {
+        score += 18;
+      }
+      if ((catLower.includes('tool') || catLower.includes('review') || catLower.includes('software')) &&
+          (combinedText.includes('crm') || combinedText.includes('tool') || combinedText.includes('software') || combinedText.includes('platform') || combinedText.includes('picks') || combinedText.includes('review') || combinedText.includes('compare') || combinedText.includes('vs'))) {
+        score += 14;
+      }
+      if (catLower.includes('sequence') && (combinedText.includes('sequence') || combinedText.includes('cadence') || combinedText.includes('follow-up') || combinedText.includes('follow up') || combinedText.includes('nurture'))) {
+        score += 16;
+      }
+      if (catLower.includes('deliverability') && (combinedText.includes('deliverability') || combinedText.includes('spam') || combinedText.includes('warm-up') || combinedText.includes('warm up') || combinedText.includes('spf') || combinedText.includes('dkim') || combinedText.includes('dmarc') || combinedText.includes('reputation') || combinedText.includes('postmaster') || combinedText.includes('blacklist') || combinedText.includes('bounce') || combinedText.includes('dedicated ip'))) {
+        score += 18;
+      }
+
+      if (score > 0) {
+        if (!bestCat || score > bestCat.score || (score === bestCat.score && cat.count < bestCat.count)) {
+          bestCat = { id: cat.id, score, count: cat.count };
+        }
+      }
+    }
+
+    if (bestCat) return [bestCat.id];
+
+    return [];
+  } catch (_) {
+    return [];
+  }
+}
+
 /**
  * Dispatch a job to the WordPress job queue
  */
@@ -209,7 +325,7 @@ export async function createWordPressJob(params: {
   // Find outbound site
   let { data: site, error: siteErr } = await supabase
     .from('wordpress_outbound_sites')
-    .select('id, status')
+    .select('id, status, site_url')
     .eq('website_id', params.websiteId)
     .eq('status', 'active')
     .maybeSingle();
@@ -219,7 +335,7 @@ export async function createWordPressJob(params: {
     const admin = createAdminClient();
     const { data: adminSite } = await admin
       .from('wordpress_outbound_sites')
-      .select('id, status')
+      .select('id, status, site_url')
       .eq('website_id', params.websiteId)
       .eq('status', 'active')
       .maybeSingle();
@@ -250,7 +366,7 @@ export async function createWordPressJob(params: {
 
   const payload: Record<string, any> = { ...params.payload };
 
-  // Automatically enforce Rule 3 (Zero Table of Contents) & layout hygiene on all posts
+  // Automatically enforce Rule 3 (Zero Table of Contents), WordPress category resolution, & layout hygiene on all posts
   if (params.jobType === 'create_post' || params.jobType === 'update_post') {
     payload.meta = {
       ...(payload.meta || {}),
@@ -259,6 +375,19 @@ export async function createWordPressJob(params: {
       '_ez-toc-insert': '0',
       'ez-toc-insert': '0',
     };
+
+    // Resolve WordPress category_ids if not already provided so posts never fall back to a single default WP category
+    if (params.jobType === 'create_post' && (!Array.isArray(payload.category_ids) || payload.category_ids.length === 0) && site.site_url) {
+      const resolvedCatIds = await resolveWordPressCategoryIds({
+        siteUrl: site.site_url,
+        targetCategory: payload.target_category || payload.category,
+        title: payload.title,
+        keyword: payload.primary_keyword || payload.focus_keyword,
+      });
+      if (resolvedCatIds.length > 0) {
+        payload.category_ids = resolvedCatIds;
+      }
+    }
 
     if (typeof payload.content === 'string' && payload.content.length > 0) {
       const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(payload.content);

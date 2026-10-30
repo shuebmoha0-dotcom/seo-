@@ -113,6 +113,28 @@ export async function POST(request: Request) {
 
     const jobPayload = { ...(claimedJob.payload || {}) };
 
+    // WORDPRESS CATEGORY RESOLUTION SAFETY NET:
+    // If a create_post job is claimed without category_ids, resolve the matching WordPress category ID dynamically
+    // so posts are placed into their true pillar (e.g., LinkedIn Outreach, Outreach Strategy, AI Tools & Reviews) instead of the default category.
+    if (
+      claimedJob.job_type === 'create_post' &&
+      (!Array.isArray(jobPayload.category_ids) || jobPayload.category_ids.length === 0) &&
+      site.site_url
+    ) {
+      try {
+        const { resolveWordPressCategoryIds } = await import('@/lib/connectors/wordpressOutbound');
+        const resolvedCatIds = await resolveWordPressCategoryIds({
+          siteUrl: site.site_url,
+          targetCategory: jobPayload.target_category || jobPayload.category,
+          title: jobPayload.title,
+          keyword: jobPayload.primary_keyword || jobPayload.focus_keyword,
+        });
+        if (resolvedCatIds.length > 0) {
+          jobPayload.category_ids = resolvedCatIds;
+        }
+      } catch (_) {}
+    }
+
     // FEATURED IMAGE RESILIENCE: If job payload has a remote HTTP featured_image_url and no direct featured_media,
     // verify the image is reachable and provide featured_image_data_uri alongside the standard HTTP featured_image_url.
     // Keeping featured_image_url as a valid HTTP URL ensures older plugin versions pass filter_var(..., FILTER_VALIDATE_URL),
