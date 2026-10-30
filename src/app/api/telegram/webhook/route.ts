@@ -1187,36 +1187,7 @@ Your agent will process the request in the background and ping you when finished
         });
       } catch(e) {}
 
-      // Route diagnostic and drop-investigation questions to seo_diagnostic immediately
-      const isDiagnosticQuestion = /why.*(rank|drop|fall|traffic|declin|loss|lost|position)|diagnos|what happened to my (rank|traffic)|why.*not ranking/i.test(taskPrompt);
-      if (isDiagnosticQuestion && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
-        parsed.intent_type = 'immediate_action';
-        parsed.action_type = 'seo_diagnostic';
-      }
-
-      // Route growth, fast ranking, and intelligence requests directly to growth_acceleration
-      const isGrowthOrIntelligenceRequest = 
-        /(grow.*fast|rank.*fast|ranking.*fast|accelerat|why.*not.*intelligent|why.*still.*not.*intelligent|not.*intelligent|help.*grow|boost.*clicks?|more.*clicks?|how.*to.*grow|striking.*distance|grow.*traffic|how.*to.*rank)/i.test(taskPrompt);
-      if (isGrowthOrIntelligenceRequest && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
-        parsed.intent_type = 'immediate_action';
-        parsed.action_type = 'growth_acceleration';
-      }
-
-      // Route keyword requests directly to keyword_research to guarantee grounded inventory check
-      const isKeywordRequest = /give me keywords?|find keywords?|keyword opportunities|what keywords?|keyword ideas/i.test(taskPrompt);
-      if (isKeywordRequest && (parsed.intent_type === 'conversation_response' || parsed.action_type === 'answer_question')) {
-        parsed.intent_type = 'immediate_action';
-        parsed.action_type = 'keyword_research';
-      }
-
-      // Route image generation / recreation requests directly to generate_images to prevent re-drafting already written articles!
-      const isImageRequest = /(recreate|generate|create|make|add|include).*?(images?|visuals?|pictures?|graphics?|photos?)|has\s+no\s+images?|missing\s+images?|no\s+images?|recreate\s+image/i.test(taskPrompt);
-      if (isImageRequest) {
-        parsed.intent_type = 'immediate_action';
-        parsed.action_type = 'generate_images';
-      }
-
-      // Route active pending article edit if user previously tapped [✏️ Edit Article]
+      // D. Route active pending article edit if user previously tapped [✏️ Edit Article]
       let activeEditingDraftId: string | undefined = undefined;
       if (pendingArticleEdits.has(chatId)) {
         activeEditingDraftId = pendingArticleEdits.get(chatId);
@@ -1225,22 +1196,33 @@ Your agent will process the request in the background and ping you when finished
         parsed.action_type = 'edit_article';
       }
 
-      // Route edit / modify requests directly to edit_article to prevent re-drafting already written articles!
-      const isEditRequest = /(edit|update|modify|revise|change|shorten|expand|add\s+to|add\s+faq|improve).*?(previous|last|recent|existing)?\s*(article|post|draft|piece|content)/i.test(taskPrompt) ||
-        /^(edit|update|modify|revise)\s+(the\s+)?(previous|last|recent|article|post|draft)/i.test(taskPrompt) ||
-        /^(edit|update|modify|revise)\s*:/i.test(taskPrompt);
-      if (isEditRequest && parsed.action_type !== 'generate_images') {
-        parsed.intent_type = 'immediate_action';
-        parsed.action_type = 'edit_article';
+      // Explicit Imperative Actions only override conversational intent if the user specifically instructed execution!
+      // Conversational inquiries ("why...", "tell me...", "how does...", "what about...") stay conversational.
+      const isConversationalInquiry = /^(why|how|what|tell|can|could|would|explain|discuss|think|do you think|who)\b/i.test(taskPrompt.trim());
+
+      if (!isConversationalInquiry && parsed.intent_type !== 'conversation_response') {
+        // Route image generation / recreation requests directly to generate_images to prevent re-drafting already written articles!
+        const isImageRequest = /(recreate|generate|create|make|add|include).*?(images?|visuals?|pictures?|graphics?|photos?)|has\s+no\s+images?|missing\s+images?|no\s+images?|recreate\s+image/i.test(taskPrompt);
+        if (isImageRequest) {
+          parsed.intent_type = 'immediate_action';
+          parsed.action_type = 'generate_images';
+        }
+
+        // Route edit / modify requests directly to edit_article to prevent re-drafting already written articles!
+        const isEditRequest = /(edit|update|modify|revise|change|shorten|expand|add\s+to|add\s+faq|improve).*?(previous|last|recent|existing)?\s*(article|post|draft|piece|content)/i.test(taskPrompt) ||
+          /^(edit|update|modify|revise)\s+(the\s+)?(previous|last|recent|article|post|draft)/i.test(taskPrompt) ||
+          /^(edit|update|modify|revise)\s*:/i.test(taskPrompt);
+        if (isEditRequest && parsed.action_type !== 'generate_images') {
+          parsed.intent_type = 'immediate_action';
+          parsed.action_type = 'edit_article';
+        }
       }
 
-      // Route indexing requests directly to indexing_check to execute live multi-engine submission
-      const isIndexingRequest = /^(index|indexing|request\s+indexing|submit\s+for\s+indexing)\b/i.test(taskPrompt.trim()) ||
-        /(is.*(site|url|page|post|article).*indexed|check.*index(ing)?|submit.*(google|index(ing)?)|request.*index(ing)?|index\s+(this|my|the|it|url|page|site|article|post|all|every|https?)|make\s+sure.*index(ed)?)/i.test(taskPrompt) ||
-        /\b(index|indexing)\s+(now|url|link|page|post|article|site|all|every)\b/i.test(taskPrompt) ||
-        /\b(request(ed)?\s+(the\s+)?bot\s+for\s+indexing|bot\s+for\s+indexing|make\s+sure\s+(every|all)\s+(post|article).*index(ed)?)\b/i.test(taskPrompt) ||
-        /^index$/i.test(taskPrompt.trim());
-      if (isIndexingRequest) {
+      // Explicit direct command to index
+      const isExplicitIndexingCommand = /^(index|request\s+indexing|submit\s+for\s+indexing)\b/i.test(taskPrompt.trim()) ||
+        /^index$/i.test(taskPrompt.trim()) ||
+        /^(please\s+)?index\s+(this|my|the|it|all|every|https?)/i.test(taskPrompt.trim());
+      if (isExplicitIndexingCommand) {
         parsed.intent_type = 'immediate_action';
         parsed.action_type = 'indexing_check';
         const urlMatch = taskPrompt.match(/https?:\/\/[^\s]+/i);
