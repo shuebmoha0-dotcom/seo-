@@ -1,12 +1,13 @@
 import { MetadataRoute } from 'next';
-import { getAllBlogPosts } from '@/lib/blog/posts';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { getLiveBlogPosts } from '@/lib/blog/posts';
+
+export const dynamic = 'force-dynamic';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com';
+  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'https://outdart.com').replace(/\/+$/, '');
   const now = new Date();
 
-  // Static core platform pages
+  // Static core platform marketing pages
   const staticRoutes: MetadataRoute.Sitemap = [
     {
       url: `${baseUrl}`,
@@ -40,36 +41,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  // Static pre-rendered blog posts
-  const staticPosts = getAllBlogPosts().map((post) => ({
-    url: `${baseUrl}/blog/${post.slug}`,
-    lastModified: new Date(post.publishedAt || now),
-    changeFrequency: 'weekly' as const,
-    priority: 0.8,
-  }));
-
-  // Dynamic database platform blog posts (if any)
-  let dbPosts: MetadataRoute.Sitemap = [];
+  // Dynamic live blog posts from getLiveBlogPosts (merges static cornerstone + platform_blog_posts + outdart content_drafts)
+  let blogRoutes: MetadataRoute.Sitemap = [];
   try {
-    const supabase = createAdminClient();
-    const { data: posts } = await supabase
-      .from('platform_blog_posts')
-      .select('slug, updated_at, created_at')
-      .eq('status', 'published')
-      .order('created_at', { ascending: false });
-
-    if (posts && posts.length > 0) {
-      dbPosts = posts.map((p) => ({
-        url: `${baseUrl}/blog/${p.slug}`,
-        lastModified: new Date(p.updated_at || p.created_at || now),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-      }));
-    }
-  } catch (_) {}
+    const livePosts = await getLiveBlogPosts();
+    blogRoutes = livePosts.map((post) => ({
+      url: `${baseUrl}/blog/${post.slug}`,
+      lastModified: new Date(post.updatedAt || post.publishedAt || now),
+      changeFrequency: 'weekly' as const,
+      priority: 0.8,
+    }));
+  } catch (err) {
+    console.warn('[Sitemap] Dynamic live posts fetch notice:', err);
+  }
 
   // Combine and deduplicate by URL
-  const allRoutes = [...staticRoutes, ...staticPosts, ...dbPosts];
+  const allRoutes = [...staticRoutes, ...blogRoutes];
   const seenUrls = new Set<string>();
   const uniqueRoutes: MetadataRoute.Sitemap = [];
 

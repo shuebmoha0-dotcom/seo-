@@ -58,13 +58,15 @@ export function PublicFooter() {
           </ul>
         </div>
 
-        <div className="space-y-3">
-          <h4 className="font-semibold text-neutral-900 text-xs uppercase tracking-wider">Connectors</h4>
+        <div className="space-y-3 col-span-2 md:col-span-1">
+          <h4 className="font-semibold text-neutral-900 text-xs uppercase tracking-wider">Featured Guides</h4>
           <ul className="space-y-2 text-xs text-neutral-600">
-            <li><span className="text-neutral-500">WordPress Connector</span></li>
-            <li><span className="text-neutral-500">GitHub (Next.js / React)</span></li>
-            <li><span className="text-neutral-500">Custom Webhook API</span></li>
-            <li><span className="text-neutral-500">Universal Web Crawler</span></li>
+            <li><Link href="/blog/b2b-seo-strategy" className="hover:text-indigo-600 transition-colors">B2B SEO Strategy</Link></li>
+            <li><Link href="/blog/seo-workflow-automation" className="hover:text-indigo-600 transition-colors">SEO Workflow Automation</Link></li>
+            <li><Link href="/blog/autonomous-ai-seo-agent" className="hover:text-indigo-600 transition-colors">Autonomous AI SEO Agents</Link></li>
+            <li><Link href="/blog/keyword-clustering" className="hover:text-indigo-600 transition-colors">Keyword Clustering</Link></li>
+            <li><Link href="/blog/seo-rank-tracking" className="hover:text-indigo-600 transition-colors">Rank Tracking Tools</Link></li>
+            <li><Link href="/blog/seo-content-brief-template" className="hover:text-indigo-600 transition-colors">Content Brief Template</Link></li>
           </ul>
         </div>
 
