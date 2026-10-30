@@ -253,7 +253,7 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
 
         {/* Cover Image */}
         {post.coverImage && (
-          <div className="relative h-72 md:h-[420px] w-full rounded-3xl overflow-hidden shadow-sm border border-neutral-200">
+          <div className="relative aspect-video w-full rounded-3xl overflow-hidden shadow-sm border border-neutral-200 bg-neutral-950">
             <img
               src={post.coverImage}
               alt={post.coverImageAlt || post.title}
@@ -262,9 +262,16 @@ export default async function BlogPostDetailPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Article Body (Markdown Formatted Presentation) */}
+        {/* Article Body (Markdown Formatted Presentation — strip embedded images when coverImage is rendered above so strictly 1 image appears per article) */}
         <article className="prose prose-neutral max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-neutral-900 prose-h2:text-2xl md:prose-h2:text-3xl prose-h2:mt-12 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3 prose-p:text-neutral-700 prose-p:leading-relaxed prose-p:text-base prose-li:text-neutral-700 prose-strong:text-neutral-900 prose-blockquote:border-l-indigo-600 prose-blockquote:bg-indigo-50/50 prose-blockquote:p-4 prose-blockquote:rounded-r-xl prose-table:border-neutral-200 prose-th:bg-neutral-50 prose-th:p-3 prose-td:p-3">
-          {renderMarkdownArticle(post.content)}
+          {renderMarkdownArticle(
+            post.coverImage
+              ? post.content
+                  .replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, "")
+                  .replace(/!\[[^\]]*\]\([^\)]+\)/g, "")
+                  .replace(/<img\s+[^>]*>/gi, "")
+              : post.content
+          )}
         </article>
 
         {/* Mid-Article / Post-Article Conversion CTA */}

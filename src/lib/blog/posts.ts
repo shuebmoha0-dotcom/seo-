@@ -61,8 +61,6 @@ Rather than dumping generic regurgitations, the agent leverages accumulated proj
 ### 4. Direct CMS Publication & Auto-Repair
 The loop doesn't end with a text document. The agent connects to your CMS (via secure Application Passwords or Webhooks) to stage or publish posts, attach high-resolution hero visuals, and trigger immediate Google Indexing requests.
 
-![Autonomous Search Agent Workflow Diagram](https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80 "Continuous Closed-Loop SEO Architecture: Ingestion, Analysis, Auto-Writing, and Indexing")
-
 ---
 
 ## The Three Pillars of Autonomous Search Dominance
@@ -138,8 +136,6 @@ Every top-ranking article follows a deliberate information architecture designed
 - Organize under clear H3 sub-headings (e.g., Step 1, Step 2, Step 3).
 - Provide concrete variables, formulas, or actionable workflows rather than abstract advice.
 - Embed contextual visual illustrations or data comparison tables.
-
-![High-Density Content Structure Model](https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80 "Information-Dense Editorial Pacing and Search Intent Mapping")
 
 ### 4. High-Intent H2: Common Pitfalls and Edge Cases (250–300 words)
 - Address frequent mistakes practitioners make when attempting the strategy.
@@ -253,8 +249,6 @@ Detection is only half the battle. True zero-touch systems bridge the gap betwee
 \`\`\`
 
 By automating technical hygiene, engineering teams save hundreds of hours of manual ticket resolution, while search engines reward your domain with rapid indexation and robust crawl efficiency.
-
-![Autonomous Technical Crawler Architecture](https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=1200&q=80 "Headless Crawler Node Graph: Depth-First URL Discovery & Canonical Verification")
 `
   },
   {
@@ -318,8 +312,6 @@ Rather than rewriting the entire post, surgically inject dedicated sections:
 ### Step 4: Internal Link Prioritization
 Point 3 to 5 internal links from your highest-authority existing pages directly to the target URL, using the striking distance query as the anchor text.
 
-![Google Search Console Striking Distance Growth Curve](https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?auto=format&fit=crop&w=1200&q=80 "Organic CTR Curve & Page 1 Search Position Multipliers")
-
 ---
 
 ## Exponential Returns: The Math of Page 1 Jumps
@@ -376,8 +368,6 @@ Successful programmatic SEO requires:
 1. **A Proprietary or Structured Dataset**: Real data, integration parameters, price points, city stats, or feature matrices that provide genuine utility.
 2. **Dynamic UI Modules**: Interactive calculators, comparison charts, copyable templates, or visual widgets unique to each page variation.
 3. **Intent-Specific Routing**: Matching queries where searchers specifically seek localized, comparative, or integration-specific answers.
-
-![Programmatic Content Architecture Schema](https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1200&q=80 "Database-Driven Page Generation Pipeline & Structured Index Architecture")
 
 ---
 
@@ -541,18 +531,39 @@ Programmatic SEO allows your organic acquisition to scale with your database rat
   },
 ];
 
+/**
+ * Normalizes Outdart blog markdown so:
+ * 1. Embedded markdown images are stripped (since coverImage renders prominently at the top of the article).
+ * 2. Internal links missing `/blog/` (e.g. https://outdart.com/seo-rank-tracking) are rewritten to https://outdart.com/blog/seo-rank-tracking.
+ * 3. Legacy or cross-tenant links are repaired to canonical Outdart blog articles.
+ */
+export function sanitizeOutdartPostContent(rawContent?: string): string {
+  if (!rawContent) return '';
+  return rawContent
+    .replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '')
+    .replace(/!\[[^\]]*\]\([^\)]+\)\s*/g, '')
+    .replace(/https?:\/\/(?:www\.)?outdart\.com\/blog\/247-continuous-autonomous-seo-engine[^\s\)]*/g, 'https://outdart.com/blog/how-autonomous-ai-agents-redefine-seo')
+    .replace(/https?:\/\/(?:www\.)?outdart\.com\/blog\/google-search-console-rank-tracking/g, 'https://outdart.com/blog/seo-rank-tracking')
+    .replace(/https?:\/\/(?:www\.)?outdart\.com\/(?!blog\/|login|pricing|privacy|terms|dashboard|api|auth)([a-z0-9-]+)\/?/gi, 'https://outdart.com/blog/$1')
+    .replace(/\[([^\]]+)\]\(https?:\/\/(?:www\.)?bizaigenius\.com\/[^\)]*\)/gi, '[$1](https://outdart.com/blog/zero-touch-technical-seo)')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function getAllBlogPosts(): BlogPost[] {
-  return [...BLOG_POSTS].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-  );
+  return [...BLOG_POSTS]
+    .map((p) => ({ ...p, content: sanitizeOutdartPostContent(p.content) }))
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 }
 
 export function getFeaturedBlogPost(): BlogPost {
-  return BLOG_POSTS.find((p) => p.featured) || BLOG_POSTS[0];
+  const post = BLOG_POSTS.find((p) => p.featured) || BLOG_POSTS[0];
+  return { ...post, content: sanitizeOutdartPostContent(post.content) };
 }
 
 export function getBlogPostBySlug(slug: string): BlogPost | undefined {
-  return BLOG_POSTS.find((p) => p.slug === slug);
+  const post = BLOG_POSTS.find((p) => p.slug === slug);
+  return post ? { ...post, content: sanitizeOutdartPostContent(post.content) } : undefined;
 }
 
 export function getRelatedPosts(currentSlug: string, category: string, limit = 3): BlogPost[] {
@@ -563,7 +574,8 @@ export function getRelatedPosts(currentSlug: string, category: string, limit = 3
       if (b.category === category && a.category !== category) return 1;
       return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
     })
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((p) => ({ ...p, content: sanitizeOutdartPostContent(p.content) }));
 }
 
 /**
@@ -607,7 +619,7 @@ export async function getLiveBlogPosts(): Promise<BlogPost[]> {
         slug: d.slug,
         title: d.title,
         excerpt: d.excerpt,
-        content: d.content,
+        content: sanitizeOutdartPostContent(d.content),
         category: d.category as any,
         author: {
           name: d.author_name || 'Editorial Team',
@@ -645,7 +657,7 @@ export async function getLiveBlogPosts(): Promise<BlogPost[]> {
         slug: draft.url_slug,
         title: draft.working_title,
         excerpt: draft.meta_description || draft.working_title,
-        content: draft.content_body,
+        content: sanitizeOutdartPostContent(draft.content_body),
         category: (rev.target_category || rev.category || cat) as any,
         author: {
           name: 'Editorial Team',
@@ -688,18 +700,11 @@ export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | un
 
     if (!error && d) {
       const staticPost = getBlogPostBySlug(slug);
-      // If the database has an older seed copy that lacks the embedded visual diagrams,
-      // prefer the enriched static content so visitors always see rich illustrations.
-      const contentToUse =
-        staticPost && !d.content?.includes("![") && staticPost.content?.includes("![")
-          ? staticPost.content
-          : d.content;
-
       return {
         slug: d.slug,
         title: d.title,
         excerpt: d.excerpt,
-        content: contentToUse,
+        content: sanitizeOutdartPostContent(d.content || staticPost?.content),
         category: d.category as any,
         author: {
           name: d.author_name || 'Editorial Team',
@@ -753,7 +758,7 @@ export async function getLiveBlogPostBySlug(slug: string): Promise<BlogPost | un
           slug: draft.url_slug,
           title: draft.working_title,
           excerpt: draft.meta_description || draft.working_title,
-          content: draft.content_body,
+          content: sanitizeOutdartPostContent(draft.content_body),
           category: (rev.target_category || rev.category || cat) as any,
           author: {
             name: 'Editorial Team',

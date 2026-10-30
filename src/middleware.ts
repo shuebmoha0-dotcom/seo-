@@ -22,6 +22,34 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/sitemap.xml',
   '/sitemap',
   '/robots.txt',
+  '/seautopilotindexnowkey.txt',
+]);
+
+const PROTECTED_APP_ROOTS = new Set([
+  'admin',
+  'api',
+  'auth',
+  'autopilot',
+  'backlinks',
+  'competitors',
+  'content-planner',
+  'dashboard',
+  'image-agent',
+  'integrations',
+  'internal-linking',
+  'keywords',
+  'memory',
+  'on-page-seo',
+  'onboarding',
+  'opportunities',
+  'rank-tracking',
+  'schedule',
+  'settings',
+  'site-explorer',
+  'strategy',
+  'technical-seo',
+  'usage',
+  'workflows',
 ]);
 
 const PUBLIC_PAGE_PREFIXES = [
@@ -59,6 +87,25 @@ function isPublicApi(pathname: string, method: string): boolean {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const method = request.method;
+
+  // 0. Canonical Blog Slug Redirects (301) for root-level internal links or legacy blog slugs
+  const cleanPathname = pathname.replace(/\/+$/, '') || '/';
+  if (cleanPathname.includes('247-continuous-autonomous-seo-engine')) {
+    return NextResponse.redirect(new URL('/blog/how-autonomous-ai-agents-redefine-seo', request.url), 301);
+  }
+  if (cleanPathname === '/blog/google-search-console-rank-tracking' || cleanPathname === '/google-search-console-rank-tracking') {
+    return NextResponse.redirect(new URL('/blog/seo-rank-tracking', request.url), 301);
+  }
+  const segments = cleanPathname.split('/').filter(Boolean);
+  if (
+    segments.length === 1 &&
+    !PUBLIC_EXACT_PAGES.has(cleanPathname) &&
+    !PROTECTED_APP_ROOTS.has(segments[0]) &&
+    !segments[0].includes('.') &&
+    segments[0].includes('-')
+  ) {
+    return NextResponse.redirect(new URL(`/blog/${segments[0]}`, request.url), 301);
+  }
 
   // Fast-path public webhook/connector APIs so external callers (Telegram, WordPress, Cron) never wait on cookie auth
   if (pathname.startsWith('/api/') && isPublicApi(pathname, method) && !pathname.startsWith('/api/platform/blog')) {

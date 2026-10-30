@@ -87,15 +87,25 @@ export async function GET(request: Request) {
       console.warn('[Content Draft GET] Query assembly error:', queryErr?.message);
     }
 
-    // Query recently completed WordPress jobs strictly for this website
-    const { data: wpJobs } = await supabase
-      .from('wordpress_jobs')
-      .select('id, idempotency_key, payload, result, completed_at')
-      .in('job_type', ['create_post', 'update_post'])
-      .eq('status', 'completed')
-      .eq('website_id', websiteId)
-      .order('completed_at', { ascending: false })
-      .limit(50);
+    // Query recently completed WordPress jobs and website info strictly for this website
+    const [{ data: wpJobs }, { data: siteRow }] = await Promise.all([
+      supabase
+        .from('wordpress_jobs')
+        .select('id, idempotency_key, payload, result, completed_at')
+        .in('job_type', ['create_post', 'update_post'])
+        .eq('status', 'completed')
+        .eq('website_id', websiteId)
+        .order('completed_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('websites')
+        .select('domain, url')
+        .eq('id', websiteId)
+        .maybeSingle(),
+    ]);
+
+    const siteBase = (siteRow?.url || (siteRow?.domain ? `https://${siteRow.domain}` : '')).replace(/\/+$/, '');
+    const isPlatformBlogSite = Boolean(siteBase.toLowerCase().includes('outdart'));
 
     const jobsByDraftId = new Map<string, any>();
     const jobsByTitle = new Map<string, any>();
@@ -156,6 +166,13 @@ export async function GET(request: Request) {
 
       if (wpUrl && currentStatus !== 'published') {
         currentStatus = 'published';
+      }
+
+      if (!wpUrl && currentStatus === 'published' && d.url_slug && siteBase) {
+        const cleanSlug = d.url_slug.replace(/^\/+|\/+$/g, '').replace(/^blog\//, '');
+        wpUrl = isPlatformBlogSite
+          ? `${siteBase}/blog/${cleanSlug}`
+          : `${siteBase}/${cleanSlug}/`;
       }
 
       let cleanBody = d.content_body || '';
@@ -451,11 +468,12 @@ export async function POST(request: Request) {
       try {
         const [pagesRes, draftsRes, webRes] = await Promise.all([
           supabase.from('pages').select('path, title, h1').eq('website_id', website_id).limit(15),
-          supabase.from('content_drafts').select('working_title, url_slug, revision_notes').eq('website_id', website_id).in('status', ['published', 'ready_for_approval', 'approved']).limit(15),
+          supabase.from('content_drafts').select('working_title, url_slug, revision_notes').eq('website_id', website_id).eq('status', 'published').limit(15),
           supabase.from('websites').select('url, domain').eq('id', website_id).maybeSingle()
         ]);
 
-        const siteBase = webRes.data?.url || (webRes.data?.domain ? `https://${webRes.data.domain}` : 'https://example.com');
+        const siteBase = (webRes.data?.url || (webRes.data?.domain ? `https://${webRes.data.domain}` : 'https://example.com')).replace(/\/+$/, '');
+        const isOutdart = siteBase.toLowerCase().includes('outdart');
 
         if (draftsRes.data) {
           for (const d of draftsRes.data) {
@@ -468,7 +486,8 @@ export async function POST(request: Request) {
               } catch (_) {}
             }
             if (!dUrl && d.url_slug) {
-              dUrl = `${siteBase.replace(/\/$/, '')}/blog/${d.url_slug}`;
+              const cleanSlug = d.url_slug.replace(/^\/+|\/+$/g, '').replace(/^blog\//, '');
+              dUrl = isOutdart ? `${siteBase}/blog/${cleanSlug}` : `${siteBase}/${cleanSlug}/`;
             }
             if (dUrl && d.working_title) {
               resolvedInternalLinks.push(`[${d.working_title}](${dUrl})`);

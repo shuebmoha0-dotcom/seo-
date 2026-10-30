@@ -743,8 +743,17 @@ export default function ContentPlannerPage() {
     const target = draftToindex || selectedDraft;
     if (!target) return;
 
-    const domainBase = currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "");
-    const liveUrl = target.wordpress_post_url || (domainBase ? `${domainBase.replace(/\/$/, '')}/${target.url_slug}/` : `/${target.url_slug}/`);
+    const domainBase = (currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "")).replace(/\/+$/, "");
+    const cleanSlug = (target.url_slug || "").replace(/^\/+|\/+$/g, "").replace(/^blog\//, "");
+    const isOutdart = domainBase.toLowerCase().includes("outdart");
+    const fallbackUrl = domainBase
+      ? isOutdart
+        ? `${domainBase}/blog/${cleanSlug}`
+        : `${domainBase}/${cleanSlug}/`
+      : isOutdart
+        ? `/blog/${cleanSlug}`
+        : `/${cleanSlug}/`;
+    const liveUrl = target.wordpress_post_url || fallbackUrl;
 
     setRequestingIndex(target.id);
     try {

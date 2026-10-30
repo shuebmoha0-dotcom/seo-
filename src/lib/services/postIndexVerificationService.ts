@@ -276,6 +276,9 @@ export class PostIndexVerificationService {
           }
         } catch (inspectErr: any) {
           coverageState = 'Inspection API Unreachable';
+          if (inspectErr?.message?.includes('searchconsole.googleapis.com') && !primaryBlocker) {
+            primaryBlocker = 'Enable Google Search Console API in GCP Project 736097096117 (https://console.developers.google.com/apis/api/searchconsole.googleapis.com/overview?project=736097096117) for real-time URL Inspection.';
+          }
         }
       }
 
@@ -288,8 +291,22 @@ export class PostIndexVerificationService {
             websiteId,
             type: 'URL_UPDATED',
           });
-          if (subResult.google?.submitted || subResult.indexNow?.submitted) {
+          if (subResult.google?.submitted) {
             submittedUrls.push(url);
+            if (coverageState === 'Inspection API Unreachable' || coverageState === 'Pending Inspection') {
+              coverageState = 'Submitted via Google Indexing API (URL_UPDATED)';
+              verdict = 'NEUTRAL';
+            }
+          } else if (subResult.indexNow?.submitted) {
+            submittedUrls.push(url);
+            if (subResult.blocker?.type === 'GSC_OWNER_REQUIRED') {
+              coverageState = 'IndexNow Submitted (GSC Owner Permission Required for Googlebot)';
+              if (subResult.blocker.actionRequired && !primaryBlocker) {
+                primaryBlocker = subResult.blocker.actionRequired;
+              }
+            } else if (coverageState === 'Inspection API Unreachable' || coverageState === 'Pending Inspection') {
+              coverageState = 'Submitted via IndexNow & Sitemap Ping';
+            }
           } else {
             const reason = subResult.blocker?.message || subResult.google?.error || 'Indexing API rejected submission';
             blockedUrls.push({

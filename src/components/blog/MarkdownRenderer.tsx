@@ -43,10 +43,32 @@ export function renderInlineFormatting(text: string): React.ReactNode {
     const linkMatch = part.match(/^\[(.*?)\]\((.*?)\)$/);
     if (linkMatch) {
       const anchorText = linkMatch[1];
-      const href = linkMatch[2];
+      let href = linkMatch[2].trim();
       const isInternal = href.startsWith("/") || href.includes("outdart.com") || href.includes("seo-hazel-eight.vercel.app") || href.includes("seautopilot.io");
 
       if (isInternal) {
+        // Normalize internal blog links that were generated at root (/<slug>) instead of /blog/<slug>
+        try {
+          const pathOnly = href.startsWith("http") ? new URL(href).pathname : href;
+          const cleanPath = pathOnly.replace(/^\/+|\/+$/g, "");
+          const nonBlogRoots = new Set([
+            "", "login", "pricing", "blog", "dashboard", "privacy", "terms",
+            "landing", "forgot-password", "reset-password", "sitemap.xml", "robots.txt"
+          ]);
+          const firstSeg = cleanPath.split("/")[0] || "";
+          if (cleanPath && !nonBlogRoots.has(firstSeg) && !cleanPath.startsWith("blog/") && !cleanPath.startsWith("auth/") && !cleanPath.startsWith("api/")) {
+            href = `/blog/${cleanPath}`;
+          } else if (cleanPath.startsWith("blog/")) {
+            href = `/${cleanPath}`;
+          }
+          // Map known legacy slugs to their canonical live articles
+          if (href.includes("247-continuous-autonomous-seo-engine")) {
+            href = "/blog/how-autonomous-ai-agents-redefine-seo";
+          } else if (href.endsWith("/google-search-console-rank-tracking")) {
+            href = "/blog/seo-rank-tracking";
+          }
+        } catch {}
+
         return (
           <Link
             key={index}

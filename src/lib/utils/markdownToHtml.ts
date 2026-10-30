@@ -38,10 +38,14 @@ export function markdownToWordPressHtml(markdown: string): string {
   // Clean empty lines at start
   html = html.replace(/^\s+/, '');
 
-  // 3. Convert Markdown Images safely by protecting URLs with placeholders
+  // 3. Convert Markdown Images safely by protecting URLs with placeholders (strictly max 1 image per article — Rule 11)
   // Match ![alt](url) and any immediately following italic caption (*alt* or _alt_) so duplicate captions are never generated
   const imagePlaceholders: string[] = [];
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)(?:\s*\n+\*+([^*\n]+)\*+)?/g, (match, alt, src, trailingItalic) => {
+    if (imagePlaceholders.length >= 1) {
+      // Strictly 1 image per article (Rule 11) — strip any duplicate or secondary images
+      return '';
+    }
     const cleanAlt = (alt || trailingItalic || 'Illustration').replace(/"/g, '&quot;').trim();
     const cleanSrc = src.trim();
     const placeholder = `__PROTECTED_IMAGE_BLOCK_${imagePlaceholders.length}__`;
