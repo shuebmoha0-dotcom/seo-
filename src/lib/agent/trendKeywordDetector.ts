@@ -45,7 +45,7 @@ export class TrendKeywordDetector {
     try {
       const { object } = await LLMProvider.generateObject({
         agent: 'KeywordAgent',
-        complexity: 'simple',
+        complexity: 'complex',
         schema: z.object({
           trends: z.array(z.object({
             keyword: z.string().describe('The breakout or rising search query'),

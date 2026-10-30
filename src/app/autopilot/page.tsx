@@ -583,6 +583,51 @@ export default function AutopilotPage() {
                   </div>
                 </div>
 
+                {/* Autonomous Strategic Reasoning & Closed-Loop Hypothesis Banner */}
+                {(fullAutopilot?.stats?.last_strategic_decision || fullAutopilot?.stats?.active_hypothesis || fullAutopilot?.stats?.last_article_title) && (
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-2.5 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-indigo-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          {fullAutopilot?.stats?.last_action_mode?.replace(/_/g, ' ') || 'Autonomous Strategy Brain'}
+                        </span>
+                        <span className="font-semibold text-neutral-900">
+                          Closed-Loop Decision &amp; Outcome Tracker
+                        </span>
+                      </div>
+                      <Link
+                        href="/strategy"
+                        className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
+                      >
+                        <span>View Full Strategic Roadmap</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+
+                    {fullAutopilot?.stats?.last_strategic_decision && (
+                      <div className="text-neutral-800 leading-relaxed">
+                        <strong className="text-neutral-900">Why the agent chose this action: </strong>
+                        {fullAutopilot.stats.last_strategic_decision}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                      {fullAutopilot?.stats?.active_hypothesis && (
+                        <div className="bg-white/90 border border-indigo-100 rounded-lg px-3 py-2 text-[11px] text-neutral-700">
+                          <span className="font-semibold text-indigo-700 block mb-0.5">🔬 Active Hypothesis (T+14d)</span>
+                          {fullAutopilot.stats.active_hypothesis}
+                        </div>
+                      )}
+                      {fullAutopilot?.stats?.last_outcome_evaluation && (
+                        <div className="bg-white/90 border border-indigo-100 rounded-lg px-3 py-2 text-[11px] text-neutral-700">
+                          <span className="font-semibold text-emerald-700 block mb-0.5">📈 Outcome Evaluation Loop</span>
+                          {fullAutopilot.stats.last_outcome_evaluation}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Autopilot Strategy & Execution Controls */}
                 <div className="bg-white/80 border border-neutral-200/90 rounded-2xl p-5 shadow-2xs space-y-4 relative z-10">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

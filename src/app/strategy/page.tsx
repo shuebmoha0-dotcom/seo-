@@ -52,6 +52,8 @@ export default function StrategyPage() {
     }
     return [];
   });
+  const [telemetry, setTelemetry] = useState<any>(null);
+  const [latestDecision, setLatestDecision] = useState<any>(null);
   const [loading, setLoading] = useState(() => {
     if (typeof window !== "undefined") {
       try {
@@ -69,6 +71,8 @@ export default function StrategyPage() {
     if (!currentWebsite) {
       setRoadmapPhases([]);
       setProjectMemory([]);
+      setTelemetry(null);
+      setLatestDecision(null);
       setLoading(false);
       return;
     }
@@ -86,6 +90,8 @@ export default function StrategyPage() {
         const mem = data.project_memory || [];
         setRoadmapPhases(phases);
         setProjectMemory(mem);
+        setTelemetry(data.telemetry || null);
+        setLatestDecision(data.latest_decision || null);
 
         if (typeof window !== "undefined") {
           sessionStorage.setItem(`seo_cached_strategy_phases_${currentWebsite.id}`, JSON.stringify(phases));
@@ -103,6 +109,8 @@ export default function StrategyPage() {
     if (!currentWebsite?.id) {
       setRoadmapPhases([]);
       setProjectMemory([]);
+      setTelemetry(null);
+      setLatestDecision(null);
       setLoading(false);
       return;
     }
@@ -122,7 +130,7 @@ export default function StrategyPage() {
     if (!currentWebsite) return;
     setEvaluating(true);
     try {
-      const res = await fetch("/api/agent/strategy", {
+      const res = await fetch("/api/strategy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -271,6 +279,58 @@ export default function StrategyPage() {
                 ))}
               </section>
 
+              {/* Autonomous Strategic Brain Diagnosis Card */}
+              {(telemetry || latestDecision) && (
+                <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-5 space-y-3 shadow-2xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                        <Brain className="w-3 h-3" />
+                        Autonomous Strategy Brain
+                      </span>
+                      <span className="text-xs font-semibold text-neutral-900">
+                        Live Empirical Diagnosis for {currentWebsite.domain}
+                      </span>
+                    </div>
+                    {telemetry && (
+                      <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-600 font-medium">
+                        <span>Published: <strong className="text-neutral-900">{telemetry.total_published_articles}</strong></span>
+                        <span>·</span>
+                        <span>Indexed: <strong className="text-emerald-700">{telemetry.indexation_rate_pct}%</strong></span>
+                        <span>·</span>
+                        <span>
+                          28d Impressions:{" "}
+                          <strong className="text-neutral-900">
+                            {telemetry.gsc_synced ? telemetry.gsc_total_impressions_28d.toLocaleString() : "Syncing GSC"}
+                          </strong>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {latestDecision?.content && (
+                    <p className="text-xs text-neutral-800 leading-relaxed bg-white/90 border border-indigo-100 rounded-lg p-3 font-medium">
+                      {latestDecision.content}
+                    </p>
+                  )}
+
+                  {telemetry && (telemetry.saturated_categories?.length > 0 || telemetry.thin_categories?.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                      {telemetry.saturated_categories?.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-medium">
+                          🔒 Saturated Pillars Locked: {telemetry.saturated_categories.slice(0, 3).join(", ")}
+                        </span>
+                      )}
+                      {telemetry.thin_categories?.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium">
+                          🎯 Priority Growth Pillars: {telemetry.thin_categories.slice(0, 4).join(", ")}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
+
               {/* Grid content */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left 2 Cols: Roadmap Phases */}
@@ -297,6 +357,11 @@ export default function StrategyPage() {
                     <div className="space-y-3">
                       {roadmapPhases.map((phase, idx) => {
                         const phaseStatus = phase.status || "Planned";
+                        const phaseItems = Array.isArray(phase.actions) && phase.actions.length > 0
+                          ? phase.actions
+                          : Array.isArray(phase.tasks)
+                          ? phase.tasks
+                          : [];
                         return (
                           <div
                             key={idx}
@@ -320,28 +385,48 @@ export default function StrategyPage() {
                               {phase.focus_description || phase.description}
                             </p>
 
-                            {phase.tasks && Array.isArray(phase.tasks) && phase.tasks.length > 0 && (
+                            {phaseItems.length > 0 && (
                               <div className="pl-8 pt-3 space-y-2 border-t border-neutral-100 mt-2">
                                 <span className="text-[10px] font-semibold text-neutral-400 uppercase tracking-wider block">
-                                  Action Items ({phase.tasks.length})
+                                  Action Items ({phaseItems.length})
                                 </span>
-                                <div className="space-y-1.5">
-                                  {phase.tasks.map((task: any, tIdx: number) => {
-                                    const taskId = task.id || task.title;
+                                <div className="space-y-2">
+                                  {phaseItems.map((task: any, tIdx: number) => {
+                                    const taskTitle = task.action_title || task.title || task;
+                                    const taskId = task.id || taskTitle;
                                     const isDelegated = delegatedList.includes(taskId);
                                     const isDelegating = delegatingId === taskId;
                                     return (
                                       <div
                                         key={tIdx}
-                                        className="flex items-center justify-between text-xs bg-neutral-50/70 px-3 py-2 rounded-lg border border-neutral-200/80"
+                                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs bg-neutral-50/70 px-3.5 py-2.5 rounded-lg border border-neutral-200/80"
                                       >
-                                        <span className="font-medium text-neutral-800">
-                                          {task.title || task}
-                                        </span>
+                                        <div className="space-y-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-semibold text-neutral-900">
+                                              {taskTitle}
+                                            </span>
+                                            {task.target_agent && (
+                                              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-medium">
+                                                {task.target_agent}
+                                              </span>
+                                            )}
+                                            {task.priority_score && (
+                                              <span className="text-[10px] text-neutral-500 font-mono">
+                                                ROI Score: {task.priority_score}/100
+                                              </span>
+                                            )}
+                                          </div>
+                                          {task.rationale && (
+                                            <p className="text-[11px] text-neutral-600 leading-relaxed">
+                                              {task.rationale}
+                                            </p>
+                                          )}
+                                        </div>
                                         <button
                                           onClick={() => handleDelegate(task)}
                                           disabled={isDelegated || isDelegating}
-                                          className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${
+                                          className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors shrink-0 self-start sm:self-center ${
                                             isDelegated
                                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                               : "bg-white border border-neutral-200 hover:bg-neutral-50 text-neutral-700 shadow-2xs"

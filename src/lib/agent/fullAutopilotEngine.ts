@@ -3,6 +3,9 @@ import { SiteNicheProfiler } from './siteNicheProfiler';
 import { SiteContentGapDetector } from './siteContentGapDetector';
 import { DuplicateArticleChecker } from './duplicateChecker';
 import { ContentAgent } from './contentAgent';
+import { StrategyAgent } from './strategyAgent';
+import { MonitoringAgent } from './monitoringAgent';
+import { TrendKeywordDetector } from './trendKeywordDetector';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { markdownToWordPressHtml, cleanMetaString } from '@/lib/utils/markdownToHtml';
 import { createWordPressJob } from '@/lib/connectors/wordpressOutbound';
@@ -26,12 +29,26 @@ export interface FullAutopilotConfig {
     last_cycle_status: string;
     last_article_title?: string;
     last_article_url?: string;
+    last_strategic_decision?: string;
+    last_action_mode?: string;
+    last_outcome_evaluation?: string;
+    active_hypothesis?: string;
   };
 }
 
 export interface AutonomousCycleResult {
   success: boolean;
   cycle_id: string;
+  strategic_decision?: {
+    action_mode: string;
+    primary_bottleneck: string;
+    rationale: string;
+    hypothesis: string;
+  };
+  outcome_evaluation?: {
+    evaluated_count: number;
+    summary: string;
+  };
   article?: {
     draft_id: string;
     title: string;
@@ -152,6 +169,10 @@ export class FullAutopilotEngine {
         last_cycle_status: rawConfig.last_cycle_status || (task.status === 'active' ? 'scheduled' : 'paused'),
         last_article_title: rawConfig.last_article_title,
         last_article_url: rawConfig.last_article_url,
+        last_strategic_decision: rawConfig.last_strategic_decision,
+        last_action_mode: rawConfig.last_action_mode,
+        last_outcome_evaluation: rawConfig.last_outcome_evaluation,
+        active_hypothesis: rawConfig.active_hypothesis,
       },
     };
   }
@@ -470,10 +491,26 @@ export class FullAutopilotEngine {
 
       const isDailyCapReached = (recentDraftsCount ?? 0) >= maxDailyArticles;
 
-      if (isDailyCapReached && !options?.force) {
-        console.log(`[FullAutopilotEngine] Daily article cap reached for ${domain} (${recentDraftsCount}/${maxDailyArticles} articles created in last 24h). Shifting cycle to striking-distance rank optimization and technical audit to grow search traffic without token waste.`);
+      // ── STEP 0: CLOSED-LOOP OUTCOME EVALUATION & STRATEGIC DECISION BRAIN ──
+      const strategyAgent = new StrategyAgent();
+      const [outcomeEvalReport, strategicDecision] = await Promise.all([
+        MonitoringAgent.runOutcomeEvaluationCycle(websiteId),
+        strategyAgent.diagnoseAndDecideNextAction(websiteId, {
+          goal: currentStatus.goal,
+          isDailyArticleCapReached: isDailyCapReached && !options?.force,
+        }),
+      ]);
 
-        // Step A: Technical SEO health check (lightweight, zero LLM token waste)
+      console.log(
+        `[FullAutopilotEngine] Strategic Brain Decision: [${strategicDecision.selected_action_mode}] | Bottleneck: ${strategicDecision.primary_bottleneck} | Outcomes: ${outcomeEvalReport.summary}`
+      );
+
+      if (isDailyCapReached && !options?.force) {
+        console.log(
+          `[FullAutopilotEngine] Daily article cap reached for ${domain} (${recentDraftsCount}/${maxDailyArticles} articles created in last 24h). Executing Strategic Mode [${strategicDecision.selected_action_mode}].`
+        );
+
+        // Step A: Technical SEO health check
         if (autoFix) {
           try {
             const { WebsiteCrawler } = await import('./crawler');
@@ -489,7 +526,7 @@ export class FullAutopilotEngine {
           }
         }
 
-        // Step B: Intelligent Striking-Distance Growth Mining from Search Console
+        // Step B: Execute Selected Autonomous Optimization Tool (CTR Rewrite / Rank Recovery / Internal Links)
         let growthSprintSummary = '';
         try {
           const { RankRecoveryEngine } = await import('./rankRecoveryEngine');
@@ -499,13 +536,35 @@ export class FullAutopilotEngine {
             siteUrl,
           });
 
-          if (recoveryReport.striking_distance_count > 0) {
-            const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+          if (recoveryReport.striking_distance_count > 0 || recoveryReport.detected_drops_count > 0) {
+            await RankRecoveryEngine.persistOpportunitiesToDatabase({
               websiteId,
               report: recoveryReport,
             });
+          }
+
+          const optMode =
+            strategicDecision.selected_action_mode === 'RECOVER_DECAYING_PAGE' ||
+            strategicDecision.selected_action_mode === 'OPTIMIZE_STRIKING_DISTANCE_CTR' ||
+            strategicDecision.selected_action_mode === 'INJECT_INTERNAL_LINKS'
+              ? strategicDecision.selected_action_mode
+              : 'INJECT_INTERNAL_LINKS';
+
+          const executedOpt = await RankRecoveryEngine.executeAutonomousOptimization({
+            websiteId,
+            domain,
+            siteUrl,
+            mode: optMode,
+            report: recoveryReport,
+          });
+
+          if (executedOpt.executed) {
+            growthSprintSummary = executedOpt.summary;
+            technicalFixesInfo.count += 1;
+            if (executedOpt.target_url) technicalFixesInfo.fixed_urls.push(executedOpt.target_url);
+          } else if (recoveryReport.striking_distance_count > 0) {
             const topOpp = recoveryReport.striking_distance_opportunities[0];
-            growthSprintSummary = `Identified ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at Pos #${topOpp?.current_position} with ${topOpp?.impressions} imps). Queued ${savedCount} CTR optimizations.`;
+            growthSprintSummary = `Monitored ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at Pos #${topOpp?.current_position}).`;
           }
         } catch (growthErr) {
           console.warn('[FullAutopilotEngine] Growth sprint notice:', growthErr);
@@ -536,12 +595,28 @@ export class FullAutopilotEngine {
           .update({
             last_run_at: new Date().toISOString(),
             next_run_at: nextRunAt,
+            schedule_config: {
+              ...currentStatus,
+              cadence,
+              auto_publish: autoPublish,
+              auto_fix_technical: autoFix,
+              total_articles_published: currentStatus.stats.total_articles_published || 0,
+              total_fixes_applied: (currentStatus.stats.total_fixes_applied || 0) + technicalFixesInfo.count,
+              total_cycles_completed: (currentStatus.stats.total_cycles_completed || 0) + 1,
+              last_cycle_status: 'completed',
+              last_article_title: currentStatus.stats.last_article_title,
+              last_article_url: currentStatus.stats.last_article_url,
+              last_strategic_decision: strategicDecision.strategic_rationale,
+              last_action_mode: strategicDecision.selected_action_mode,
+              last_outcome_evaluation: outcomeEvalReport.summary,
+              active_hypothesis: strategicDecision.expected_hypothesis.target_delta,
+            },
             updated_at: new Date().toISOString(),
           })
           .eq('name', 'Zero-Touch Full Autopilot')
           .or(`website_id.eq.${websiteId},and(website_id.is.null,project_id.eq.${projectId})`);
 
-        const capSummary = `Daily article quota active (${recentDraftsCount}/${maxDailyArticles} articles created in past 24h). Autopilot executed a Search Console Growth & Indexing Sprint: ${growthSprintSummary || 'monitored keyword positions'}${indexingAuditSummary ? ` · ${indexingAuditSummary}` : ''}. Next scheduled cycle: ${new Date(nextRunAt).toLocaleString()}.`;
+        const capSummary = `[${strategicDecision.selected_action_mode}] ${strategicDecision.strategic_rationale} ${growthSprintSummary || ''}${indexingAuditSummary ? ` · ${indexingAuditSummary}` : ''}. Next scheduled cycle: ${new Date(nextRunAt).toLocaleString()}.`;
 
         if (execution?.id) {
           await supabase
@@ -557,6 +632,16 @@ export class FullAutopilotEngine {
         return {
           success: true,
           cycle_id: cycleId,
+          strategic_decision: {
+            action_mode: strategicDecision.selected_action_mode,
+            primary_bottleneck: strategicDecision.primary_bottleneck,
+            rationale: strategicDecision.strategic_rationale,
+            hypothesis: strategicDecision.expected_hypothesis.target_delta,
+          },
+          outcome_evaluation: {
+            evaluated_count: outcomeEvalReport.evaluated_count,
+            summary: outcomeEvalReport.summary,
+          },
           technical_fixes: technicalFixesInfo,
           next_run_at: nextRunAt,
           summary: capSummary,
@@ -572,16 +657,40 @@ export class FullAutopilotEngine {
 
       console.log(`[FullAutopilotEngine] Authority Tier: ${profile.authorityTier.toUpperCase()} | KD Range: ${profile.keywordStrategy.kdMin}-${profile.keywordStrategy.kdMax} | Inventory: ${inventory.coveredTitles.length} existing articles`);
 
-      // ── STEP 2: CONTENT GAP DETECTION (ZERO CANNIBALIZATION) ─────────────
-      const gaps = await SiteContentGapDetector.findContentGaps({
-        inventory,
-        siteProfile: profile,
-        limit: 8,
-      });
+      // ── STEP 2: CONTENT GAP & TREND DETECTION (ZERO CANNIBALIZATION) ─────
+      const [gaps, trendingCandidates] = await Promise.all([
+        SiteContentGapDetector.findContentGaps({
+          inventory,
+          siteProfile: profile,
+          limit: 8,
+        }),
+        strategicDecision.selected_action_mode === 'CAPTURE_TRENDING_TOPIC'
+          ? TrendKeywordDetector.discoverTrendingKeywords({
+              websiteId,
+              domain,
+              siteUrl,
+              siteProfile: profile,
+              inventory,
+              limit: 4,
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const combinedRawGaps = [
+        ...trendingCandidates.map((t) => ({
+          keyword: t.keyword,
+          working_title: t.working_title,
+          target_category: t.target_category,
+          search_intent: t.search_intent,
+          estimated_volume: t.estimated_volume,
+          estimated_kd: t.estimated_kd,
+        })),
+        ...gaps,
+      ];
 
       // Pre-filter candidate gaps against live DuplicateArticleChecker
       const candidateGaps: any[] = [];
-      for (const gap of gaps) {
+      for (const gap of combinedRawGaps) {
         const dupCheck = await DuplicateArticleChecker.check({
           website_id: websiteId,
           primary_keyword: gap.keyword,
@@ -896,8 +1005,17 @@ export class FullAutopilotEngine {
         }
       }
 
-      // Update draft in database
+      // Update draft in database with testable T+14d Action Hypothesis
       const finalDraftStatus = isPublishedLive ? 'published' : 'ready_for_approval';
+      const articleHypothesis = MonitoringAgent.buildActionHypothesis({
+        actionType: 'create_post',
+        targetKeyword: selectedGap.keyword,
+        targetUrl: livePostUrl || undefined,
+        category: selectedGap.target_category,
+        expectedOutcome: strategicDecision.expected_hypothesis.target_delta,
+        evaluateAfterDays: 14,
+      });
+
       if (draftId) {
         await supabase
           .from('content_drafts')
@@ -918,6 +1036,8 @@ export class FullAutopilotEngine {
               autopilot_cycle_id: cycleId,
               indexed_at: indexingSummary ? new Date().toISOString() : undefined,
               indexing_status: indexingSummary || undefined,
+              strategic_mode: strategicDecision.selected_action_mode,
+              hypothesis: articleHypothesis,
             }),
             updated_at: new Date().toISOString(),
           })
@@ -973,7 +1093,7 @@ export class FullAutopilotEngine {
         }
       }
 
-      // ── STEP 5.5: STRIKING-DISTANCE GROWTH MINING & DUAL-ENGINE ACCELERATION ──
+      // ── STEP 5.5: STRIKING-DISTANCE GROWTH MINING & MULTI-TOOL BOOSTER ────
       let strikingDistanceSummary = '';
       try {
         const { RankRecoveryEngine } = await import('./rankRecoveryEngine');
@@ -983,13 +1103,35 @@ export class FullAutopilotEngine {
           siteUrl,
         });
 
-        if (recoveryReport.striking_distance_count > 0) {
-          const savedCount = await RankRecoveryEngine.persistOpportunitiesToDatabase({
+        if (recoveryReport.striking_distance_count > 0 || recoveryReport.detected_drops_count > 0) {
+          await RankRecoveryEngine.persistOpportunitiesToDatabase({
             websiteId,
             report: recoveryReport,
           });
+        }
+
+        // Execute secondary booster tool if recommended by Strategic Brain
+        if (
+          strategicDecision.secondary_booster_mode === 'OPTIMIZE_STRIKING_DISTANCE_CTR' ||
+          strategicDecision.secondary_booster_mode === 'RECOVER_DECAYING_PAGE' ||
+          strategicDecision.secondary_booster_mode === 'INJECT_INTERNAL_LINKS'
+        ) {
+          const boosterRes = await RankRecoveryEngine.executeAutonomousOptimization({
+            websiteId,
+            domain,
+            siteUrl,
+            mode: strategicDecision.secondary_booster_mode,
+            report: recoveryReport,
+          });
+          if (boosterRes.executed) {
+            strikingDistanceSummary = boosterRes.summary;
+            technicalFixesInfo.count += 1;
+          }
+        }
+
+        if (!strikingDistanceSummary && recoveryReport.striking_distance_count > 0) {
           const topOpp = recoveryReport.striking_distance_opportunities[0];
-          strikingDistanceSummary = `Discovered ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at #${topOpp?.current_position} · ${topOpp?.impressions} imps). Queued ${savedCount} High-CTR optimizations.`;
+          strikingDistanceSummary = `Discovered ${recoveryReport.striking_distance_count} striking-distance queries (Top: "${topOpp?.keyword}" at #${topOpp?.current_position} · ${topOpp?.impressions} imps).`;
         }
       } catch (growthErr) {
         console.warn('[FullAutopilotEngine] Striking-distance scan notice:', growthErr);
@@ -1038,6 +1180,10 @@ export class FullAutopilotEngine {
             last_cycle_status: 'completed',
             last_article_title: articleOutput.working_title,
             last_article_url: livePostUrl,
+            last_strategic_decision: strategicDecision.strategic_rationale,
+            last_action_mode: strategicDecision.selected_action_mode,
+            last_outcome_evaluation: outcomeEvalReport.summary,
+            active_hypothesis: articleHypothesis.expected_outcome,
           },
           updated_at: new Date().toISOString(),
         })
@@ -1051,7 +1197,7 @@ export class FullAutopilotEngine {
           .update({
             status: 'completed',
             completed_at: new Date().toISOString(),
-            result_summary: `Published "${articleOutput.working_title}" (${articleOutput.word_count} words). Auto-fixed ${technicalFixesInfo.count} tech issues. Next run: ${new Date(nextRunAt).toLocaleString()}.`,
+            result_summary: `[${strategicDecision.selected_action_mode}] Published "${articleOutput.working_title}" (${articleOutput.word_count} words) in [${selectedGap.target_category || 'Core Pillar'}]. ${strikingDistanceSummary ? `${strikingDistanceSummary} ` : ''}Next run: ${new Date(nextRunAt).toLocaleString()}.`,
           })
           .eq('id', execution.id);
       }
@@ -1061,21 +1207,27 @@ export class FullAutopilotEngine {
         const telegram = new TelegramService();
         let telegramMsg = `🚀 *Autonomous Cycle Completed!*\n\n`;
         telegramMsg += `🌐 *Website:* \`${domain}\`\n`;
+        telegramMsg += `🧠 *Strategic Mode:* \`${strategicDecision.selected_action_mode}\`\n`;
+        telegramMsg += `💡 *Why:* ${strategicDecision.strategic_rationale}\n`;
         telegramMsg += `📝 *Article:* "${articleOutput.working_title}"\n`;
         telegramMsg += `🎯 *Target Keyword:* \`${selectedGap.keyword}\` (KD ${selectedGap.estimated_kd})\n`;
         telegramMsg += `📊 *Word Count:* ${articleOutput.word_count} words\n`;
         if (livePostUrl) {
           telegramMsg += `🔗 *Live Post:* [${livePostUrl}](${livePostUrl})\n`;
         }
+        telegramMsg += `🔬 *Hypothesis (T+14d):* ${articleHypothesis.expected_outcome}\n`;
+        if (outcomeEvalReport.evaluated_count > 0) {
+          telegramMsg += `📈 *Past Outcomes:* ${outcomeEvalReport.summary}\n`;
+        }
         telegramMsg += `🛠️ *Technical SEO:* ${technicalFixesInfo.summary}\n`;
         if (strikingDistanceSummary) {
-          telegramMsg += `⚡ *Growth Acceleration:* ${strikingDistanceSummary}\n`;
+          telegramMsg += `⚡ *Growth Booster:* ${strikingDistanceSummary}\n`;
         }
         if (indexingVerificationSummary) {
           telegramMsg += `🔍 *Google Indexation:* ${indexingVerificationSummary}\n`;
         }
         telegramMsg += `⏱️ *Next Cycle:* ${new Date(nextRunAt).toUTCString()}\n\n`;
-        telegramMsg += `_Operating 24/7 autonomously with zero human intervention needed._`;
+        telegramMsg += `_Operating 24/7 autonomously with closed-loop strategy & learning._`;
 
         await telegram.notifyWebsiteSubscribers(websiteId, telegramMsg);
       } catch (_) {}
@@ -1083,10 +1235,20 @@ export class FullAutopilotEngine {
       return {
         success: true,
         cycle_id: cycleId,
+        strategic_decision: {
+          action_mode: strategicDecision.selected_action_mode,
+          primary_bottleneck: strategicDecision.primary_bottleneck,
+          rationale: strategicDecision.strategic_rationale,
+          hypothesis: articleHypothesis.expected_outcome,
+        },
+        outcome_evaluation: {
+          evaluated_count: outcomeEvalReport.evaluated_count,
+          summary: outcomeEvalReport.summary,
+        },
         article: publishedArticleInfo,
         technical_fixes: technicalFixesInfo,
         next_run_at: nextRunAt,
-        summary: `Successfully completed zero-touch cycle. Published "${articleOutput.working_title}" and verified technical health.`,
+        summary: `[${strategicDecision.selected_action_mode}] Published "${articleOutput.working_title}" (${strategicDecision.strategic_rationale}) and verified technical health.`,
       };
     } catch (cycleErr: any) {
       console.error('[FullAutopilotEngine] Autonomous cycle error:', cycleErr?.message || cycleErr);
