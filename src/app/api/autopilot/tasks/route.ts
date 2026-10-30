@@ -6,7 +6,7 @@ import { TaskParser } from '@/lib/agent/taskParser';
 import { AutopilotNLParser } from '@/lib/agent/autopilotNLParser';
 import { AutopilotExecutor } from '@/lib/agent/autopilotExecutor';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyWebsiteAccess } from '@/lib/auth/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/verifyWebsiteAccess';
 
 function safeBackground(fn: () => Promise<void>) {
   setImmediate(async () => {

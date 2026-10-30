@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyWebsiteAccess } from '@/lib/auth/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/verifyWebsiteAccess';
 import { WordPressClient } from '@/lib/connectors/wordpressClient';
 import { CustomSaaSClient } from '@/lib/connectors/customSaaSClient';
 import { decryptCredential } from '@/lib/utils/encryption';

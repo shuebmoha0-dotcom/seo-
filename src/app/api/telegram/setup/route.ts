@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { TelegramService } from '@/lib/telegram/telegramService';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyWebsiteAccess } from '@/lib/auth/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/verifyWebsiteAccess';
 
 export async function GET(request: Request) {
   try {

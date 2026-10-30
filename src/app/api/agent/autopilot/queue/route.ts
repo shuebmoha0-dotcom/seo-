@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyWebsiteAccess } from '@/lib/auth/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/verifyWebsiteAccess';
 import { SiteContentGapDetector } from '@/lib/agent/siteContentGapDetector';
 
 export async function GET(req: Request) {

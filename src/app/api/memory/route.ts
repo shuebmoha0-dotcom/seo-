@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { verifyWebsiteAccess } from '@/lib/auth/admin';
+import { verifyWebsiteAccess } from '@/lib/auth/verifyWebsiteAccess';
 
 // GET all memories, project instructions, and knowledge bank
 export async function GET(request: Request) {
