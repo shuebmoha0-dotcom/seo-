@@ -331,12 +331,25 @@ export class PostIndexVerificationService {
         }
 
         if (item.draftId) {
+          const matchingDraft = drafts.find((d) => d.id === item.draftId);
+          let existingNotes: Record<string, any> = {};
+          try {
+            existingNotes =
+              typeof matchingDraft?.revision_notes === 'string'
+                ? JSON.parse(matchingDraft.revision_notes)
+                : matchingDraft?.revision_notes || {};
+          } catch {}
+
           const notesObj = {
+            ...existingNotes,
             is_indexed: isIndexed,
             indexing_verdict: verdict,
             coverage_state: coverageState,
             last_indexed_check: new Date().toISOString(),
-            last_submitted_for_indexing: (subResult?.google?.submitted || subResult?.indexNow?.submitted) ? new Date().toISOString() : undefined,
+            last_submitted_for_indexing:
+              subResult?.google?.submitted || subResult?.indexNow?.submitted
+                ? new Date().toISOString()
+                : existingNotes.last_submitted_for_indexing,
             indexing_blocker: subResult?.blocker?.actionRequired,
           };
           await supabase.from('content_drafts').update({

@@ -1053,6 +1053,57 @@ export class FullAutopilotEngine {
         published_live: isPublishedLive,
       };
 
+      // ── STEP 4.5: AUTONOMOUS MULTI-DAY ROADMAP QUEUE SELF-REPLENISHMENT ───
+      // Ensure the user always has a visible forward-looking queue of at least 4 upcoming topics in Content Planner
+      try {
+        const { count: remainingQueued } = await supabase
+          .from('content_drafts')
+          .select('id', { count: 'exact', head: true })
+          .eq('website_id', websiteId)
+          .eq('status', 'brief_pending');
+
+        const currentQueueSize = remainingQueued ?? 0;
+        if (currentQueueSize < 4) {
+          const needed = 4 - currentQueueSize;
+          const unusedGaps = candidateGaps
+            .filter(
+              (g) =>
+                !g.draft_id &&
+                g.keyword.toLowerCase() !== selectedGap.keyword.toLowerCase() &&
+                g.working_title.toLowerCase() !== selectedGap.working_title.toLowerCase()
+            )
+            .slice(0, needed);
+
+          for (const nextGap of unusedGaps) {
+            await supabase.from('content_drafts').insert({
+              website_id: websiteId,
+              working_title: nextGap.working_title,
+              primary_keyword: nextGap.keyword,
+              search_intent: nextGap.search_intent || 'informational',
+              content_type: 'article',
+              target_audience: profile.targetAudience || 'B2B audience',
+              current_version: 1,
+              status: 'brief_pending',
+              url_slug: DuplicateArticleChecker.toSlug(nextGap.working_title).slice(0, 50).replace(/-+$/, ''),
+              revision_notes: JSON.stringify({
+                planned_by_agent: true,
+                target_category: nextGap.target_category || strategicDecision.target_category_or_pillar,
+                estimated_volume: nextGap.estimated_volume || 600,
+                estimated_kd: nextGap.estimated_kd || 20,
+              }),
+              created_at: new Date().toISOString(),
+            });
+          }
+          if (unusedGaps.length > 0) {
+            console.log(
+              `[FullAutopilotEngine] Autonomously replenished upcoming Content Roadmap queue with ${unusedGaps.length} verified topic(s).`
+            );
+          }
+        }
+      } catch (queueErr) {
+        console.warn('[FullAutopilotEngine] Roadmap replenishment notice:', queueErr);
+      }
+
       // ── STEP 5: TECHNICAL SEO AUDIT & AUTONOMOUS AUTO-FIX ─────────────────
       if (autoFix) {
         console.log(`[FullAutopilotEngine] Running technical SEO auto-fix crawl on ${domain}...`);

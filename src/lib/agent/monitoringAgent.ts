@@ -222,13 +222,20 @@ export class MonitoringAgent {
           },
         };
 
+        const updatedNotes: Record<string, any> = {
+          ...notes,
+          hypothesis: updatedHypothesis,
+        };
+
+        // If REGRESSION or STAGNANT, clear last_ctr_optimized_at so RankRecoveryEngine can self-heal this article
+        if (outcomeStatus === 'REGRESSION' || outcomeStatus === 'STAGNANT') {
+          delete updatedNotes.last_ctr_optimized_at;
+        }
+
         await supabase
           .from('content_drafts')
           .update({
-            revision_notes: JSON.stringify({
-              ...notes,
-              hypothesis: updatedHypothesis,
-            }),
+            revision_notes: JSON.stringify(updatedNotes),
           })
           .eq('id', draft.id);
 
@@ -241,6 +248,43 @@ export class MonitoringAgent {
             learningSummary: `[Outcome ${outcomeStatus}] ${outcomeSummary}`,
           });
           learningsRecorded.push(outcomeSummary);
+        }
+
+        // Autonomous Self-Healing: queue recovery opportunity & re-ping indexing for REGRESSION or STAGNANT articles
+        if (outcomeStatus === 'REGRESSION' || outcomeStatus === 'STAGNANT') {
+          try {
+            const problemTitle = `[AUTO-HEAL ${outcomeStatus}] "${draft.working_title}" (${draft.primary_keyword})`;
+            const { data: existingOpp } = await supabase
+              .from('seo_opportunities')
+              .select('id')
+              .eq('website_id', websiteId)
+              .eq('problem', problemTitle)
+              .maybeSingle();
+
+            if (!existingOpp) {
+              await supabase.from('seo_opportunities').insert({
+                website_id: websiteId,
+                problem: problemTitle,
+                evidence: outcomeSummary,
+                recommended_action: `1. Rewrite SEO title & meta description via OnPageAgent\n2. Inject 2026 FAQ block and internal links from top cluster hubs\n3. Re-submit URL to Google Indexing API`,
+                expected_impact: `Unlock indexation and initial Top-15 impressions within 14 days`,
+                confidence: 'high',
+                effort: 'low',
+                risk: 'low',
+                priority: 'high',
+                status: 'pending_approval',
+              });
+            }
+
+            if (notes.wordpress_post_url) {
+              const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
+              await GoogleIndexingService.requestIndexing({
+                url: notes.wordpress_post_url,
+                websiteId,
+                type: 'URL_UPDATED',
+              }).catch(() => {});
+            }
+          } catch {}
         }
 
         // Cap evaluations per cycle to 5 so it completes in < 2 seconds

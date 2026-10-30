@@ -486,14 +486,55 @@ export class RankRecoveryEngine {
 
         const kwLabel = targetKw || targetDraft.primary_keyword || targetDraft.working_title;
         const capKw = kwLabel.charAt(0).toUpperCase() + kwLabel.slice(1);
-        const newSeoTitle = cleanMetaString(
+        let newSeoTitle = cleanMetaString(
           topStrike?.prescriptive_actions?.title_hook_suggestion ||
             `${capKw}: Proven 2026 Framework & Step-by-Step Playbook`
         ).slice(0, 65);
-        const newMetaDesc = cleanMetaString(
+        let newMetaDesc = cleanMetaString(
           topStrike?.prescriptive_actions?.meta_description_suggestion ||
             `Master ${kwLabel} with our verified 2026 implementation guide. Actionable benchmarks, templates, and proven workflows for B2B teams.`
         ).slice(0, 158);
+        let updatedContentBody = targetDraft.content_body || '';
+
+        // Use Claude Sonnet 5 (complexity: 'complex', thinking disabled) to craft bespoke CTR title, meta, and recovery FAQ block
+        try {
+          const { object: aiBoost } = await LLMProvider.generateObject({
+            agent: 'OnPageAgent',
+            complexity: 'complex',
+            schema: z.object({
+              seo_title: z.string().describe('High-CTR 2026 SEO Title tag (50-62 characters) front-loading the target keyword'),
+              meta_description: z.string().describe('Compelling meta description (135-155 characters) with clear practitioner value'),
+              faq_refresh_markdown: z
+                .string()
+                .describe('Concise 2-question Markdown FAQ section (## Frequently Asked Questions on [Keyword]) to capture rich snippets and refresh page freshness'),
+            }),
+            system: `You are an elite On-Page SEO & CTR Optimization Agent for "${domain}".
+Write a high-converting SEO Title, Meta Description, and a concise 2-question Markdown FAQ expansion block to push this page into Google's Top 3.
+Rules: No Table of Contents, no fluff, strictly practitioner-grade.`,
+            prompt: `Optimization Mode: ${mode}
+Target Query: "${kwLabel}"
+Current Article Title: "${targetDraft.working_title}"
+Current SEO Title: "${targetDraft.seo_title || targetDraft.working_title}"
+Current Position: ${topStrike?.current_position ?? topDrop?.current_position ?? 'Striking Distance'}
+Current Impressions: ${topStrike?.impressions ?? 0} | Current CTR: ${topStrike?.ctr ?? 0}%`,
+          });
+
+          if (aiBoost?.seo_title) {
+            newSeoTitle = cleanMetaString(aiBoost.seo_title).slice(0, 65);
+          }
+          if (aiBoost?.meta_description) {
+            newMetaDesc = cleanMetaString(aiBoost.meta_description).slice(0, 158);
+          }
+          if (
+            aiBoost?.faq_refresh_markdown &&
+            updatedContentBody.length > 400 &&
+            !updatedContentBody.includes('## Frequently Asked Questions')
+          ) {
+            updatedContentBody = `${updatedContentBody.trim()}\n\n${aiBoost.faq_refresh_markdown.trim()}\n`;
+          }
+        } catch (aiErr: any) {
+          console.warn('[RankRecoveryEngine] Using deterministic CTR title/meta fallback:', aiErr?.message || aiErr);
+        }
 
         let notes: Record<string, any> = {};
         try {
@@ -526,6 +567,7 @@ export class RankRecoveryEngine {
           .update({
             seo_title: newSeoTitle,
             meta_description: newMetaDesc,
+            content_body: updatedContentBody,
             revision_notes: JSON.stringify({
               ...notes,
               last_ctr_optimized_at: new Date().toISOString(),
@@ -542,6 +584,7 @@ export class RankRecoveryEngine {
             payload: {
               slug: targetDraft.url_slug,
               title: targetDraft.working_title,
+              content: updatedContentBody !== (targetDraft.content_body || '') ? markdownToWordPressHtml(updatedContentBody) : undefined,
               seo_title: newSeoTitle,
               meta_description: newMetaDesc,
               focus_keyword: kwLabel,

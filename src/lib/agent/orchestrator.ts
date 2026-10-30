@@ -49,6 +49,7 @@ export class Orchestrator {
     
     const { object } = await LLMProvider.generateObject({
       agent: 'Orchestrator',
+      complexity: 'complex',
       schema: z.object({
         initial_tasks: z.array(z.object({
           task_id: z.string(),
@@ -214,7 +215,22 @@ Never ask the user for their website URL because the website context is already 
       pkg.status = 'EXECUTING';
       state.current_stage = 'EXECUTING_PACKAGE';
       console.log(`[Orchestrator] Automatically executing ${pkg.actions.length} approved actions...`);
-      await new Promise(res => setTimeout(res, 1000));
+
+      const websiteId = state.project_id;
+      if (websiteId && websiteId !== 'default') {
+        try {
+          const { RankRecoveryEngine } = await import('./rankRecoveryEngine');
+          await RankRecoveryEngine.executeAutonomousOptimization({
+            websiteId,
+            domain: '',
+            siteUrl: '',
+            mode: 'OPTIMIZE_STRIKING_DISTANCE_CTR',
+          });
+        } catch (execErr) {
+          console.warn('[Orchestrator] Package execution notice:', execErr);
+        }
+      }
+
       pkg.status = 'COMPLETED';
       state.current_stage = 'COMPLETED';
       console.log(`[Orchestrator] Execution successful.`);
@@ -241,13 +257,23 @@ Never ask the user for their website URL because the website context is already 
 
     const injectedContext = this.extractContextForAgent(task.target_agent, state);
     const targetUrl = task.input_data?.url || 'https://example.com';
-    const websiteId = task.input_data?.website_id || 'default';
+    const websiteId = task.input_data?.website_id || state.project_id || 'default';
 
     switch (task.target_agent) {
       case 'StrategyAgent': {
         const agent = new StrategyAgent();
-        const analysis = await agent.generateStrategyRoadmap('ESTABLISHED', 'increase_organic_traffic', 50, 100);
+        const analysis = await agent.generateStrategyRoadmap(
+          'ESTABLISHED',
+          'increase_organic_traffic',
+          0,
+          0,
+          websiteId !== 'default' ? websiteId : undefined
+        );
         findings.push(analysis.phases.map(p => p.phase_title).join(', '));
+        if (websiteId !== 'default') {
+          const decision = await agent.diagnoseAndDecideNextAction(websiteId);
+          findings.push(`Decision [${decision.selected_action_mode}]: ${decision.strategic_rationale}`);
+        }
         break;
       }
       case 'TechnicalSEOAgent': {
@@ -274,9 +300,12 @@ Never ask the user for their website URL because the website context is already 
         break;
       }
       case 'MonitoringAgent': {
-        const agent = new MonitoringAgent();
-        const alerts = await agent.analyzeRankingShifts([], []); 
-        findings.push(`Monitoring generated ${alerts.length} alerts for ${targetUrl}.`);
+        if (websiteId && websiteId !== 'default') {
+          const evalReport = await MonitoringAgent.runOutcomeEvaluationCycle(websiteId);
+          findings.push(evalReport.summary);
+        } else {
+          findings.push(`Monitoring completed for ${targetUrl}.`);
+        }
         break;
       }
       case 'CompetitorAgent': {

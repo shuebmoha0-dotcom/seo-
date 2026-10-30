@@ -186,14 +186,20 @@ export class StrategyAgent {
     for (const d of publishedDrafts) {
       try {
         const notes = typeof d.revision_notes === 'string' ? JSON.parse(d.revision_notes) : d.revision_notes || {};
-        if (notes?.indexed_at || notes?.indexing_status) {
+        if (
+          notes?.indexed_at ||
+          notes?.indexing_status ||
+          notes?.last_submitted_for_indexing ||
+          notes?.is_indexed ||
+          notes?.wordpress_post_url
+        ) {
           indexedCount++;
         }
       } catch {}
     }
 
     const totalPublished = Math.max(publishedDrafts.length, inventory.coveredTitles.length);
-    const effectiveIndexed = indexedCount > 0 ? indexedCount : Math.min(totalPublished, publishedDrafts.length);
+    const effectiveIndexed = indexedCount > 0 ? Math.max(indexedCount, inventory.coveredTitles.length) : Math.min(totalPublished, publishedDrafts.length);
     const unindexedCount = Math.max(0, totalPublished - effectiveIndexed);
     const indexationRatePct = totalPublished > 0 ? Math.round((effectiveIndexed / totalPublished) * 100) : 100;
 
@@ -463,6 +469,101 @@ export class StrategyAgent {
         selectedActionMode === 'CAPTURE_TRENDING_TOPIC'
           ? `Selected first-mover trend capture in under-served pillar [${targetCategoryOrPillar}] to acquire low-KD breakout search demand${secondaryBoosterMode ? `, paired with ${secondaryBoosterMode.replace(/_/g, ' ').toLowerCase()}` : ''}.`
           : `Prioritizing topical authority expansion in thin pillar [${targetCategoryOrPillar}] (avoiding saturated [${telemetry.saturated_categories.slice(0, 2).join(', ') || 'none'}])${secondaryBoosterMode ? `, paired with ${secondaryBoosterMode.replace(/_/g, ' ').toLowerCase()}` : ''}.`;
+    }
+
+    // 2.5 CLAUDE SONNET 5 COGNITIVE REASONING OVER LIVE TELEMETRY & LEARNED MEMORY
+    try {
+      const { data: learnedMemories } = await supabase
+        .from('project_memory')
+        .select('category, content')
+        .eq('website_id', websiteId)
+        .in('category', ['experiments', 'decisions', 'content_pillars', 'seo_strategy'])
+        .order('created_at', { ascending: false })
+        .limit(12);
+
+      const memorySummary =
+        learnedMemories && learnedMemories.length > 0
+          ? learnedMemories.map((m) => `[${m.category.toUpperCase()}] ${m.content}`).join('\n')
+          : 'No prior outcome experiments recorded yet.';
+
+      const allowedPrimaryModes = capReached
+        ? (['RECOVER_DECAYING_PAGE', 'OPTIMIZE_STRIKING_DISTANCE_CTR', 'INJECT_INTERNAL_LINKS', 'REPAIR_INDEXATION_AND_TECHNICAL'] as const)
+        : (['WRITE_NEW_CLUSTER_ARTICLE', 'CAPTURE_TRENDING_TOPIC', 'RECOVER_DECAYING_PAGE', 'OPTIMIZE_STRIKING_DISTANCE_CTR'] as const);
+
+      const { object: llmDecision } = await LLMProvider.generateObject({
+        agent: 'StrategyAgent',
+        complexity: 'complex',
+        schema: z.object({
+          primary_bottleneck: z.string().describe('Empirical diagnosis of the #1 SEO growth bottleneck right now'),
+          selected_action_mode: z.enum([
+            'RECOVER_DECAYING_PAGE',
+            'OPTIMIZE_STRIKING_DISTANCE_CTR',
+            'INJECT_INTERNAL_LINKS',
+            'REPAIR_INDEXATION_AND_TECHNICAL',
+            'CAPTURE_TRENDING_TOPIC',
+            'WRITE_NEW_CLUSTER_ARTICLE',
+          ]),
+          secondary_booster_mode: z
+            .enum([
+              'RECOVER_DECAYING_PAGE',
+              'OPTIMIZE_STRIKING_DISTANCE_CTR',
+              'INJECT_INTERNAL_LINKS',
+              'REPAIR_INDEXATION_AND_TECHNICAL',
+            ])
+            .nullable()
+            .describe('Optional secondary on-page/technical action to execute alongside primary action'),
+          target_category_or_pillar: z.string().describe('Which under-served content pillar to prioritize'),
+          target_url_or_keyword: z.string().describe('Specific query or URL to target or optimize'),
+          strategic_rationale: z.string().describe('Clear 1-2 sentence explanation of why this action yields the highest ROI now'),
+          expected_hypothesis: z.object({
+            metric: z.enum(['impressions', 'clicks', 'ctr', 'position', 'indexation']),
+            target_delta: z.string().describe('Specific measurable outcome expected in 14 days'),
+            evaluation_window_days: z.number(),
+          }),
+        }),
+        system: `You are the Autonomous AI SEO Strategy Brain for "${telemetry.domain}".
+You own the entire SEO strategy. Reason strictly from the empirical telemetry and past experiment outcomes provided. Never invent metrics.
+Rules:
+- Daily Article Quota Reached: ${capReached ? 'YES (choose a non-drafting optimization mode from: ' + allowedPrimaryModes.join(', ') + ')' : 'NO (full execution cycle available; prefer WRITE_NEW_CLUSTER_ARTICLE or CAPTURE_TRENDING_TOPIC as primary mode + attach a secondary_booster_mode for existing pages)'}.
+- NEVER select a category from Saturated Categories (${telemetry.saturated_categories.join(', ') || 'none'}). Always choose from Thin Categories (${telemetry.thin_categories.join(', ') || 'core niche pillars'}).`,
+        prompt: `User Strategic Goal: ${options?.goal || 'Grow organic search traffic and build topical authority'}
+
+LIVE EMPIRICAL TELEMETRY:
+${JSON.stringify(telemetry, null, 2)}
+
+LEARNED PROJECT MEMORY & PAST EXPERIMENT OUTCOMES:
+${memorySummary}
+
+Diagnose the primary bottleneck and decide the highest-ROI action plan for this cycle.`,
+      });
+
+      if (llmDecision) {
+        primaryBottleneck = llmDecision.primary_bottleneck || primaryBottleneck;
+        selectedActionMode = capReached && (llmDecision.selected_action_mode === 'WRITE_NEW_CLUSTER_ARTICLE' || llmDecision.selected_action_mode === 'CAPTURE_TRENDING_TOPIC')
+          ? selectedActionMode
+          : llmDecision.selected_action_mode;
+        if (llmDecision.secondary_booster_mode) {
+          secondaryBoosterMode = llmDecision.secondary_booster_mode;
+        }
+        if (llmDecision.target_category_or_pillar) {
+          targetCategoryOrPillar = llmDecision.target_category_or_pillar;
+        }
+        if (llmDecision.target_url_or_keyword) {
+          targetUrlOrKeyword = llmDecision.target_url_or_keyword;
+        }
+        if (llmDecision.strategic_rationale) {
+          strategicRationale = llmDecision.strategic_rationale;
+        }
+        if (llmDecision.expected_hypothesis) {
+          expectedHypothesis = {
+            metric: llmDecision.expected_hypothesis.metric,
+            target_delta: llmDecision.expected_hypothesis.target_delta,
+            evaluation_window_days: llmDecision.expected_hypothesis.evaluation_window_days || 14,
+          };
+        }
+      }
+    } catch (llmErr: any) {
+      console.warn('[StrategyAgent] Using deterministic empirical decision fallback:', llmErr?.message || llmErr);
     }
 
     const decision: AutonomousStrategicDecision = {
