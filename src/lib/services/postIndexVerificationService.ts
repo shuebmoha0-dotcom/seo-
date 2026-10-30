@@ -162,10 +162,13 @@ export class PostIndexVerificationService {
       cachedSignals?: any;
     }>();
 
+    const isPlatformBlog = domain?.toLowerCase().includes('outdart');
     for (const d of drafts) {
       if (!d.url_slug) continue;
-      const cleanSlug = d.url_slug.replace(/^\/+|\/+$/g, '');
-      const fullUrl = `${siteBaseUrl}/${cleanSlug}/`;
+      const cleanSlug = d.url_slug.replace(/^\/+|\/+$/g, '').replace(/^blog\//, '');
+      const fullUrl = isPlatformBlog
+        ? `${siteBaseUrl}/blog/${cleanSlug}`
+        : `${siteBaseUrl}/${cleanSlug}/`;
       urlMap.set(fullUrl, {
         title: d.working_title || cleanSlug,
         slug: cleanSlug,
@@ -193,11 +196,25 @@ export class PostIndexVerificationService {
 
     console.log(`[PostIndexVerificationService] Found ${urlMap.size} published URLs to verify for ${domain}...`);
 
-    // 3. Setup Google Search Console Inspection client
+    // 3. Setup Google Search Console Inspection client (supports both Service Account JWT and OAuth2 token)
     let accessToken = await this.getGSCAccessToken();
-    let auth = new google.auth.OAuth2();
-    if (accessToken) auth.setCredentials({ access_token: accessToken });
-    let searchconsole = accessToken ? google.searchconsole({ version: 'v1', auth }) : null;
+    const saCreds = GoogleIndexingService.getServiceAccountCredentials();
+    let auth: any = null;
+    if (saCreds?.client_email && saCreds?.private_key) {
+      auth = new google.auth.JWT({
+        email: saCreds.client_email,
+        key: saCreds.private_key,
+        scopes: [
+          'https://www.googleapis.com/auth/webmasters.readonly',
+          'https://www.googleapis.com/auth/webmasters',
+        ],
+      });
+    } else if (accessToken) {
+      const oauth = new google.auth.OAuth2();
+      oauth.setCredentials({ access_token: accessToken });
+      auth = oauth;
+    }
+    let searchconsole = auth ? google.searchconsole({ version: 'v1', auth }) : null;
 
     const posts: PostIndexingStatus[] = [];
     const alreadyIndexedUrls: string[] = [];
@@ -346,10 +363,15 @@ export class PostIndexVerificationService {
             indexing_verdict: verdict,
             coverage_state: coverageState,
             last_indexed_check: new Date().toISOString(),
+            indexed_at:
+              subResult?.google?.submitted || subResult?.indexNow?.submitted
+                ? new Date().toISOString()
+                : existingNotes.indexed_at,
             last_submitted_for_indexing:
               subResult?.google?.submitted || subResult?.indexNow?.submitted
                 ? new Date().toISOString()
                 : existingNotes.last_submitted_for_indexing,
+            indexing_status: subResult?.summary || existingNotes.indexing_status,
             indexing_blocker: subResult?.blocker?.actionRequired,
           };
           await supabase.from('content_drafts').update({

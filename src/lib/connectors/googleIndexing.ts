@@ -394,6 +394,40 @@ export class GoogleIndexingService {
       }
 
       if (!token) {
+        const saCreds = this.getServiceAccountCredentials();
+        if (saCreds?.client_email && saCreds?.private_key) {
+          const jwtAuth = new google.auth.JWT({
+            email: saCreds.client_email,
+            key: saCreds.private_key,
+            scopes: [
+              'https://www.googleapis.com/auth/webmasters.readonly',
+              'https://www.googleapis.com/auth/webmasters',
+            ],
+          });
+          const searchconsole = google.searchconsole({
+            version: 'v1',
+            auth: jwtAuth,
+          });
+          const res = await searchconsole.urlInspection.index.inspect({
+            requestBody: {
+              inspectionUrl,
+              siteUrl,
+            },
+          });
+          const inspectionResult = res.data?.inspectionResult;
+          const indexStatusResult = inspectionResult?.indexStatusResult;
+          return {
+            success: true,
+            url: inspectionUrl,
+            verdict: indexStatusResult?.verdict || 'UNKNOWN',
+            coverageState: indexStatusResult?.coverageState || 'UNKNOWN',
+            robotTxtState: indexStatusResult?.robotsTxtState || 'UNKNOWN',
+            indexingState: indexStatusResult?.indexingState || 'UNKNOWN',
+            lastCrawlTime: indexStatusResult?.lastCrawlTime || undefined,
+            pageFetchState: indexStatusResult?.pageFetchState || 'UNKNOWN',
+          };
+        }
+
         return {
           success: false,
           url: inspectionUrl,

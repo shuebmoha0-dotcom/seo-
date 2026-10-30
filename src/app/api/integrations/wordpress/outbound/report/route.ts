@@ -77,36 +77,22 @@ export async function POST(request: Request) {
     if (isSuccess && job.job_type === 'create_post') {
       try {
         let draftId: string | null = null;
-        if (job.idempotency_key?.startsWith('create_post_draft_')) {
+        if ( job.idempotency_key?.startsWith('create_post_draft_') ) {
+          const parts = job.idempotency_key.split('_');
+          if (parts[3] && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[3])) {
+            draftId = parts[3];
+          }
+        } else if (job.idempotency_key?.startsWith('full_autopilot_post_')) {
           const parts = job.idempotency_key.split('_');
           if (parts[3] && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(parts[3])) {
             draftId = parts[3];
           }
         }
 
-        const wpMeta = JSON.stringify({
-          wordpress_post_id: result?.post_id || null,
-          wordpress_post_url: result?.permalink || null,
-          published_at: new Date().toISOString(),
-        });
-
-        // Update with existing columns in content_drafts schema so Postgres never rejects the update
-        const draftUpdatePayload: Record<string, any> = {
-          status: 'published',
-          revision_notes: wpMeta,
-          updated_at: new Date().toISOString(),
-        };
-
-        if (draftId) {
-          await supabase.from('content_drafts').update(draftUpdatePayload).eq('id', draftId);
-          console.log(`[Outbound Report] Marked draft ${draftId} as published live: ${result?.permalink}`);
-        } else if (job.payload?.title) {
-          await supabase.from('content_drafts').update(draftUpdatePayload).eq('working_title', job.payload.title);
-          console.log(`[Outbound Report] Marked draft title "${job.payload.title}" as published live: ${result?.permalink}`);
-        }
-
         // Automatically trigger multi-engine indexing (Google, IndexNow, Sitemap) on live publication
         const liveUrl = result?.permalink || (job.payload?.slug && site.site_url ? `${site.site_url.replace(/\/+$/, '')}/${job.payload.slug}/` : null);
+        let idxSummary = '';
+        let idxSubmitted = false;
         if (liveUrl) {
           try {
             const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
@@ -115,10 +101,58 @@ export async function POST(request: Request) {
               websiteId: job.website_id,
               type: 'URL_UPDATED',
             });
+            idxSummary = idxRes.summary;
+            idxSubmitted = Boolean(idxRes.google?.submitted || idxRes.indexNow?.submitted);
             console.log(`[Outbound Report] Auto-indexing completed for ${liveUrl}:`, idxRes.summary);
           } catch (idxErr) {
             console.warn('[Outbound Report] Auto-indexing notice:', idxErr);
           }
+        }
+
+        // Merge with existing revision_notes so we NEVER wipe out indexed_at, target_category, or featured_image_url
+        let existingNotes: Record<string, any> = {};
+        try {
+          let existingDraftQuery = supabase.from('content_drafts').select('id, revision_notes');
+          if (draftId) {
+            existingDraftQuery = existingDraftQuery.eq('id', draftId);
+          } else if (job.payload?.title) {
+            existingDraftQuery = existingDraftQuery.eq('working_title', job.payload.title);
+          }
+          const { data: existingDraft } = await existingDraftQuery.limit(1).maybeSingle();
+          if (existingDraft?.id && !draftId) draftId = existingDraft.id;
+          if (existingDraft?.revision_notes) {
+            existingNotes = typeof existingDraft.revision_notes === 'string'
+              ? JSON.parse(existingDraft.revision_notes)
+              : existingDraft.revision_notes;
+          }
+        } catch (_) {}
+
+        const nowIso = new Date().toISOString();
+        const wpMeta = JSON.stringify({
+          ...existingNotes,
+          wordpress_post_id: result?.post_id || existingNotes.wordpress_post_id || null,
+          wordpress_post_url: liveUrl || result?.permalink || existingNotes.wordpress_post_url || null,
+          published_at: existingNotes.published_at || nowIso,
+          ...(idxSubmitted || existingNotes.indexed_at ? {
+            indexed_at: nowIso,
+            last_submitted_for_indexing: nowIso,
+            indexing_status: idxSummary || existingNotes.indexing_status || 'Submitted to Google Indexing API & Sitemap',
+          } : {}),
+        });
+
+        // Update with existing columns in content_drafts schema so Postgres never rejects the update
+        const draftUpdatePayload: Record<string, any> = {
+          status: 'published',
+          revision_notes: wpMeta,
+          updated_at: nowIso,
+        };
+
+        if (draftId) {
+          await supabase.from('content_drafts').update(draftUpdatePayload).eq('id', draftId);
+          console.log(`[Outbound Report] Marked draft ${draftId} as published & indexed live: ${liveUrl}`);
+        } else if (job.payload?.title) {
+          await supabase.from('content_drafts').update(draftUpdatePayload).eq('working_title', job.payload.title);
+          console.log(`[Outbound Report] Marked draft title "${job.payload.title}" as published & indexed live: ${liveUrl}`);
         }
 
         // GUARANTEE FEATURED IMAGE: Check if newly published WordPress post has a valid thumbnail
