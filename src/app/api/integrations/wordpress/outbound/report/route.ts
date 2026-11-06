@@ -157,14 +157,14 @@ export async function POST(request: Request) {
 
         // GUARANTEE FEATURED IMAGE: Check if newly published WordPress post has a valid thumbnail
         const createdPostId = result?.post_id;
-        const heroUrl = job.payload?.featured_image_url || job.payload?.image_url;
+        let heroUrl = job.payload?.featured_image_http_url || job.payload?.featured_image_url || job.payload?.image_url || existingNotes?.featured_image_url;
         const dataUri = job.payload?.featured_image_data_uri;
-        if (createdPostId && (heroUrl || dataUri)) {
+        if (createdPostId) {
           try {
             const siteUrl = site.site_url.replace(/\/+$/, '');
             let hasThumbnail = false;
             try {
-              const wpCheck = await fetch(`${siteUrl}/wp-json/wp/v2/posts/${createdPostId}`, {
+              const wpCheck = await fetch(`${siteUrl}/wp-json/wp/v2/posts/${createdPostId}?_fields=id,featured_media`, {
                 signal: AbortSignal.timeout(4000),
               });
               if (wpCheck.ok) {
@@ -177,6 +177,15 @@ export async function POST(request: Request) {
 
             if (!hasThumbnail) {
               console.log(`[Outbound Report] Post #${createdPostId} is missing featured media. Auto-healing via upload_media pipeline...`);
+              if (!heroUrl && !dataUri) {
+                try {
+                  const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+                  heroUrl = CuratedEditorialProvider.generateImage(
+                    job.payload?.title || job.payload?.primary_keyword || job.payload?.focus_keyword || job.payload?.slug || 'B2B Strategy'
+                  ).url;
+                } catch (_) {}
+              }
+
               let base64Data = '';
               if (dataUri && typeof dataUri === 'string' && dataUri.includes(';base64,')) {
                 base64Data = dataUri.split(';base64,')[1];
@@ -206,9 +215,11 @@ export async function POST(request: Request) {
                   idempotency_key: `upload_feat_${createdPostId}_${Date.now()}`,
                 });
 
-                // Wake WordPress to process the upload immediately
-                fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
-                fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+                // AWAIT wakeup pings to WordPress (Rule 4: never abandon unawaited promises before NextResponse)
+                await Promise.allSettled([
+                  fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                  fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                ]);
               }
             }
           } catch (featErr) {
@@ -217,6 +228,57 @@ export async function POST(request: Request) {
         }
       } catch (draftUpdErr) {
         console.warn('[Outbound Report] Draft status update error:', draftUpdErr);
+      }
+    }
+
+    // Step 1.5: If an update_post job completed (and wasn't itself a thumbnail-attach job), verify the post didn't lose its thumbnail
+    if (isSuccess && job.job_type === 'update_post' && !job.payload?.featured_media) {
+      const updatedPostId = result?.post_id || job.payload?.post_id;
+      if (updatedPostId && site.site_url) {
+        try {
+          const siteUrl = site.site_url.replace(/\/+$/, '');
+          const wpCheck = await fetch(`${siteUrl}/wp-json/wp/v2/posts/${updatedPostId}?_fields=id,slug,title,featured_media`, {
+            signal: AbortSignal.timeout(3500),
+          });
+          if (wpCheck.ok) {
+            const wpData = await wpCheck.json();
+            if (!wpData.featured_media || Number(wpData.featured_media) === 0) {
+              console.log(`[Outbound Report] Updated post #${updatedPostId} has featured_media=0. Auto-healing via upload_media...`);
+              let heroUrl = job.payload?.featured_image_http_url || job.payload?.featured_image_url;
+              if (!heroUrl) {
+                const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+                heroUrl = CuratedEditorialProvider.generateImage(
+                  wpData.title?.rendered || job.payload?.title || wpData.slug || 'B2B Strategy'
+                ).url;
+              }
+              if (heroUrl && heroUrl.startsWith('http')) {
+                const imgRes = await fetch(heroUrl, { signal: AbortSignal.timeout(6000) });
+                if (imgRes.ok) {
+                  const buffer = await imgRes.arrayBuffer();
+                  const base64Data = Buffer.from(buffer).toString('base64');
+                  const slug = wpData.slug || job.payload?.slug || `post-${updatedPostId}`;
+                  await supabase.from('wordpress_jobs').insert({
+                    site_id: site.id,
+                    website_id: job.website_id,
+                    job_type: 'upload_media',
+                    status: 'pending',
+                    payload: {
+                      file_name: `${slug}-featured.webp`,
+                      file_data: base64Data,
+                      alt_text: wpData.title?.rendered || slug,
+                      target_post_id: Number(updatedPostId),
+                    },
+                    idempotency_key: `upload_feat_${updatedPostId}_${Date.now()}`,
+                  });
+                  await Promise.allSettled([
+                    fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                    fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                  ]);
+                }
+              }
+            }
+          }
+        } catch (_) {}
       }
     }
 
@@ -233,16 +295,18 @@ export async function POST(request: Request) {
             job_type: 'update_post',
             status: 'pending',
             payload: {
-              post_id: targetPostId,
-              featured_media: mediaId,
+              post_id: Number(targetPostId),
+              featured_media: Number(mediaId),
             },
             idempotency_key: `update_feat_${targetPostId}_${mediaId}_${Date.now()}`,
           });
 
-          // Wake WordPress
+          // AWAIT wakeup pings to WordPress so thumbnail attaches immediately (Rule 4)
           const siteUrl = site.site_url.replace(/\/+$/, '');
-          fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
-          fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+          await Promise.allSettled([
+            fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+            fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+          ]);
         }
       } catch (mediaErr) {
         console.warn('[Outbound Report] Error queueing update_post from upload_media:', mediaErr);

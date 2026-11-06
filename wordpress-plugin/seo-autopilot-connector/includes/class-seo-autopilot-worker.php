@@ -96,8 +96,8 @@ class SEO_Autopilot_Worker {
             }
         }
 
-        // 2. Direct image URL passed in payload
-        $img_url = $payload['featured_image_url'] ?? $payload['image_url'] ?? $payload['featured_image'] ?? '';
+        // 2. Direct image URL or Base64 Data URI passed in payload
+        $img_url = $payload['featured_image_data_uri'] ?? $payload['featured_image_url'] ?? $payload['image_url'] ?? $payload['featured_image'] ?? '';
 
         // 3. Fallback: Extract first image from content
         if (empty($img_url) && !empty($content)) {
@@ -488,6 +488,12 @@ class SEO_Autopilot_Worker {
 
     private static function op_update_post($payload) {
         $post_id = (int)($payload['post_id'] ?? $payload['id'] ?? 0);
+        if (!$post_id && !empty($payload['slug'])) {
+            $found = get_page_by_path(sanitize_title($payload['slug']), OBJECT, 'post');
+            if ($found && !empty($found->ID)) {
+                $post_id = (int)$found->ID;
+            }
+        }
         if (!$post_id || !get_post($post_id)) {
             throw new Exception("Post #{$post_id} not found.");
         }
@@ -521,13 +527,11 @@ class SEO_Autopilot_Worker {
             throw new Exception($result->get_error_message());
         }
 
-        if (isset($payload['featured_media'])) {
-            if (empty($payload['featured_media'])) {
-                delete_post_thumbnail($post_id);
-            } else {
-                set_post_thumbnail($post_id, (int)$payload['featured_media']);
-            }
-        } elseif (!empty($payload['featured_image_url']) || !empty($payload['image_url']) || !has_post_thumbnail($post_id)) {
+        if (!empty($payload['remove_featured_image'])) {
+            delete_post_thumbnail($post_id);
+        } elseif (!empty($payload['featured_media']) && (int)$payload['featured_media'] > 0) {
+            set_post_thumbnail($post_id, (int)$payload['featured_media']);
+        } elseif (!empty($payload['featured_image_data_uri']) || !empty($payload['featured_image_url']) || !empty($payload['image_url']) || !has_post_thumbnail($post_id)) {
             self::auto_set_featured_image($post_id, $payload, $payload['content'] ?? '');
         }
 

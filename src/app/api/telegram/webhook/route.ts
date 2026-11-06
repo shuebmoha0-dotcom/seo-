@@ -121,8 +121,14 @@ export async function POST(request: Request) {
               } catch (_) {}
             }
             if (!featuredImg && draft.content_body) {
-              const match = draft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+              const match = draft.content_body.match(/!\[.*?\]\(((?:https?:\/\/|data:image\/)[^\s\)]+)\)/i);
               if (match) featuredImg = match[1];
+            }
+            if (!featuredImg) {
+              try {
+                const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+                featuredImg = CuratedEditorialProvider.generateImage(draft.working_title || cleanKw || 'B2B Strategy').url;
+              } catch (_) {}
             }
             
             let wpSiteQuery = supabase
@@ -147,17 +153,10 @@ export async function POST(request: Request) {
                 const parsedNotes = typeof draft.revision_notes === 'string' ? JSON.parse(draft.revision_notes) : (draft.revision_notes || {});
                 targetCategory = parsedNotes?.target_category || parsedNotes?.category || '';
               } catch (_) {}
-              const { resolveWordPressCategoryIds } = await import('@/lib/connectors/wordpressOutbound');
-              const categoryIds = await resolveWordPressCategoryIds({
-                siteUrl: wpSite.site_url,
-                targetCategory,
-                title: draft.working_title,
-                keyword: cleanKw,
-              });
-              await supabase.from('wordpress_jobs').insert({
-                site_id: wpSite.id,
-                website_id: draft.website_id,
-                job_type: 'create_post',
+              const { createWordPressJob } = await import('@/lib/connectors/wordpressOutbound');
+              await createWordPressJob({
+                websiteId: draft.website_id,
+                jobType: 'create_post',
                 payload: {
                   title: draft.working_title,
                   content: formattedHtmlContent,
@@ -169,17 +168,17 @@ export async function POST(request: Request) {
                   focus_keyword: cleanKw,
                   primary_keyword: cleanKw,
                   target_category: targetCategory || undefined,
-                  ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
                   featured_image_url: featuredImg,
                 },
-                idempotency_key: `create_post_draft_${draft.id}_${Date.now()}`,
-                status: 'pending',
+                idempotencyKey: `create_post_draft_${draft.id}_${Date.now()}`,
               });
 
-              // Wake up WordPress plugin to execute immediately
+              // Wake up WordPress plugin to execute immediately (awaited per Rule 4)
               const siteUrl = wpSite.site_url.replace(/\/+$/, '');
-              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
-              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }).catch(() => {});
+              await Promise.allSettled([
+                fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+              ]);
             }
           } catch (wpErr) {
             console.warn('[Telegram Webhook] WordPress dispatch notice:', wpErr);

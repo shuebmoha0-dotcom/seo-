@@ -455,18 +455,23 @@ export class RankRecoveryEngine {
         const topDrop = report.detected_rank_drops[0];
         const targetKw = (mode === 'RECOVER_DECAYING_PAGE' ? topDrop?.keyword : topStrike?.keyword) || topStrike?.keyword || topDrop?.keyword;
 
-        // Match draft by keyword or pick the most eligible draft not optimized in last 14 days
+        // Match draft by keyword or pick the most eligible draft not optimized in last 14 days (and at least 3 days old)
+        const threeDaysAgoMs = Date.now() - 3 * 24 * 60 * 60 * 1000;
+        let matchedByKeyword = false;
         let targetDraft = drafts.find((d) => {
           if (!targetKw) return false;
           const kw = targetKw.toLowerCase();
-          return (
+          const isMatch =
             (d.primary_keyword || '').toLowerCase().includes(kw) ||
-            (d.working_title || '').toLowerCase().includes(kw)
-          );
+            (d.working_title || '').toLowerCase().includes(kw);
+          if (isMatch) matchedByKeyword = true;
+          return isMatch;
         });
 
         if (!targetDraft) {
           targetDraft = drafts.find((d) => {
+            const createdMs = d.created_at ? new Date(d.created_at).getTime() : 0;
+            if (createdMs > threeDaysAgoMs) return false; // Never overwrite brand-new articles just published!
             try {
               const notes = typeof d.revision_notes === 'string' ? JSON.parse(d.revision_notes) : d.revision_notes || {};
               return !notes?.last_ctr_optimized_at;
@@ -484,7 +489,7 @@ export class RankRecoveryEngine {
           };
         }
 
-        const kwLabel = targetKw || targetDraft.primary_keyword || targetDraft.working_title;
+        const kwLabel = (matchedByKeyword && targetKw) ? targetKw : (targetDraft.primary_keyword || targetDraft.working_title);
         const capKw = kwLabel.charAt(0).toUpperCase() + kwLabel.slice(1);
         let newSeoTitle = cleanMetaString(
           topStrike?.prescriptive_actions?.title_hook_suggestion ||

@@ -86,15 +86,9 @@ export const OpenAIImageProvider: ImageProvider = {
       size = '1536x1024'; // Default to 3:2 landscape
     }
 
-    const modelsToTry = [primaryModel];
-    if (fallbackModel && fallbackModel !== primaryModel) {
-      modelsToTry.push(fallbackModel);
-    }
-    if (!modelsToTry.includes('chatgpt-image-latest')) {
-      modelsToTry.push('chatgpt-image-latest');
-    }
-    if (!modelsToTry.includes('gpt-image-2')) {
-      modelsToTry.push('gpt-image-2');
+    const modelsToTry = ['gpt-image-1'];
+    if (primaryModel && !modelsToTry.includes(primaryModel)) {
+      modelsToTry.push(primaryModel);
     }
 
     let lastError: Error | null = null;
@@ -113,7 +107,7 @@ export const OpenAIImageProvider: ImageProvider = {
             n: 1,
             size,
           }),
-          signal: AbortSignal.timeout(35000),
+          signal: AbortSignal.timeout(18000),
         });
 
         if (!response.ok) {

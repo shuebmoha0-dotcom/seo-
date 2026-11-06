@@ -368,6 +368,12 @@ export async function createWordPressJob(params: {
 
   // Automatically enforce Rule 3 (Zero Table of Contents), WordPress category resolution, & layout hygiene on all posts
   if (params.jobType === 'create_post' || params.jobType === 'update_post') {
+    // CRITICAL: Never pass a falsy featured_media (0, null, "") in payload, because op_update_post in PHP
+    // calls delete_post_thumbnail($post_id) whenever isset($payload['featured_media']) && empty($payload['featured_media'])!
+    if ('featured_media' in payload && (!payload.featured_media || Number(payload.featured_media) <= 0)) {
+      delete payload.featured_media;
+    }
+
     payload.meta = {
       ...(payload.meta || {}),
       '_ez-toc-disabled': '1',
@@ -375,6 +381,48 @@ export async function createWordPressJob(params: {
       '_ez-toc-insert': '0',
       'ez-toc-insert': '0',
     };
+
+    // For update_post jobs dispatched with a slug but no post_id, resolve the live WordPress post_id automatically
+    let wpPostMissingThumbnail = false;
+    if (params.jobType === 'update_post' && !payload.post_id && !payload.id && payload.slug && site.site_url) {
+      try {
+        const cleanSiteUrl = site.site_url.replace(/\/+$/, '');
+        const wpLookup = await fetch(
+          `${cleanSiteUrl}/wp-json/wp/v2/posts?slug=${encodeURIComponent(payload.slug)}&_fields=id,featured_media`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (wpLookup.ok) {
+          const wpPosts = await wpLookup.json();
+          if (Array.isArray(wpPosts) && wpPosts.length > 0 && wpPosts[0].id) {
+            payload.post_id = Number(wpPosts[0].id);
+            if (!wpPosts[0].featured_media || Number(wpPosts[0].featured_media) === 0) {
+              wpPostMissingThumbnail = true;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Fallback: check content_drafts.revision_notes for wordpress_post_id
+      if (!payload.post_id) {
+        try {
+          const { data: draftMatch } = await supabase
+            .from('content_drafts')
+            .select('revision_notes')
+            .eq('website_id', params.websiteId)
+            .eq('url_slug', payload.slug)
+            .limit(1)
+            .maybeSingle();
+          if (draftMatch?.revision_notes) {
+            const notes = typeof draftMatch.revision_notes === 'string'
+              ? JSON.parse(draftMatch.revision_notes)
+              : draftMatch.revision_notes;
+            if (notes?.wordpress_post_id) {
+              payload.post_id = Number(notes.wordpress_post_id);
+            }
+          }
+        } catch (_) {}
+      }
+    }
 
     // Resolve WordPress category_ids if not already provided so posts never fall back to a single default WP category
     if (params.jobType === 'create_post' && (!Array.isArray(payload.category_ids) || payload.category_ids.length === 0) && site.site_url) {
@@ -390,12 +438,9 @@ export async function createWordPressJob(params: {
     }
 
     if (typeof payload.content === 'string' && payload.content.length > 0) {
-      const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(payload.content);
-      payload.content = repairedHtml;
-
-      // If featured_image_url not provided, extract the first hero image from content
+      // Extract image BEFORE autoRepairHtml or markdownToWordPressHtml strips anything
       if (!payload.featured_image_url && !payload.featured_media) {
-        const mdImg = payload.content.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+        const mdImg = payload.content.match(/!\[.*?\]\(((?:https?:\/\/|data:image\/)[^\s\)]+)\)/i);
         const htmlImg = payload.content.match(/<img[^>]+src=["']([^"']+)["']/i);
         if (mdImg) {
           payload.featured_image_url = mdImg[1];
@@ -403,25 +448,78 @@ export async function createWordPressJob(params: {
           payload.featured_image_url = htmlImg[1];
         }
       }
+
+      const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(payload.content);
+      payload.content = repairedHtml;
     }
 
-    // Pre-encode remote HTTP featured image as base64 Data URI to eliminate remote cURL failures on WordPress hosts
-    // Store in featured_image_data_uri while keeping featured_image_url as a valid HTTP URL
+    // Guarantee featured_image_url on create_post (or update_post when live post is missing a thumbnail)
+    if ((params.jobType === 'create_post' || wpPostMissingThumbnail) && !payload.featured_image_url && !payload.featured_media) {
+      if (payload.image_url) {
+        payload.featured_image_url = payload.image_url;
+      } else if (payload.featured_image) {
+        payload.featured_image_url = payload.featured_image;
+      }
+
+      // Check content_drafts in Supabase if slug or title is known
+      if (!payload.featured_image_url && (payload.slug || payload.title)) {
+        try {
+          let draftQuery = supabase
+            .from('content_drafts')
+            .select('revision_notes, content_body')
+            .eq('website_id', params.websiteId);
+          if (payload.slug) {
+            draftQuery = draftQuery.eq('url_slug', payload.slug);
+          } else {
+            draftQuery = draftQuery.eq('working_title', payload.title);
+          }
+          const { data: dRow } = await draftQuery.limit(1).maybeSingle();
+          if (dRow) {
+            if (dRow.revision_notes) {
+              const notes = typeof dRow.revision_notes === 'string' ? JSON.parse(dRow.revision_notes) : dRow.revision_notes;
+              if (notes?.featured_image_url) {
+                payload.featured_image_url = notes.featured_image_url;
+              }
+            }
+            if (!payload.featured_image_url && dRow.content_body) {
+              const bodyImg = dRow.content_body.match(/!\[.*?\]\(((?:https?:\/\/|data:image\/)[^\s\)]+)\)/i);
+              if (bodyImg) payload.featured_image_url = bodyImg[1];
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Ultimate Zero-Fail Fallback: Curated 16:9 widescreen editorial visual
+      if (!payload.featured_image_url) {
+        try {
+          const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+          payload.featured_image_url = CuratedEditorialProvider.generateImage(
+            payload.title || payload.primary_keyword || payload.focus_keyword || payload.slug || 'B2B Strategy'
+          ).url;
+        } catch (_) {}
+      }
+    }
+
+    // Pre-encode remote HTTP featured image as base64 Data URI to eliminate remote cURL/sideload failures on WordPress hosts
     if (
       payload.featured_image_url &&
       typeof payload.featured_image_url === 'string' &&
-      payload.featured_image_url.startsWith('http') &&
       !payload.featured_media
     ) {
-      try {
-        const imgRes = await fetch(payload.featured_image_url, { signal: AbortSignal.timeout(5000) });
-        if (imgRes.ok) {
-          const contentType = imgRes.headers.get('content-type') || 'image/webp';
-          const buffer = await imgRes.arrayBuffer();
-          payload.featured_image_data_uri = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+      if (payload.featured_image_url.startsWith('data:image/')) {
+        payload.featured_image_data_uri = payload.featured_image_url;
+      } else if (payload.featured_image_url.startsWith('http')) {
+        payload.featured_image_http_url = payload.featured_image_url;
+        try {
+          const imgRes = await fetch(payload.featured_image_url, { signal: AbortSignal.timeout(6000) });
+          if (imgRes.ok) {
+            const contentType = (imgRes.headers.get('content-type') || 'image/webp').split(';')[0].trim();
+            const buffer = await imgRes.arrayBuffer();
+            payload.featured_image_data_uri = `data:${contentType};base64,${Buffer.from(buffer).toString('base64')}`;
+          }
+        } catch (imgErr) {
+          // Non-blocking: poll endpoint will retry conversion at worker claim time
         }
-      } catch (imgErr) {
-        // Non-blocking: poll endpoint will retry conversion at worker claim time
       }
     }
   }

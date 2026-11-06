@@ -652,6 +652,19 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
         }
       }
 
+      if (!featuredImageUrl) {
+        const { CuratedEditorialProvider } = await import('../ai/imageRouter');
+        const fallbackImg = CuratedEditorialProvider.generateImage(brief.working_title || input.primary_keyword);
+        featuredImageUrl = fallbackImg.url;
+        if (enrichedImages.length > 0 && !enrichedImages[0].image_url) {
+          enrichedImages[0] = {
+            ...enrichedImages[0],
+            image_url: featuredImageUrl,
+            generation_status: 'generated',
+          };
+        }
+      }
+
       return { featuredImageUrl, featuredImageAlt, enrichedImages };
     })();
 

@@ -125,7 +125,7 @@ export class PostIndexVerificationService {
     // Check WordPress outbound site for authoritative live URL
     const { data: wpSite } = await supabase
       .from('wordpress_outbound_sites')
-      .select('site_url')
+      .select('id, site_url')
       .eq('website_id', websiteId)
       .eq('status', 'active')
       .maybeSingle();
@@ -152,6 +152,94 @@ export class PostIndexVerificationService {
 
     const drafts = draftsRes.data || [];
     const pages = pagesRes.data || [];
+
+    // 2.5. LIVE FEATURED IMAGE WATCHDOG:
+    // Automatically inspect live WordPress posts for missing featured images (featured_media === 0)
+    // and queue upload_media -> update_post self-healing jobs so no post ever stays without a featured image.
+    if (wpSite?.id && wpSite?.site_url) {
+      try {
+        const wpPostsRes = await fetch(
+          `${siteBaseUrl}/wp-json/wp/v2/posts?per_page=40&_fields=id,slug,title,featured_media`,
+          { signal: AbortSignal.timeout(4500) }
+        );
+        if (wpPostsRes.ok) {
+          const wpPosts = await wpPostsRes.json();
+          if (Array.isArray(wpPosts)) {
+            const missingThumbPosts = wpPosts.filter(
+              (p: any) => p.id && (!p.featured_media || Number(p.featured_media) === 0)
+            );
+            if (missingThumbPosts.length > 0) {
+              const { data: activeMediaJobs } = await supabase
+                .from('wordpress_jobs')
+                .select('payload')
+                .eq('site_id', wpSite.id)
+                .in('status', ['pending', 'claimed'])
+                .in('job_type', ['upload_media', 'update_post']);
+
+              const inFlightPostIds = new Set<number>();
+              for (const j of activeMediaJobs || []) {
+                const tid = Number(j.payload?.target_post_id || j.payload?.post_id || 0);
+                if (tid > 0) inFlightPostIds.add(tid);
+              }
+
+              let queuedHeals = 0;
+              for (const mp of missingThumbPosts.slice(0, 3)) {
+                const postId = Number(mp.id);
+                if (inFlightPostIds.has(postId)) continue;
+
+                const matchingDraft = drafts.find((d) => d.url_slug === mp.slug);
+                let heroUrl = '';
+                if (matchingDraft?.revision_notes) {
+                  try {
+                    const notes = typeof matchingDraft.revision_notes === 'string'
+                      ? JSON.parse(matchingDraft.revision_notes)
+                      : matchingDraft.revision_notes;
+                    if (notes?.featured_image_url) heroUrl = notes.featured_image_url;
+                  } catch (_) {}
+                }
+                if (!heroUrl) {
+                  const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+                  heroUrl = CuratedEditorialProvider.generateImage(
+                    mp.title?.rendered || matchingDraft?.working_title || mp.slug || 'B2B Strategy'
+                  ).url;
+                }
+
+                if (heroUrl && heroUrl.startsWith('http')) {
+                  const imgFetch = await fetch(heroUrl, { signal: AbortSignal.timeout(6000) });
+                  if (imgFetch.ok) {
+                    const buf = await imgFetch.arrayBuffer();
+                    const base64Data = Buffer.from(buf).toString('base64');
+                    await supabase.from('wordpress_jobs').insert({
+                      site_id: wpSite.id,
+                      website_id: websiteId,
+                      job_type: 'upload_media',
+                      status: 'pending',
+                      payload: {
+                        file_name: `${mp.slug || `post-${postId}`}-featured.webp`,
+                        file_data: base64Data,
+                        alt_text: (mp.title?.rendered || mp.slug || 'Featured Image').replace(/&#[0-9]+;/g, ''),
+                        target_post_id: postId,
+                      },
+                      idempotency_key: `watchdog_feat_${postId}_${new Date().toISOString().split('T')[0]}`,
+                    });
+                    queuedHeals++;
+                  }
+                }
+              }
+
+              if (queuedHeals > 0) {
+                await Promise.allSettled([
+                  fetch(`${siteBaseUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                  fetch(`${siteBaseUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+                ]);
+              }
+            }
+          }
+        }
+      } catch (watchdogErr) {
+        console.warn('[PostIndexVerificationService] Featured image watchdog notice:', watchdogErr);
+      }
+    }
 
     // Map of unique URLs to check
     const urlMap = new Map<string, {

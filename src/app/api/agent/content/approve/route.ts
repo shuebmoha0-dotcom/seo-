@@ -350,24 +350,22 @@ export async function POST(request: Request) {
             } catch (_) {}
           }
           if (!featuredImageUrl && updatedDraft.content_body) {
-            const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\((https?:\/\/[^\s\)]+)\)/i);
+            const imgMatch = updatedDraft.content_body.match(/!\[.*?\]\(((?:https?:\/\/|data:image\/)[^\s\)]+)\)/i);
             if (imgMatch) {
               featuredImageUrl = imgMatch[1];
             }
           }
+          if (!featuredImageUrl) {
+            try {
+              const { CuratedEditorialProvider } = await import('@/lib/ai/imageRouter');
+              featuredImageUrl = CuratedEditorialProvider.generateImage(updatedDraft.working_title || cleanKw || 'B2B Strategy').url;
+            } catch (_) {}
+          }
 
-          const { resolveWordPressCategoryIds } = await import('@/lib/connectors/wordpressOutbound');
-          const categoryIds = await resolveWordPressCategoryIds({
-            siteUrl: wpSite.site_url,
-            targetCategory,
-            title: updatedDraft.working_title,
-            keyword: cleanKw,
-          });
-
-          await supabase.from('wordpress_jobs').insert({
-            site_id: wpSite.id,
-            website_id: updatedDraft.website_id,
-            job_type: 'create_post',
+          const { createWordPressJob } = await import('@/lib/connectors/wordpressOutbound');
+          await createWordPressJob({
+            websiteId: updatedDraft.website_id,
+            jobType: 'create_post',
             payload: {
               title: updatedDraft.working_title,
               content: formattedHtmlContent,
@@ -379,21 +377,19 @@ export async function POST(request: Request) {
               focus_keyword: cleanKw,
               primary_keyword: cleanKw,
               target_category: targetCategory || undefined,
-              ...(categoryIds.length > 0 ? { category_ids: categoryIds } : {}),
               featured_image_url: featuredImageUrl || undefined,
             },
-            idempotency_key: `create_post_draft_${updatedDraft.id}_${Date.now()}`,
-            status: 'pending',
+            idempotencyKey: `create_post_draft_${updatedDraft.id}_${Date.now()}`,
           });
           console.log(`[Content Approval] Queued create_post job for draft ${updatedDraft.id} on WordPress site ${wpSite.site_url}`);
 
-          // Trigger asynchronous wakeup ping to WordPress so it executes immediately
+          // Trigger wakeup ping to WordPress so it executes immediately (awaited per Rule 4)
           try {
             const siteUrl = wpSite.site_url.replace(/\/+$/, '');
-            Promise.allSettled([
-              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2000) }),
-              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2000) }),
-            ]).catch(() => {});
+            await Promise.allSettled([
+              fetch(`${siteUrl}/wp-cron.php?doing_wp_cron=${Date.now()}`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+              fetch(`${siteUrl}/wp-json/seo-autopilot/v1/status?wake=1`, { method: 'GET', signal: AbortSignal.timeout(2500) }),
+            ]);
           } catch (pingErr) {
             console.warn('[Content Approval] Wakeup ping notice:', pingErr);
           }
