@@ -136,15 +136,21 @@ export async function notifyAdminOnTokenExhaustion(params: {
   model: string;
   agent: string;
   errorMessage: string;
+  fallbackProvider?: string;
+  fallbackModel?: string;
 }): Promise<void> {
   try {
     const { TelegramService } = await import('@/lib/telegram/telegramService');
     const telegram = new TelegramService();
+    const fallbackLine =
+      params.fallbackProvider && params.fallbackModel
+        ? `• *Adaptive Failover Active:* Switched to \`${params.fallbackProvider.toUpperCase()}\` (\`${params.fallbackModel}\`) until primary credits are restored\n`
+        : '';
     const alertText =
       `🚨 *[ADMIN ONLY] AI TOKENS / CREDITS EXHAUSTED*\n\n` +
-      `• *Provider:* \`${params.provider.toUpperCase()}\` (\`${params.model}\`)\n` +
+      `• *Exhausted Provider:* \`${params.provider.toUpperCase()}\` (\`${params.model}\`)\n` +
       `• *Component:* \`${params.agent}\`\n` +
-      `• *Status:* Out of tokens / API quota exhausted\n` +
+      fallbackLine +
       `• *Provider Response:* ${params.errorMessage.slice(0, 260)}\n\n` +
       `🔒 _This notification was sent strictly to the Admin Bot and hidden from all other users._`;
 
@@ -424,6 +430,8 @@ export const TextRouter = {
             model: primary.modelName,
             agent: options.agent,
             errorMessage: error.message || 'Provider token/credit quota exhausted',
+            fallbackProvider: fallback.provider,
+            fallbackModel: fallback.modelName,
           });
           break;
         }
@@ -565,6 +573,8 @@ export const TextRouter = {
             model: primary.modelName,
             agent: options.agent,
             errorMessage: error.message || 'Provider token/credit quota exhausted',
+            fallbackProvider: fallback.provider,
+            fallbackModel: fallback.modelName,
           });
           break;
         }
