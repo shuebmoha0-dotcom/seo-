@@ -35,7 +35,11 @@ export default function BacklinksPage() {
   const [researching, setResearching] = useState(false);
   const [selectedProspect, setSelectedProspect] = useState<any | null>(null);
   const [outreachDraft, setOutreachDraft] = useState<{ subject: string; body: string } | null>(null);
+  const [executionPayload, setExecutionPayload] = useState<any | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [executingAcquisition, setExecutingAcquisition] = useState(false);
+  const [buildingAssetFor, setBuildingAssetFor] = useState<string | null>(null);
+  const [executionNotice, setExecutionNotice] = useState<string | null>(null);
   const [approvedList, setApprovedList] = useState<string[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -169,24 +173,33 @@ export default function BacklinksPage() {
     }
   };
 
+  const isDirectoryDomain = (domain?: string) => {
+    const clean = (domain || "").toLowerCase().replace(/^www\./, "");
+    return /producthunt\.com|saashub\.com|betalist\.com|alternativeto\.net|g2\.com|capterra\.com|theresanaiforthat\.com|futurepedia\.io|toolify\.ai|indiehackers\.com|crunchbase\.com|f6s\.com|sourceforge\.net/i.test(clean);
+  };
+
   const handleDraftOutreach = async (prospect: any) => {
     setSelectedProspect(prospect);
     setDrafting(true);
     setOutreachDraft(null);
+    setExecutionPayload(null);
 
     try {
-      const res = await fetch("/api/agent/backlink/outreach/draft", {
+      const res = await fetch("/api/agent/backlink/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prospect,
-          siteName: currentWebsite?.domain || "SEO Platform",
-          linkTargetUrl: currentWebsite?.url || (currentWebsite?.domain ? `https://${currentWebsite.domain}` : "https://example.com"),
+          website_id: currentWebsite?.id,
+          action_mode: "prepare",
         }),
       });
       if (res.ok) {
         const data = await res.json();
-        setOutreachDraft(data.draft);
+        setExecutionPayload(data);
+        if (data.draft) {
+          setOutreachDraft(data.draft);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -195,17 +208,70 @@ export default function BacklinksPage() {
     }
   };
 
-  const handleApprove = async (prospectId: string) => {
+  const handleCompleteAcquisition = async (prospect: any) => {
+    if (!currentWebsite) return;
+    setExecutingAcquisition(true);
     try {
-      await fetch("/api/agent/backlinks/approve", {
+      const res = await fetch("/api/agent/backlink/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prospectId }),
+        body: JSON.stringify({
+          prospect,
+          website_id: currentWebsite.id,
+          action_mode: "complete_acquisition",
+          submission_data: executionPayload?.directory_kit,
+        }),
       });
-      setApprovedList((prev) => [...prev, prospectId]);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.acquired) {
+          setAcquiredLinks((prev) => [data.acquired, ...prev]);
+        }
+        if (prospect.id) {
+          setProspects((prev) => prev.filter((p) => p.id !== prospect.id));
+        }
+        setExecutionNotice(data.message || `Backlink on ${prospect.domain} executed and logged to Acquired Backlinks!`);
+        setTimeout(() => setExecutionNotice(null), 6000);
+        setSelectedProspect(null);
+      }
     } catch (e) {
       console.error(e);
+    } finally {
+      setExecutingAcquisition(false);
     }
+  };
+
+  const handleBuildCitationMagnet = async (prospect: any) => {
+    if (!currentWebsite) return;
+    const key = prospect.id || prospect.domain;
+    setBuildingAssetFor(key);
+    try {
+      const res = await fetch("/api/agent/backlink/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prospect,
+          website_id: currentWebsite.id,
+          action_mode: "build_citation_magnet",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExecutionNotice(`Citation Magnet Asset Created for ${prospect.domain}! Check Content Planner to review & publish.`);
+        setTimeout(() => setExecutionNotice(null), 7000);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBuildingAssetFor(null);
+    }
+  };
+
+  const handleApprove = async (prospectId: string) => {
+    if (selectedProspect) {
+      await handleCompleteAcquisition(selectedProspect);
+    }
+    setApprovedList((prev) => [...prev, prospectId]);
   };
 
   // Empirical calculation: only count if opportunity_score or relevance_score exists and >= 80
@@ -467,23 +533,49 @@ export default function BacklinksPage() {
                             )}
                           </div>
 
-                          <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-xs mt-3">
+                          <div className="flex items-center justify-between pt-3 border-t border-neutral-100 text-xs mt-3 gap-2">
                             <a
                               href={p.contact_page || targetLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-neutral-500 hover:text-neutral-800 text-[11px] font-medium flex items-center gap-1 transition-colors"
+                              className="text-neutral-500 hover:text-neutral-800 text-[11px] font-medium flex items-center gap-1 transition-colors shrink-0"
                             >
-                              <span>Visit Target</span>
+                              <span>{isDirectoryDomain(p.domain) ? "Submission Portal" : "Visit Target"}</span>
                               <ArrowUpRight className="w-3 h-3" />
                             </a>
-                            <button
-                              onClick={() => handleDraftOutreach(p)}
-                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
-                            >
-                              <Mail className="w-3 h-3" />
-                              <span>Draft Outreach</span>
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {!isDirectoryDomain(p.domain) && (
+                                <button
+                                  onClick={() => handleBuildCitationMagnet(p)}
+                                  disabled={buildingAssetFor === (p.id || p.domain)}
+                                  title="Autonomously draft a Citation Magnet Benchmark Report tailored to win this link"
+                                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold px-2.5 py-1.5 rounded-lg text-[11px] flex items-center gap-1 transition-colors"
+                                >
+                                  {buildingAssetFor === (p.id || p.domain) ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Sparkles className="w-3 h-3" />
+                                  )}
+                                  <span>Build Asset</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDraftOutreach(p)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                              >
+                                {isDirectoryDomain(p.domain) ? (
+                                  <>
+                                    <Sparkles className="w-3 h-3" />
+                                    <span>Submit &amp; Claim Profile</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send className="w-3 h-3" />
+                                    <span>Execute Acquisition</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -908,18 +1000,38 @@ export default function BacklinksPage() {
           </>
         )}
 
-        {/* OUTREACH DRAFT MODAL */}
+        {/* EXECUTION NOTICE BANNER */}
+        {executionNotice && (
+          <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-2.5 text-xs font-semibold animate-in fade-in slide-in-from-bottom-4">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{executionNotice}</span>
+          </div>
+        )}
+
+        {/* BACKLINK EXECUTION MODAL (DIRECTORY CLAIM KIT OR EDITORIAL OUTREACH DISPATCH) */}
         {selectedProspect && (
           <div className="fixed inset-0 bg-neutral-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-            <div className="bg-white border border-neutral-200 rounded-xl p-6 max-w-lg w-full space-y-4 shadow-xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="bg-white border border-neutral-200 rounded-xl p-6 max-w-xl w-full space-y-4 shadow-xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                    <Mail className="w-4 h-4" />
+                    {executionPayload?.execution_type === "directory_submission" || isDirectoryDomain(selectedProspect.domain) ? (
+                      <Sparkles className="w-4 h-4" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
                   </div>
                   <div>
-                    <h3 className="font-bold text-neutral-900 text-sm">Personalized Outreach Draft</h3>
-                    <p className="text-[11px] text-neutral-500">Target: {selectedProspect.domain}</p>
+                    <h3 className="font-bold text-neutral-900 text-sm">
+                      {executionPayload?.execution_type === "directory_submission" || isDirectoryDomain(selectedProspect.domain)
+                        ? `Direct Platform Listing & Auto-Fill Kit — ${selectedProspect.domain}`
+                        : `Backlink Acquisition Execution — ${selectedProspect.domain}`}
+                    </h3>
+                    <p className="text-[11px] text-neutral-500">
+                      {executionPayload?.execution_type === "directory_submission" || isDirectoryDomain(selectedProspect.domain)
+                        ? "Self-serve directory & startup profile registration"
+                        : `Linked Asset: ${executionPayload?.linked_asset?.title || currentWebsite?.domain}`}
+                    </p>
                   </div>
                 </div>
                 <button
@@ -933,10 +1045,117 @@ export default function BacklinksPage() {
               {drafting ? (
                 <div className="p-8 text-center space-y-2">
                   <Loader2 className="w-6 h-6 animate-spin text-indigo-600 mx-auto" />
-                  <p className="text-xs text-neutral-500 font-medium">Generating contextual outreach email...</p>
+                  <p className="text-xs text-neutral-500 font-medium">
+                    Preparing live execution kit for {selectedProspect.domain}...
+                  </p>
+                </div>
+              ) : executionPayload?.execution_type === "directory_submission" && executionPayload?.directory_kit ? (
+                <div className="space-y-3.5 text-xs">
+                  <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 block">
+                      Direct Portal Submission Steps
+                    </span>
+                    {executionPayload.directory_kit.steps.map((st: string, i: number) => (
+                      <div key={i} className="text-[11px] text-neutral-700 flex items-start gap-1.5">
+                        <span className="font-bold text-indigo-600">{i + 1}.</span>
+                        <span>{st}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold uppercase text-neutral-400">Product / Site Name</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(executionPayload.directory_kit.product_name)}
+                          className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="font-semibold text-neutral-900 truncate">{executionPayload.directory_kit.product_name}</p>
+                    </div>
+
+                    <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-2.5">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-semibold uppercase text-neutral-400">Target Website URL</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(executionPayload.directory_kit.website_url)}
+                          className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="font-mono text-[11px] text-indigo-600 truncate">{executionPayload.directory_kit.website_url}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-semibold uppercase text-neutral-400">Ready-to-Paste Tagline</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(executionPayload.directory_kit.tagline)}
+                        className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                      >
+                        Copy Tagline
+                      </button>
+                    </div>
+                    <p className="text-neutral-900 font-medium">{executionPayload.directory_kit.tagline}</p>
+                  </div>
+
+                  <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-2.5">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-semibold uppercase text-neutral-400">Product / Publication Description</span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(executionPayload.directory_kit.short_description)}
+                        className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                      >
+                        Copy Description
+                      </button>
+                    </div>
+                    <p className="text-neutral-700 leading-relaxed">{executionPayload.directory_kit.short_description}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <a
+                      href={executionPayload.portal_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 bg-neutral-900 hover:bg-neutral-800 text-white font-semibold px-3.5 py-2 rounded-lg text-xs transition-colors"
+                    >
+                      <span>1. Open {selectedProspect.domain} Submission Portal</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+
+                    <button
+                      onClick={() => handleCompleteAcquisition(selectedProspect)}
+                      disabled={executingAcquisition}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      {executingAcquisition ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>2. Confirm &amp; Log Acquired Backlink</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3 text-xs">
+                  {executionPayload?.linked_asset && (
+                    <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase text-emerald-800 block">Live Citation Asset Selected by Agent</span>
+                        <a
+                          href={executionPayload.linked_asset.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-emerald-700 hover:underline truncate block"
+                        >
+                          {executionPayload.linked_asset.title} ({executionPayload.linked_asset.url})
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
                       Subject Line
@@ -949,7 +1168,7 @@ export default function BacklinksPage() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-semibold uppercase text-neutral-500 mb-1">
-                      Email Body
+                      Pitch &amp; Citation Body
                     </label>
                     <textarea
                       rows={7}
@@ -957,28 +1176,42 @@ export default function BacklinksPage() {
                       className="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-3 text-neutral-900 leading-relaxed font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                     />
                   </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-neutral-100">
+                    <div className="flex items-center gap-2">
+                      {executionPayload?.mailto_url && (
+                        <a
+                          href={executionPayload.mailto_url}
+                          className="bg-neutral-900 hover:bg-neutral-800 text-white px-3.5 py-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>Launch Email Client</span>
+                        </a>
+                      )}
+                      {executionPayload?.contact_url && (
+                        <a
+                          href={executionPayload.contact_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                        >
+                          <span>Open Contact / Pitch Form</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleCompleteAcquisition(selectedProspect)}
+                      disabled={executingAcquisition}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      {executingAcquisition ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>Mark Executed &amp; Track Backlink</span>
+                    </button>
+                  </div>
                 </div>
               )}
-
-              <div className="flex items-center justify-between pt-3 border-t border-neutral-100">
-                <button
-                  onClick={() => setSelectedProspect(null)}
-                  className="bg-neutral-100 hover:bg-neutral-200 text-neutral-700 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={() => {
-                    handleApprove(selectedProspect.id);
-                    setSelectedProspect(null);
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Approve for Sending</span>
-                </button>
-              </div>
             </div>
           </div>
         )}
