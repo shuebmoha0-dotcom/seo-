@@ -73,6 +73,33 @@ async function handleCronExecution(request: Request) {
       console.warn('[Cron Trigger] Platform blog engine notice:', blogErr.message);
     }
 
+    // 0.6. Continuous Auto-Indexing Watchdog: Scan all connected websites and automatically submit any unindexed published posts
+    try {
+      const { PostIndexVerificationService } = await import('@/lib/services/postIndexVerificationService');
+      const { data: allActiveWebsites } = await supabase
+        .from('websites')
+        .select('id, domain, url')
+        .limit(10);
+
+      if (allActiveWebsites && allActiveWebsites.length > 0) {
+        for (const ws of allActiveWebsites) {
+          try {
+            const indexAudit = await PostIndexVerificationService.verifyAndIndexAllPosts({
+              websiteId: ws.id,
+              domain: ws.domain,
+            });
+            if (indexAudit.unindexed_submitted_count > 0) {
+              console.log(`[Cron Trigger Auto-Indexing Watchdog] Auto-submitted ${indexAudit.unindexed_submitted_count} unindexed post(s) for ${ws.domain}`);
+            }
+          } catch (siteIdxErr) {
+            console.warn(`[Cron Trigger Auto-Indexing Watchdog] Notice for ${ws.domain}:`, siteIdxErr);
+          }
+        }
+      }
+    } catch (idxWatchdogErr: any) {
+      console.warn('[Cron Trigger] Indexing watchdog error:', idxWatchdogErr?.message || idxWatchdogErr);
+    }
+
     // 1. Check and execute due tasks from public.tasks table
     const { data: dueTasks, error: tasksErr } = await supabase
       .from('tasks')
