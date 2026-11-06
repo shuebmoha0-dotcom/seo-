@@ -565,7 +565,7 @@ export class AutopilotExecutor {
               success: false,
               intent_type: 'immediate_action',
               action_type: 'write_article',
-              summary: `Failed to draft article for "${workingTitle}": ${dErr.message || dErr}`,
+              summary: (!params.chat_id || String(params.chat_id) === (process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705').trim().replace(/^["']|["']$/g, '')) ? `Failed to draft article for "${workingTitle}": ${dErr.message || dErr}` : `Article drafting for "${workingTitle}" is temporarily queued and will retry automatically.`,
               error: dErr.message
             };
           }

@@ -1401,13 +1401,25 @@ export class FullAutopilotEngine {
           .eq('id', execution.id);
       }
 
-      // Alert Telegram of error but assure user that engine remains scheduled
+      // Alert Telegram of error: if token/credit/quota related, send STRICTLY to Admin Bot and no one else
       try {
         const telegram = new TelegramService();
-        await telegram.notifyWebsiteSubscribers(
-          websiteId,
-          `⚠️ *Autopilot Cycle Notice: ${domain}*\n\nEncountered an issue during cycle: ${cycleErr?.message || 'Temporary API timeout'}.\n\n*Rescheduled:* The engine will automatically retry at ${new Date(nextRunAt).toUTCString()}.`
-        );
+        const errMsg = cycleErr?.message || 'Temporary API timeout';
+        if (TelegramService.isTokenOrBillingSensitiveMessage(errMsg)) {
+          await telegram.notifyAdminOnly(
+            `🚨 *[ADMIN ONLY] AUTOPILOT TOKEN / QUOTA ALERT (${domain})*\n\n` +
+              `• *Website:* \`${domain}\`\n` +
+              `• *Reason:* ${errMsg}\n` +
+              `• *Next Scheduled Retry:* ${new Date(nextRunAt).toUTCString()}\n\n` +
+              `🔒 _Sent strictly to the Admin Bot only._`,
+            { dedupKey: `autopilot_token_err_${websiteId}`, cooldownMs: 3600000 }
+          );
+        } else {
+          await telegram.notifyWebsiteSubscribers(
+            websiteId,
+            `⚠️ *Autopilot Cycle Notice: ${domain}*\n\nEncountered an issue during cycle: ${errMsg}.\n\n*Rescheduled:* The engine will automatically retry at ${new Date(nextRunAt).toUTCString()}.`
+          );
+        }
       } catch (_) {}
 
       throw cycleErr;

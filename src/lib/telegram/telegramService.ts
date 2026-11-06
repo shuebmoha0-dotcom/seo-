@@ -559,13 +559,67 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
   }
 
   /**
-   * Broadcast a notification to all subscribers of a website (or global fallback subscribers)
+   * Returns the single authoritative Admin Telegram Chat ID.
+   * Token/credit/quota notifications MUST ONLY ever be delivered to this chat ID.
+   */
+  static getAdminChatId(): string {
+    return (process.env.TELEGRAM_ADMIN_CHAT_ID || '6362597705').trim().replace(/^["']|["']$/g, '');
+  }
+
+  /**
+   * Checks whether a message contains sensitive internal token, credit, quota, or billing information
+   * that must be restricted strictly to the Admin Bot and never sent to general subscribers.
+   */
+  static isTokenOrBillingSensitiveMessage(text: string): boolean {
+    if (!text) return false;
+    return /credit balance is too low|insufficient_quota|exceeded your current quota|billing_hard_limit|out of tokens|token limit|tokens? almost near ending|token budget|api credit|quota exceeded|rate_limit_exceeded|anthropic api|openai api/i.test(
+      text
+    );
+  }
+
+  /**
+   * Send a private operational alert STRICTLY to the Admin Bot (TELEGRAM_ADMIN_CHAT_ID) and NO ONE ELSE.
+   * Includes optional deduplication cooldown to prevent duplicate alerts during parallel tasks.
+   */
+  async notifyAdminOnly(
+    text: string,
+    options?: { dedupKey?: string; cooldownMs?: number; reply_markup?: any }
+  ): Promise<boolean> {
+    const adminChatId = TelegramService.getAdminChatId();
+    if (!adminChatId) return false;
+
+    if (options?.dedupKey) {
+      const now = Date.now();
+      const cooldown = options.cooldownMs ?? 3600000; // default 1 hour cooldown per unique dedupKey
+      const lastSent = notifiedDiscoveries.get(`admin:${options.dedupKey}`) || 0;
+      if (now - lastSent < cooldown) {
+        return false;
+      }
+      notifiedDiscoveries.set(`admin:${options.dedupKey}`, now);
+    }
+
+    return this.sendMessage(adminChatId, text, { reply_markup: options?.reply_markup });
+  }
+
+  /**
+   * Broadcast a notification to all subscribers of a website (or global fallback subscribers).
+   * HARD GUARD: If the message contains any token/credit/quota exhaustion info, it is intercepted
+   * and routed EXCLUSIVELY to the Admin Bot (`notifyAdminOnly`) so no other user ever sees it.
    */
   async notifyWebsiteSubscribers(
     websiteId: string,
     text: string,
     options?: { reply_markup?: any }
   ): Promise<void> {
+    if (TelegramService.isTokenOrBillingSensitiveMessage(text)) {
+      await this.notifyAdminOnly(text, {
+        dedupKey: `intercepted_token_alert_${websiteId}`,
+        cooldownMs: 1800000,
+        reply_markup: options?.reply_markup,
+      });
+      return;
+    }
+
     const subscribers = await this.getSubscribers(websiteId);
     if (subscribers.length === 0) return;
 

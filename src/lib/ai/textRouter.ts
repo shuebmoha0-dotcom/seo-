@@ -102,6 +102,135 @@ export function isConfigurationError(error: any): boolean {
   return false;
 }
 
+export function isTokenOrQuotaExhaustedError(error: any): boolean {
+  if (!error) return false;
+  const message = (error.message || '').toLowerCase();
+  const status = error.status || error.statusCode;
+
+  if (status === 402) return true;
+  if (
+    message.includes('credit balance is too low') ||
+    message.includes('insufficient_quota') ||
+    message.includes('exceeded your current quota') ||
+    message.includes('billing_hard_limit_reached') ||
+    message.includes('billing_not_active') ||
+    message.includes('out of tokens') ||
+    message.includes('token limit') ||
+    message.includes('monthly spend limit') ||
+    message.includes('quota exceeded') ||
+    message.includes('quota_exceeded')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+let lastBudgetCheckTime = 0;
+
+/**
+   * Sends a private notification EXCLUSIVELY to the Admin Bot when provider tokens/credits run out.
+   * Never notifies any other subscriber or client.
+   */
+export async function notifyAdminOnTokenExhaustion(params: {
+  provider: string;
+  model: string;
+  agent: string;
+  errorMessage: string;
+}): Promise<void> {
+  try {
+    const { TelegramService } = await import('@/lib/telegram/telegramService');
+    const telegram = new TelegramService();
+    const alertText =
+      `🚨 *[ADMIN ONLY] AI TOKENS / CREDITS EXHAUSTED*\n\n` +
+      `• *Provider:* \`${params.provider.toUpperCase()}\` (\`${params.model}\`)\n` +
+      `• *Component:* \`${params.agent}\`\n` +
+      `• *Status:* Out of tokens / API quota exhausted\n` +
+      `• *Provider Response:* ${params.errorMessage.slice(0, 260)}\n\n` +
+      `🔒 _This notification was sent strictly to the Admin Bot and hidden from all other users._`;
+
+    await telegram.notifyAdminOnly(alertText, {
+      dedupKey: `token_exhausted_${params.provider}_${params.model}`,
+      cooldownMs: 3600000, // 1 hour cooldown per provider
+    });
+  } catch (err) {
+    console.warn('[Model Router] Admin token exhaustion alert error:', err);
+  }
+}
+
+/**
+   * Checks monthly token & budget consumption and sends a private warning EXCLUSIVELY to the Admin Bot
+   * when tokens are almost near ending (>= 80%, >= 90%) or fully reached (>= 100%).
+   */
+export async function monitorTokenBudgetAndAlertAdmin(supabase: any): Promise<void> {
+  const now = Date.now();
+  // Throttle DB aggregation to once every 3 minutes per instance
+  if (now - lastBudgetCheckTime < 180000) return;
+  lastBudgetCheckTime = now;
+
+  try {
+    const nowDate = new Date();
+    const monthStartIso = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), 1)).toISOString();
+    const monthKey = monthStartIso.slice(0, 7); // YYYY-MM
+
+    const { data: rows, error } = await supabase
+      .from('usage_events')
+      .select('input_tokens, output_tokens, estimated_cost')
+      .gte('created_at', monthStartIso);
+
+    if (error || !rows) return;
+
+    let totalTokens = 0;
+    let totalCostUsd = 0;
+    for (const r of rows) {
+      totalTokens += (Number(r.input_tokens) || 0) + (Number(r.output_tokens) || 0);
+      totalCostUsd += Number(r.estimated_cost) || 0;
+    }
+
+    const monthlyTokenLimit = Number(process.env.MONTHLY_TOKEN_LIMIT || 2000000);
+    const monthlyBudgetUsd = Number(process.env.MONTHLY_TOKEN_BUDGET_USD || 50);
+
+    const tokenPct = monthlyTokenLimit > 0 ? (totalTokens / monthlyTokenLimit) * 100 : 0;
+    const costPct = monthlyBudgetUsd > 0 ? (totalCostUsd / monthlyBudgetUsd) * 100 : 0;
+    const maxPct = Math.max(tokenPct, costPct);
+
+    if (maxPct < 80) return;
+
+    const { TelegramService } = await import('@/lib/telegram/telegramService');
+    const telegram = new TelegramService();
+    const remainingTokens = Math.max(0, monthlyTokenLimit - totalTokens);
+    const remainingUsd = Math.max(0, monthlyBudgetUsd - totalCostUsd);
+
+    if (maxPct >= 100) {
+      await telegram.notifyAdminOnly(
+        `🚨 *[ADMIN ONLY] TOKEN BUDGET EXHAUSTED (${maxPct.toFixed(1)}%)*\n\n` +
+          `• *Monthly Tokens Used:* ${totalTokens.toLocaleString()} / ${monthlyTokenLimit.toLocaleString()}\n` +
+          `• *Monthly Spend:* $${totalCostUsd.toFixed(2)} / $${monthlyBudgetUsd.toFixed(2)}\n` +
+          `• *Remaining:* 0 tokens ($0.00)\n\n` +
+          `🔒 _Sent strictly to the Admin Bot only._`,
+        { dedupKey: `token_budget_100_${monthKey}`, cooldownMs: 21600000 }
+      );
+    } else if (maxPct >= 90) {
+      await telegram.notifyAdminOnly(
+        `⚠️ *[ADMIN ONLY] TOKENS CRITICALLY LOW (${maxPct.toFixed(1)}% USED)*\n\n` +
+          `• *Monthly Tokens Used:* ${totalTokens.toLocaleString()} / ${monthlyTokenLimit.toLocaleString()} (${remainingTokens.toLocaleString()} left)\n` +
+          `• *Monthly Spend:* $${totalCostUsd.toFixed(2)} / $${monthlyBudgetUsd.toFixed(2)} ($${remainingUsd.toFixed(2)} left)\n\n` +
+          `🔒 _Tokens are almost finished. Sent strictly to the Admin Bot only._`,
+        { dedupKey: `token_budget_90_${monthKey}`, cooldownMs: 43200000 }
+      );
+    } else if (maxPct >= 80) {
+      await telegram.notifyAdminOnly(
+        `🔔 *[ADMIN ONLY] TOKENS ALMOST NEAR ENDING (${maxPct.toFixed(1)}% USED)*\n\n` +
+          `• *Monthly Tokens Used:* ${totalTokens.toLocaleString()} / ${monthlyTokenLimit.toLocaleString()} (${remainingTokens.toLocaleString()} left)\n` +
+          `• *Monthly Spend:* $${totalCostUsd.toFixed(2)} / $${monthlyBudgetUsd.toFixed(2)} ($${remainingUsd.toFixed(2)} left)\n\n` +
+          `🔒 _Early warning sent strictly to the Admin Bot only._`,
+        { dedupKey: `token_budget_80_${monthKey}`, cooldownMs: 86400000 }
+      );
+    }
+  } catch (err) {
+    console.warn('[Model Router] Token budget monitor warning:', err);
+  }
+}
+
 function resolveModel(provider: 'openai' | 'anthropic', modelName: string): LanguageModel {
   if (provider === 'anthropic') {
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -206,6 +335,8 @@ async function recordUsage(log: ExecutionLog, options: RouterOptions) {
 
     if (insertErr) {
       console.warn('[Model Router] Usage tracking insert warning:', insertErr.message);
+    } else {
+      await monitorTokenBudgetAndAlertAdmin(supabase);
     }
   } catch (err) {
     console.warn('[Model Router] Usage tracking record failed:', err);
@@ -287,6 +418,16 @@ export const TextRouter = {
       } catch (error: any) {
         lastError = error;
 
+        if (isTokenOrQuotaExhaustedError(error)) {
+          await notifyAdminOnTokenExhaustion({
+            provider: primary.provider,
+            model: primary.modelName,
+            agent: options.agent,
+            errorMessage: error.message || 'Provider token/credit quota exhausted',
+          });
+          break;
+        }
+
         if (isConfigurationError(error)) {
           console.warn(`[Model Router] Primary model configuration error (${primary.modelName}): ${error.message}. Checking fallback...`);
           break;
@@ -344,6 +485,14 @@ export const TextRouter = {
         provider: fallback.provider,
       };
     } catch (fallbackError: any) {
+      if (isTokenOrQuotaExhaustedError(fallbackError)) {
+        await notifyAdminOnTokenExhaustion({
+          provider: fallback.provider,
+          model: fallback.modelName,
+          agent: options.agent,
+          errorMessage: fallbackError.message || 'Fallback provider token/credit quota exhausted',
+        });
+      }
       recordProviderFailure(fallback.healthKey, fallbackError.message);
       console.error(`[Model Router] Both primary (${primary.modelName}) and fallback (${fallback.modelName}) failed.`);
       throw new Error(`AI Model execution failed: ${lastError?.message || fallbackError.message}`);
@@ -410,6 +559,16 @@ export const TextRouter = {
       } catch (error: any) {
         lastError = error;
 
+        if (isTokenOrQuotaExhaustedError(error)) {
+          await notifyAdminOnTokenExhaustion({
+            provider: primary.provider,
+            model: primary.modelName,
+            agent: options.agent,
+            errorMessage: error.message || 'Provider token/credit quota exhausted',
+          });
+          break;
+        }
+
         if (isConfigurationError(error)) {
           console.warn(`[Model Router] Primary model configuration error (${primary.modelName}): ${error.message}. Checking fallback...`);
           break;
@@ -468,6 +627,14 @@ export const TextRouter = {
         provider: fallback.provider,
       };
     } catch (fallbackError: any) {
+      if (isTokenOrQuotaExhaustedError(fallbackError)) {
+        await notifyAdminOnTokenExhaustion({
+          provider: fallback.provider,
+          model: fallback.modelName,
+          agent: options.agent,
+          errorMessage: fallbackError.message || 'Fallback provider token/credit quota exhausted',
+        });
+      }
       recordProviderFailure(fallback.healthKey, fallbackError.message);
       console.error(`[Model Router] Both primary (${primary.modelName}) and fallback (${fallback.modelName}) failed.`);
       throw new Error(`AI Model execution failed: ${lastError?.message || fallbackError.message}`);

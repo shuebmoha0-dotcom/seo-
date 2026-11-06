@@ -5,7 +5,13 @@ import {
   recordProviderSuccess,
   recordProviderFailure,
 } from './config';
-import { TextRouter, UsageContext } from './textRouter';
+import {
+  TextRouter,
+  UsageContext,
+  isTokenOrQuotaExhaustedError,
+  notifyAdminOnTokenExhaustion,
+  monitorTokenBudgetAndAlertAdmin,
+} from './textRouter';
 
 export interface ImageGenerationRequest {
   topic: string;
@@ -464,6 +470,14 @@ export const ImageRouter = {
           },
         };
       } catch (openAiError: any) {
+        if (isTokenOrQuotaExhaustedError(openAiError)) {
+          await notifyAdminOnTokenExhaustion({
+            provider: 'openai',
+            model: AI_CONFIG.OPENAI_IMAGE_MODEL,
+            agent: 'ImageAgent',
+            errorMessage: openAiError?.message || 'OpenAI image quota exhausted',
+          });
+        }
         recordProviderFailure('openai_image', openAiError?.message || 'OpenAI image generation failed');
         console.warn(`[Image Router] OpenAI Image failed: ${openAiError?.message || openAiError}`);
       }
@@ -500,6 +514,14 @@ export const ImageRouter = {
           },
         };
       } catch (geminiError: any) {
+        if (isTokenOrQuotaExhaustedError(geminiError)) {
+          await notifyAdminOnTokenExhaustion({
+            provider: 'gemini',
+            model: AI_CONFIG.GEMINI_IMAGE_MODEL,
+            agent: 'ImageAgent',
+            errorMessage: geminiError?.message || 'Gemini image quota exhausted',
+          });
+        }
         recordProviderFailure('gemini_image', geminiError?.message || 'Gemini image generation failed');
         console.warn(`[Image Router] Gemini Image failed: ${geminiError?.message || geminiError}`);
       }
@@ -651,6 +673,7 @@ async function recordImageUsage(data: {
       console.warn('[Image Router] Failed to insert usage_event:', error.message);
     } else {
       console.log(`[Image Router] Live usage tracked: ${data.model} ($${estimatedCost.toFixed(3)})`);
+      await monitorTokenBudgetAndAlertAdmin(supabase);
     }
   } catch (err: any) {
     console.warn('[Image Router] Failed to record usage to database:', err.message);
