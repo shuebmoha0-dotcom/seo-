@@ -120,6 +120,11 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'integration_id,credential_type' });
 
+    if (website_id) {
+      const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
+      await syncSearchConsoleData(website_id).catch((e) => console.warn('[GSC Service Account Initial Sync Notice]', e));
+    }
+
     return NextResponse.json({
       success: true,
       message: `Google Search Console connected successfully to ${property_url}!`,

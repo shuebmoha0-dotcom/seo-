@@ -40,7 +40,30 @@ export async function GET(request: Request) {
     }
 
     const userClient = await createClient();
-    const supabase = userClient || createAdminClient();
+    const { data: { user } } = await userClient.auth.getUser();
+    const supabase = createAdminClient();
+
+    // Enforce multi-tenant ownership check on websiteId (Rule 10)
+    if (user?.id) {
+      const { data: ownedSite } = await supabase
+        .from('websites')
+        .select('id')
+        .eq('id', websiteId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!ownedSite) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
+    // Auto-clean stale drafts stuck in 'writing' status for > 15 minutes so Recent Activity stays accurate
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    await supabase
+      .from('content_drafts')
+      .delete()
+      .eq('website_id', websiteId)
+      .eq('status', 'writing')
+      .lt('created_at', fifteenMinsAgo);
 
     const [
       { count: keywordCount },
@@ -143,9 +166,10 @@ export async function GET(request: Request) {
     ]);
 
     let finalGscRows = gscRows || [];
-    const isGscConnected = gscIntegration?.status === 'connected';
+    let finalTopQueries = topQueries || [];
+    let isGscConnected = gscIntegration?.status === 'connected';
 
-    // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, hourly missing/stale (> 30 mins), or explicitly requested
+    // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, hourly missing/stale (> 30 mins), unlinked (auto-discover), or explicitly requested
     const lastSyncTime = gscIntegration?.last_synced_at ? new Date(gscIntegration.last_synced_at).getTime() : 0;
     const isStale = Date.now() - lastSyncTime > 5 * 60 * 1000;
     const forceSync = searchParams.get('sync') === 'true';
@@ -158,11 +182,11 @@ export async function GET(request: Request) {
       : 0;
     const isHourlyStale = Date.now() - hourlyLastSynced > 30 * 60 * 1000;
 
-    if (isGscConnected && (isStale || forceSync || finalGscRows.length === 0 || !activeGscConfig?.hourly_data_24h || isHourlyStale)) {
+    if (!gscIntegration || (isGscConnected && (isStale || forceSync || finalGscRows.length === 0 || !activeGscConfig?.hourly_data_24h || isHourlyStale))) {
       try {
         const { syncSearchConsoleData } = await import('@/lib/services/gscSyncService');
         await syncSearchConsoleData(websiteId, 480, supabase);
-        const [refreshedRows, refreshedIntg] = await Promise.all([
+        const [refreshedRows, refreshedQueries, refreshedIntg] = await Promise.all([
           supabase
             .from('search_console_data')
             .select('date, clicks, impressions, ctr, position')
@@ -171,8 +195,15 @@ export async function GET(request: Request) {
             .order('date', { ascending: true })
             .limit(500),
           supabase
+            .from('search_console_data')
+            .select('query, clicks, impressions, ctr, position')
+            .eq('website_id', websiteId)
+            .not('query', 'is', null)
+            .order('impressions', { ascending: false })
+            .limit(10),
+          supabase
             .from('integrations')
-            .select('config, last_synced_at')
+            .select('status, config, last_synced_at')
             .eq('website_id', websiteId)
             .eq('provider', 'google_search_console')
             .maybeSingle(),
@@ -180,7 +211,11 @@ export async function GET(request: Request) {
         if (refreshedRows?.data && refreshedRows.data.length > 0) {
           finalGscRows = refreshedRows.data;
         }
+        if (refreshedQueries?.data && refreshedQueries.data.length > 0) {
+          finalTopQueries = refreshedQueries.data;
+        }
         if (refreshedIntg?.data) {
+          isGscConnected = refreshedIntg.data.status === 'connected';
           activeGscConfig = refreshedIntg.data.config;
           activeLastSynced = refreshedIntg.data.last_synced_at;
         }
@@ -240,7 +275,7 @@ export async function GET(request: Request) {
       recent_approvals: approvals || [],
       recent_activity: activityList.slice(0, 6),
       chart_data: chartData,
-      top_queries: (topQueries || []).map((q: any) => ({
+      top_queries: (finalTopQueries || []).map((q: any) => ({
         query: q.query,
         clicks: q.clicks || 0,
         impressions: q.impressions || 0,
@@ -248,7 +283,7 @@ export async function GET(request: Request) {
         position: q.position !== null && q.position !== undefined ? Number(q.position) : 0,
       })),
       gsc_connected: isGscConnected,
-      gsc_property: gscIntegration?.config?.property_url || null,
+      gsc_property: activeGscConfig?.property_url || gscIntegration?.config?.property_url || null,
       gsc_last_synced: activeLastSynced || gscIntegration?.last_synced_at || null,
       gsc_hourly: activeGscConfig?.hourly_data_24h || null,
     });

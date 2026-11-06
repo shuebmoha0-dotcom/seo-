@@ -1,5 +1,7 @@
+import { google } from 'googleapis';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { decryptCredential, encryptCredential } from '@/lib/utils/encryption';
+import { GoogleIndexingService } from '@/lib/connectors/googleIndexing';
 
 export interface GSCSyncResult {
   success: boolean;
@@ -11,16 +13,184 @@ export interface GSCSyncResult {
   error?: string;
 }
 
-export async function syncSearchConsoleData(websiteId: string, daysBack: number = 480, customClient?: any): Promise<GSCSyncResult> {
-  const supabase = customClient || createAdminClient();
+export async function syncSearchConsoleData(websiteId: string, daysBack: number = 480, _customClient?: any): Promise<GSCSyncResult> {
+  // Always use admin client for credential decryption &search_console_data persistence after route-level auth
+  const supabase = createAdminClient();
 
   // 1. Fetch connected GSC integration
-  const { data: integration, error: intErr } = await supabase
+  let { data: integration, error: intErr } = await supabase
     .from('integrations')
     .select('id, config, status')
     .eq('website_id', websiteId)
     .eq('provider', 'google_search_console')
     .maybeSingle();
+
+  // Auto-discover if user's existing Google OAuth (on another site of same user_id) or Platform Service Account already has access to this website's domain
+  if (!integration) {
+    try {
+      const { data: web } = await supabase
+        .from('websites')
+        .select('id, user_id, domain, url')
+        .eq('id', websiteId)
+        .maybeSingle();
+
+      if (web?.domain) {
+        const cleanDomain = web.domain.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '').toLowerCase();
+        const candidateProps = [`sc-domain:${cleanDomain}`, `https://${cleanDomain}/`, `https://www.${cleanDomain}/`];
+
+        // A. Check if the same user already connected Google Search Console OAuth on another website in their account
+        if (web.user_id) {
+          const { data: userSites } = await supabase
+            .from('websites')
+            .select('id')
+            .eq('user_id', web.user_id)
+            .neq('id', websiteId);
+
+          const siblingSiteIds = (userSites || []).map((s: any) => s.id);
+          if (siblingSiteIds.length > 0) {
+            const { data: siblingIntg } = await supabase
+              .from('integrations')
+              .select('id, config')
+              .in('website_id', siblingSiteIds)
+              .eq('provider', 'google_search_console')
+              .eq('status', 'connected')
+              .limit(1)
+              .maybeSingle();
+
+            if (siblingIntg?.id) {
+              const { data: siblingCred } = await supabase
+                .from('integration_credentials')
+                .select('credential_type, encrypted_value')
+                .eq('integration_id', siblingIntg.id)
+                .maybeSingle();
+
+              if (siblingCred?.encrypted_value && siblingCred.credential_type !== 'service_account') {
+                const parts = siblingCred.encrypted_value.split(':::');
+                let sibAccess = decryptCredential(parts[0]);
+                const sibRefresh = parts[1] ? decryptCredential(parts[1]) : '';
+
+                if (sibRefresh && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+                  try {
+                    const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                      body: new URLSearchParams({
+                        client_id: process.env.GOOGLE_CLIENT_ID,
+                        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+                        refresh_token: sibRefresh,
+                        grant_type: 'refresh_token',
+                      }),
+                    });
+                    if (refreshRes.ok) {
+                      const tokenData = await refreshRes.json();
+                      if (tokenData.access_token) sibAccess = tokenData.access_token;
+                    }
+                  } catch (_) {}
+                }
+
+                if (sibAccess) {
+                  const sitesRes = await fetch('https://www.googleapis.com/webmasters/v3/sites', {
+                    headers: { Authorization: `Bearer ${sibAccess}` },
+                  });
+                  if (sitesRes.ok) {
+                    const sitesData = await sitesRes.json();
+                    const entries: Array<{ siteUrl: string }> = sitesData.siteEntry || [];
+                    const matchedEntry = entries.find((e) => {
+                      const norm = e.siteUrl.toLowerCase().replace(/^sc-domain:/, '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+                      return norm === cleanDomain;
+                    });
+
+                    if (matchedEntry?.siteUrl) {
+                      const { data: inserted } = await supabase
+                        .from('integrations')
+                        .insert({
+                          website_id: websiteId,
+                          provider: 'google_search_console',
+                          display_name: 'Google Search Console',
+                          status: 'connected',
+                          status_message: `Auto-linked property: ${matchedEntry.siteUrl}`,
+                          config: {
+                            property_url: matchedEntry.siteUrl,
+                            available_properties: entries.map((s) => s.siteUrl),
+                          },
+                          capabilities: ['READ_ANALYTICS', 'INDEX_URLS', 'URL_INSPECTION'],
+                          last_tested_at: new Date().toISOString(),
+                          last_success_at: new Date().toISOString(),
+                          last_synced_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        })
+                        .select('id, config, status')
+                        .single();
+
+                      if (inserted) {
+                        const encAccess = encryptCredential(sibAccess);
+                        const encRefresh = encryptCredential(sibRefresh);
+                        await supabase.from('integration_credentials').insert({
+                          integration_id: inserted.id,
+                          credential_type: 'oauth_token',
+                          encrypted_value: `${encAccess}:::${encRefresh}`,
+                        });
+                        integration = inserted;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // B. Check if Platform Service Account has verified access to this domain
+        const saCreds = GoogleIndexingService.getServiceAccountCredentials();
+        if (!integration && saCreds?.client_email && saCreds?.private_key) {
+          const jwtAuth = new google.auth.JWT({
+            email: saCreds.client_email,
+            key: saCreds.private_key,
+            scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+          });
+          const sc = google.searchconsole({ version: 'v1', auth: jwtAuth });
+          for (const candProp of candidateProps) {
+            try {
+              await sc.searchanalytics.query({
+                siteUrl: candProp,
+                requestBody: {
+                  startDate: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10),
+                  endDate: new Date().toISOString().slice(0, 10),
+                  rowLimit: 1,
+                },
+              });
+              // Service account has verified access to this property! Auto-create integration row
+              const { data: inserted } = await supabase
+                .from('integrations')
+                .insert({
+                  website_id: websiteId,
+                  provider: 'google_search_console',
+                  display_name: 'Google Search Console',
+                  status: 'connected',
+                  status_message: `Connected via Service Account: ${candProp}`,
+                  config: {
+                    property_url: candProp,
+                    auth_type: 'service_account',
+                    client_email: saCreds.client_email,
+                  },
+                  capabilities: ['GET_SEARCH_ANALYTICS', 'READ_ANALYTICS', 'INDEX_URLS', 'URL_INSPECTION'],
+                  last_tested_at: new Date().toISOString(),
+                  last_success_at: new Date().toISOString(),
+                  last_synced_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                })
+                .select('id, config, status')
+                .single();
+              if (inserted) {
+                integration = inserted;
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
   if (intErr || !integration) {
     return {
@@ -46,27 +216,69 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
     };
   }
 
-  // 2. Fetch encrypted credentials
-  const { data: creds, error: credErr } = await supabase
+  // 2. Fetch encrypted credentials (supports both OAuth tokens and Service Account keys)
+  const { data: creds } = await supabase
     .from('integration_credentials')
-    .select('encrypted_value')
+    .select('credential_type, encrypted_value')
     .eq('integration_id', integration.id)
     .maybeSingle();
 
-  if (credErr || !creds?.encrypted_value) {
-    return {
-      success: false,
-      syncedRows: 0,
-      totalImpressions: 0,
-      totalClicks: 0,
-      message: 'OAuth credentials not found. Please reconnect Google Search Console.',
-      error: 'CREDENTIALS_NOT_FOUND',
-    };
+  let accessToken = '';
+  let refreshToken = '';
+
+  if (integration.config?.auth_type === 'service_account' || creds?.credential_type === 'service_account') {
+    let saEmail = integration.config?.client_email || '';
+    let saPrivateKey = '';
+    if (creds?.encrypted_value) {
+      const saParts = creds.encrypted_value.split(':::');
+      saEmail = saParts[0] || saEmail;
+      saPrivateKey = saParts[1] ? decryptCredential(saParts[1]) : '';
+    }
+    if (!saEmail || !saPrivateKey) {
+      const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+      if (platformCreds?.client_email && platformCreds?.private_key) {
+        saEmail = platformCreds.client_email;
+        saPrivateKey = platformCreds.private_key;
+      }
+    }
+    if (saEmail && saPrivateKey) {
+      try {
+        const jwtClient = new google.auth.JWT({
+          email: saEmail,
+          key: saPrivateKey,
+          scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        });
+        const tokRes = await jwtClient.getAccessToken();
+        if (tokRes?.token) {
+          accessToken = tokRes.token;
+        }
+      } catch (jwtErr: any) {
+        console.warn('[GSCSyncService] Service account token error:', jwtErr?.message || jwtErr);
+      }
+    }
+  } else if (creds?.encrypted_value) {
+    const parts = creds.encrypted_value.split(':::');
+    accessToken = decryptCredential(parts[0]);
+    refreshToken = parts[1] ? decryptCredential(parts[1]) : '';
   }
 
-  const parts = creds.encrypted_value.split(':::');
-  let accessToken = decryptCredential(parts[0]);
-  let refreshToken = parts[1] ? decryptCredential(parts[1]) : '';
+  // Fallback: if accessToken is still empty, check if platform Service Account has access
+  if (!accessToken || accessToken.includes('simulated')) {
+    const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+    if (platformCreds?.client_email && platformCreds?.private_key) {
+      try {
+        const jwtClient = new google.auth.JWT({
+          email: platformCreds.client_email,
+          key: platformCreds.private_key,
+          scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+        });
+        const tokRes = await jwtClient.getAccessToken();
+        if (tokRes?.token) {
+          accessToken = tokRes.token;
+        }
+      } catch (_) {}
+    }
+  }
 
   if (!accessToken || accessToken.includes('simulated')) {
     return {
