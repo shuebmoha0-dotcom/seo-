@@ -21,6 +21,8 @@ export function markdownToWordPressHtml(markdown: string, schemaContext?: {
   url?: string;
   imageUrl?: string;
   datePublished?: string;
+  brandName?: string;
+  focusKeyword?: string;
 }): string {
   if (!markdown) return '';
 
@@ -196,8 +198,38 @@ export function markdownToWordPressHtml(markdown: string, schemaContext?: {
     }
   );
 
-  // 12. Inject Article + FAQPage JSON-LD Structured Data Schema for Google Rich Snippets & AI Overviews
+  // 12. Inject Article + Organization Entity + FAQPage JSON-LD Structured Data Schema for Google Rich Snippets, AI Overviews & LLM Citations
   const schemaGraph: any[] = [];
+  let derivedOrigin = '';
+  let derivedBrand = schemaContext?.brandName || '';
+  if (schemaContext?.url) {
+    try {
+      const u = new URL(schemaContext.url);
+      derivedOrigin = u.origin;
+      if (!derivedBrand) {
+        const hostBase = u.hostname.replace(/^www\./i, '').split('.')[0];
+        derivedBrand = hostBase.charAt(0).toUpperCase() + hostBase.slice(1);
+      }
+    } catch (_) {}
+  }
+
+  if (derivedBrand && derivedOrigin) {
+    schemaGraph.push({
+      '@type': 'Organization',
+      '@id': `${derivedOrigin}/#organization`,
+      name: derivedBrand,
+      url: derivedOrigin,
+      ...(schemaContext?.focusKeyword || extractedH1
+        ? {
+            knowsAbout: [
+              ...(schemaContext?.focusKeyword ? [schemaContext.focusKeyword] : []),
+              extractedH1,
+            ].filter(Boolean),
+          }
+        : {}),
+    });
+  }
+
   if (extractedH1) {
     schemaGraph.push({
       '@type': 'Article',
@@ -205,6 +237,15 @@ export function markdownToWordPressHtml(markdown: string, schemaContext?: {
       ...(schemaContext?.description ? { description: schemaContext.description.slice(0, 160) } : {}),
       ...(schemaContext?.imageUrl ? { image: [schemaContext.imageUrl] } : {}),
       ...(schemaContext?.url ? { mainEntityOfPage: { '@type': 'WebPage', '@id': schemaContext.url } } : {}),
+      ...(derivedBrand && derivedOrigin
+        ? {
+            author: { '@type': 'Organization', name: derivedBrand, url: derivedOrigin },
+            publisher: { '@id': `${derivedOrigin}/#organization` },
+          }
+        : {}),
+      ...(schemaContext?.focusKeyword
+        ? { about: { '@type': 'Thing', name: schemaContext.focusKeyword } }
+        : {}),
       datePublished: schemaContext?.datePublished || new Date().toISOString(),
       dateModified: new Date().toISOString(),
     });

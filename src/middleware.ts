@@ -22,6 +22,7 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/sitemap.xml',
   '/sitemap',
   '/robots.txt',
+  '/llms.txt',
   '/seautopilotindexnowkey.txt',
 ]);
 

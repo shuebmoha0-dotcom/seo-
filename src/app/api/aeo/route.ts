@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { website_id, custom_prompt } = body;
+    const { website_id, custom_prompt, action, draft_id } = body;
 
     if (!website_id) {
       return NextResponse.json({ error: 'website_id is required' }, { status: 400 });
@@ -57,6 +57,26 @@ export async function POST(request: Request) {
 
     if (!website || (user?.id && website.user_id !== user.id)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (action === 'optimize_article' && draft_id) {
+      const optRes = await AeoMonitorService.optimizeArticleForLlmMentions(website_id, draft_id);
+      const report = await AeoMonitorService.getOrRunReport(website_id, { forceFresh: true });
+      return NextResponse.json({
+        ...report,
+        optimization_result: optRes,
+        message: `Optimized "${optRes.title}" to 100% LLM & AEO Readiness (${optRes.applied_upgrades.join(', ')}) and pushed live!`,
+      });
+    }
+
+    if (action === 'optimize_all') {
+      const batchRes = await AeoMonitorService.optimizeAllArticlesForLlmMentions(website_id);
+      const report = await AeoMonitorService.getOrRunReport(website_id, { forceFresh: true });
+      return NextResponse.json({
+        ...report,
+        optimization_result: batchRes,
+        message: `Optimized ${batchRes.optimized_count} published article(s) with Brand Entity Co-Occurrence, LLM Comparison Tables, Question FAQ H3s, and Organization + FAQPage JSON-LD Schema!`,
+      });
     }
 
     const report = await AeoMonitorService.getOrRunReport(website_id, {

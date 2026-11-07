@@ -30,6 +30,67 @@ export default function AeoMentionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [attackingKeyword, setAttackingKeyword] = useState<string | null>(null);
   const [attackBanner, setAttackBanner] = useState<string | null>(null);
+  const [optimizingDraftId, setOptimizingDraftId] = useState<string | null>(null);
+  const [optimizingAll, setOptimizingAll] = useState(false);
+
+  const handleOptimizeArticle = async (draftId: string) => {
+    if (!currentWebsite || optimizingDraftId || optimizingAll) return;
+    setOptimizingDraftId(draftId);
+    setAttackBanner(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/aeo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          action: "optimize_article",
+          draft_id: draftId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || "Failed to optimize article for LLM mentions.");
+      } else {
+        setReport(data);
+        setAttackBanner(data.message || "Article optimized for LLM Mentions & pushed live!");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to optimize article for LLM mentions.");
+    } finally {
+      setOptimizingDraftId(null);
+    }
+  };
+
+  const handleOptimizeAllArticles = async () => {
+    if (!currentWebsite || optimizingAll || optimizingDraftId) return;
+    setOptimizingAll(true);
+    setAttackBanner(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/aeo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          action: "optimize_all",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || "Failed to batch-optimize articles for LLM mentions.");
+      } else {
+        setReport(data);
+        setAttackBanner(
+          data.message || "All published articles upgraded with LLM Brand Entity Co-Occurrence, Comparison Tables, FAQ H3s, and Organization + FAQPage JSON-LD Schema!"
+        );
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to batch-optimize articles for LLM mentions.");
+    } finally {
+      setOptimizingAll(false);
+    }
+  };
 
   const fetchAeoReport = async () => {
     if (!currentWebsite) {
@@ -178,16 +239,36 @@ export default function AeoMentionsPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 self-start md:self-auto">
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
               {currentWebsite && (
-                <button
-                  onClick={() => handleRunLiveScan()}
-                  disabled={scanning}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
-                >
-                  {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  <span>{scanning ? "Probing AI Engines…" : "Run live AI mention scan"}</span>
-                </button>
+                <>
+                  <a
+                    href={`/llms.txt?domain=${encodeURIComponent(currentWebsite.domain)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 text-[12px] font-medium text-neutral-700 shadow-2xs transition-colors hover:bg-neutral-50"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>View /llms.txt</span>
+                    <ExternalLink className="h-3 w-3 text-neutral-400" />
+                  </a>
+                  <button
+                    onClick={handleOptimizeAllArticles}
+                    disabled={optimizingAll || scanning}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-700 bg-emerald-600 px-3 text-[12px] font-medium text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    {optimizingAll ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    <span>{optimizingAll ? "Optimizing All Posts for LLMs…" : "Optimize All Posts for LLM Mentions"}</span>
+                  </button>
+                  <button
+                    onClick={() => handleRunLiveScan()}
+                    disabled={scanning}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    <span>{scanning ? "Probing AI Engines…" : "Run live AI mention scan"}</span>
+                  </button>
+                </>
               )}
             </div>
           </header>
@@ -479,11 +560,12 @@ export default function AeoMentionsPage() {
                         <tr className="border-b border-neutral-200 bg-neutral-50/70 text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
                           <th className="py-2.5 px-5">Published Article</th>
                           <th className="py-2.5 px-3 text-center">AEO Score</th>
-                          <th className="py-2.5 px-3 text-center">45w Answer Lead</th>
-                          <th className="py-2.5 px-3 text-center">Comparison Table</th>
-                          <th className="py-2.5 px-3 text-center">FAQ H3s (? )</th>
-                          <th className="py-2.5 px-3 text-center">FAQPage JSON-LD</th>
-                          <th className="py-2.5 px-3 text-center">Citation Mesh</th>
+                          <th className="py-2.5 px-3 text-center">45w Lead</th>
+                          <th className="py-2.5 px-3 text-center">Table</th>
+                          <th className="py-2.5 px-3 text-center">FAQ H3s</th>
+                          <th className="py-2.5 px-3 text-center">JSON-LD</th>
+                          <th className="py-2.5 px-3 text-center">Brand Entity</th>
+                          <th className="py-2.5 px-4 text-right">LLM Optimization</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100">
@@ -548,10 +630,34 @@ export default function AeoMentionsPage() {
                               )}
                             </td>
                             <td className="py-3 px-3 text-center">
-                              {art.triggers?.entity_internal_links ? (
+                              {art.triggers?.brand_entity_cooccurrence ? (
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600 mx-auto" />
                               ) : (
                                 <span className="text-neutral-300">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {art.aeo_score === 100 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-medium">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span>LLM Ready</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOptimizeArticle(art.draft_id)}
+                                  disabled={!!optimizingDraftId || optimizingAll}
+                                  className="inline-flex h-7 items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-colors disabled:opacity-50"
+                                >
+                                  {optimizingDraftId === art.draft_id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <Zap className="w-3 h-3" />
+                                  )}
+                                  <span>
+                                    {optimizingDraftId === art.draft_id ? "Upgrading…" : "Optimize for LLM"}
+                                  </span>
+                                </button>
                               )}
                             </td>
                           </tr>
