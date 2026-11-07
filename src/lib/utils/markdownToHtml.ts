@@ -15,10 +15,34 @@ export function cleanMetaString(text?: string): string {
  * Utility to convert Markdown content into clean, semantic HTML and Gutenberg WordPress blocks.
  * Automatically cleans and removes metadata prefixes, duplicate H1s, and raw image prompts.
  */
-export function markdownToWordPressHtml(markdown: string): string {
+export function markdownToWordPressHtml(markdown: string, schemaContext?: {
+  title?: string;
+  description?: string;
+  url?: string;
+  imageUrl?: string;
+  datePublished?: string;
+}): string {
   if (!markdown) return '';
 
   let html = markdown.trim();
+
+  // Extract H1 title and FAQ pairs BEFORE transforming markdown so we can inject Article + FAQPage JSON-LD schema
+  const extractedH1 = schemaContext?.title || (html.match(/^#\s+([^\n]+)/m)?.[1] || '').replace(/[*_`]/g, '').trim();
+  const faqPairs: Array<{ question: string; answer: string }> = [];
+  const faqRegex = /^###\s+([^\n]+\?)\s*\n+([^\n#<][\s\S]*?)(?=\n+(?:###|##|#|$))/gm;
+  let faqMatch: RegExpExecArray | null;
+  while ((faqMatch = faqRegex.exec(html)) !== null) {
+    const q = faqMatch[1].replace(/^\d+\.\s*/, '').replace(/[*_`]/g, '').trim();
+    const a = faqMatch[2]
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/[*_`>#]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (q && a && a.length >= 20) {
+      faqPairs.push({ question: q, answer: a.slice(0, 500) });
+    }
+  }
 
   // 0. Pre-clean and normalize split images and split links
   html = html.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
@@ -171,6 +195,41 @@ export function markdownToWordPressHtml(markdown: string): string {
       return fullMatch;
     }
   );
+
+  // 12. Inject Article + FAQPage JSON-LD Structured Data Schema for Google Rich Snippets & AI Overviews
+  const schemaGraph: any[] = [];
+  if (extractedH1) {
+    schemaGraph.push({
+      '@type': 'Article',
+      headline: extractedH1.slice(0, 110),
+      ...(schemaContext?.description ? { description: schemaContext.description.slice(0, 160) } : {}),
+      ...(schemaContext?.imageUrl ? { image: [schemaContext.imageUrl] } : {}),
+      ...(schemaContext?.url ? { mainEntityOfPage: { '@type': 'WebPage', '@id': schemaContext.url } } : {}),
+      datePublished: schemaContext?.datePublished || new Date().toISOString(),
+      dateModified: new Date().toISOString(),
+    });
+  }
+  if (faqPairs.length > 0) {
+    schemaGraph.push({
+      '@type': 'FAQPage',
+      mainEntity: faqPairs.slice(0, 6).map((faq) => ({
+        '@type': 'Question',
+        name: faq.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: faq.answer,
+        },
+      })),
+    });
+  }
+
+  if (schemaGraph.length > 0 && !result.includes('application/ld+json')) {
+    const jsonLdPayload = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': schemaGraph,
+    });
+    result += `\n\n<!-- wp:html -->\n<script type="application/ld+json">${jsonLdPayload}</script>\n<!-- /wp:html -->`;
+  }
 
   return result;
 }

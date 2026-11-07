@@ -944,8 +944,16 @@ export class FullAutopilotEngine {
         .limit(1)
         .maybeSingle();
 
-      const formattedHtml = markdownToWordPressHtml(articleOutput.content_body);
       const articleSlug = articleOutput.url_slug || selectedGap.keyword.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const expectedCanonicalUrl = wpSite
+        ? `${wpSite.site_url.replace(/\/$/, '')}/${articleSlug}/`
+        : `${siteUrl.replace(/\/$/, '')}/${articleSlug}/`;
+      const formattedHtml = markdownToWordPressHtml(articleOutput.content_body, {
+        title: articleOutput.working_title,
+        description: cleanMetaString(articleOutput.meta_description || ''),
+        url: expectedCanonicalUrl,
+        imageUrl: articleOutput.featured_image_url,
+      });
 
       if (autoPublish && wpSite) {
         livePostUrl = `${wpSite.site_url.replace(/\/$/, '')}/${articleSlug}/`;
@@ -1105,6 +1113,82 @@ export class FullAutopilotEngine {
         published_live: isPublishedLive,
       };
 
+      // ── STEP 4.2: BIDIRECTIONAL TOPIC CLUSTER MESH (RETROACTIVE INTERNAL LINK INJECTION) ──
+      // Automatically inject contextual internal links from up to 2 older published articles pointing TO the newly published post
+      if (isPublishedLive && livePostUrl) {
+        try {
+          const { data: existingPosts } = await supabase
+            .from('content_drafts')
+            .select('id, working_title, primary_keyword, url_slug, content_body, seo_title, meta_description, revision_notes')
+            .eq('website_id', websiteId)
+            .eq('status', 'published')
+            .neq('id', draftId || '')
+            .order('created_at', { ascending: false })
+            .limit(8);
+
+          let retroInjectedCount = 0;
+          for (const olderPost of existingPosts || []) {
+            if (retroInjectedCount >= 2) break;
+            if (!olderPost.content_body || olderPost.content_body.includes(livePostUrl)) continue;
+
+            const linkSentence = `\n\n> **Related Deep Dive:** Explore our step-by-step playbook on [${articleOutput.working_title}](${livePostUrl}) for benchmark frameworks on ${selectedGap.keyword}.\n\n`;
+            const h2Matches = [...olderPost.content_body.matchAll(/\n(##\s+[^\n]+)/g)];
+            let updatedMarkdown = olderPost.content_body;
+            if (h2Matches.length >= 2 && h2Matches[h2Matches.length - 1].index !== undefined) {
+              const insertIdx = h2Matches[h2Matches.length - 1].index!;
+              updatedMarkdown = olderPost.content_body.slice(0, insertIdx) + linkSentence + olderPost.content_body.slice(insertIdx);
+            } else {
+              updatedMarkdown = olderPost.content_body + linkSentence;
+            }
+
+            await supabase
+              .from('content_drafts')
+              .update({
+                content_body: updatedMarkdown,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', olderPost.id);
+
+            if (wpSite && olderPost.url_slug) {
+              let olderFeaturedImg = '';
+              try {
+                const notes = typeof olderPost.revision_notes === 'string'
+                  ? JSON.parse(olderPost.revision_notes)
+                  : (olderPost.revision_notes || {});
+                olderFeaturedImg = notes.featured_image_url || '';
+              } catch (_) {}
+
+              await createWordPressJob({
+                websiteId,
+                jobType: 'update_post',
+                payload: {
+                  title: olderPost.working_title,
+                  slug: olderPost.url_slug,
+                  content: markdownToWordPressHtml(updatedMarkdown, {
+                    title: olderPost.working_title,
+                    description: cleanMetaString(olderPost.meta_description || ''),
+                    imageUrl: olderFeaturedImg || undefined,
+                  }),
+                  status: 'publish',
+                  seo_title: cleanMetaString(olderPost.seo_title || olderPost.working_title),
+                  meta_description: cleanMetaString(olderPost.meta_description || ''),
+                  focus_keyword: olderPost.primary_keyword,
+                  ...(olderFeaturedImg ? { featured_image_url: olderFeaturedImg } : {}),
+                },
+                idempotencyKey: `retro_mesh_${olderPost.id}_to_${draftId}`,
+              });
+            }
+            retroInjectedCount++;
+          }
+          if (retroInjectedCount > 0) {
+            console.log(`[FullAutopilotEngine] Retroactively injected bidirectional internal links from ${retroInjectedCount} existing post(s) -> ${livePostUrl}`);
+            technicalFixesInfo.count += retroInjectedCount;
+          }
+        } catch (meshErr) {
+          console.warn('[FullAutopilotEngine] Retroactive internal link mesh notice:', meshErr);
+        }
+      }
+
       // ── STEP 4.5: AUTONOMOUS MULTI-DAY ROADMAP QUEUE SELF-REPLENISHMENT ───
       // Ensure the user always has a visible forward-looking queue of at least 4 upcoming topics in Content Planner
       // across DISTINCT categories and pillars with zero topical overlap.
@@ -1243,23 +1327,28 @@ export class FullAutopilotEngine {
           });
         }
 
-        // Execute secondary booster tool if recommended by Strategic Brain
-        if (
+        // Always execute an autonomous optimization on an existing post in every cycle (CTR Rewrite, Decay Recovery, or Internal Link Injection)
+        const activeBoosterMode =
           strategicDecision.secondary_booster_mode === 'OPTIMIZE_STRIKING_DISTANCE_CTR' ||
           strategicDecision.secondary_booster_mode === 'RECOVER_DECAYING_PAGE' ||
           strategicDecision.secondary_booster_mode === 'INJECT_INTERNAL_LINKS'
-        ) {
-          const boosterRes = await RankRecoveryEngine.executeAutonomousOptimization({
-            websiteId,
-            domain,
-            siteUrl,
-            mode: strategicDecision.secondary_booster_mode,
-            report: recoveryReport,
-          });
-          if (boosterRes.executed) {
-            strikingDistanceSummary = boosterRes.summary;
-            technicalFixesInfo.count += 1;
-          }
+            ? strategicDecision.secondary_booster_mode
+            : recoveryReport.striking_distance_count > 0
+            ? 'OPTIMIZE_STRIKING_DISTANCE_CTR'
+            : recoveryReport.detected_drops_count > 0
+            ? 'RECOVER_DECAYING_PAGE'
+            : 'INJECT_INTERNAL_LINKS';
+
+        const boosterRes = await RankRecoveryEngine.executeAutonomousOptimization({
+          websiteId,
+          domain,
+          siteUrl,
+          mode: activeBoosterMode,
+          report: recoveryReport,
+        });
+        if (boosterRes.executed) {
+          strikingDistanceSummary = boosterRes.summary;
+          technicalFixesInfo.count += 1;
         }
 
         if (!strikingDistanceSummary && recoveryReport.striking_distance_count > 0) {

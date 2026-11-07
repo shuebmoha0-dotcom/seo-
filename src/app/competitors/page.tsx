@@ -28,6 +28,41 @@ export default function CompetitorsPage() {
   const [scanStep, setScanStep] = useState<string>("");
   const [selectedThreat, setSelectedThreat] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attackingKeyword, setAttackingKeyword] = useState<string | null>(null);
+  const [attackBanner, setAttackBanner] = useState<string | null>(null);
+
+  const handleCounterAttack = async (keyword: string, competitorDomain?: string) => {
+    if (!currentWebsite || attackingKeyword) return;
+    setAttackingKeyword(keyword);
+    setAttackBanner(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/autopilot/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+          instruction: `Write and publish an authoritative SEO guide on "${keyword}" to outrank ${competitorDomain || "competitors"}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || "Counter-attack execution failed.");
+      } else {
+        setAttackBanner(
+          data.message ||
+            `Counter-attack executed for "${keyword}": SERP reverse-engineered, comparison table & FAQPage JSON-LD schema injected, published, and internal links meshed!`
+        );
+        if (selectedThreat?.keyword === keyword) {
+          setSelectedThreat(null);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to execute competitor counter-attack.");
+    } finally {
+      setAttackingKeyword(null);
+    }
+  };
 
   const fetchCompetitorData = async () => {
     if (!currentWebsite) {
@@ -173,6 +208,38 @@ export default function CompetitorsPage() {
                 <h4 className="text-xs font-semibold text-indigo-950">Autonomous Competitor Analysis Active</h4>
                 <p className="text-xs text-indigo-700">{scanStep}</p>
               </div>
+            </div>
+          )}
+
+          {attackingKeyword && (
+            <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center gap-3 shadow-2xs">
+              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
+              <div>
+                <h4 className="text-xs font-semibold text-indigo-950">
+                  Executing 7-Weapon Competitor Counter-Attack on &ldquo;{attackingKeyword}&rdquo;...
+                </h4>
+                <p className="text-xs text-indigo-700">
+                  Reverse-engineering Page 1 H2s &amp; NLP entities, drafting benchmark comparison table + FAQPage JSON-LD schema, publishing, and injecting retroactive internal links...
+                </p>
+              </div>
+            </div>
+          )}
+
+          {attackBanner && !attackingKeyword && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between gap-3 text-emerald-900 text-xs shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div>
+                  <p className="font-semibold">Competitor Counter-Attack Executed</p>
+                  <p className="text-emerald-800 mt-0.5">{attackBanner}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAttackBanner(null)}
+                className="text-emerald-700 hover:text-emerald-950 p-1"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -363,6 +430,23 @@ export default function CompetitorsPage() {
                               <span>Volume: <strong className="text-neutral-800 font-mono">{gap.search_volume ? gap.search_volume.toLocaleString() : "—"}</strong></span>
                               <span>Difficulty: <strong className="text-neutral-800 font-mono">{gap.difficulty ?? "—"}</strong></span>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCounterAttack(gap.keyword, gap.competitor_domain)}
+                              disabled={!!attackingKeyword}
+                              className="w-full mt-1 inline-flex h-7 items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 px-2.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-colors disabled:opacity-50"
+                            >
+                              {attackingKeyword === gap.keyword ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Zap className="w-3 h-3" />
+                              )}
+                              <span>
+                                {attackingKeyword === gap.keyword
+                                  ? "Counter-Attacking SERP…"
+                                  : `Outrank ${gap.competitor_domain || "Rival"}`}
+                              </span>
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -453,12 +537,24 @@ export default function CompetitorsPage() {
                     {selectedThreat.recommended_response}
                   </p>
                 </div>
-                <div className="flex justify-end pt-2">
+                <div className="flex items-center justify-end gap-2 pt-2">
                   <button
                     onClick={() => setSelectedThreat(null)}
                     className="inline-flex h-8 items-center rounded-lg border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 shadow-2xs transition-colors"
                   >
                     Dismiss
+                  </button>
+                  <button
+                    onClick={() => handleCounterAttack(selectedThreat.keyword, selectedThreat.competitor_domain)}
+                    disabled={!!attackingKeyword}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-indigo-700 bg-indigo-600 px-3 text-[13px] font-medium text-white hover:bg-indigo-700 shadow-xs transition-colors disabled:opacity-50"
+                  >
+                    {attackingKeyword === selectedThreat.keyword ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="w-3.5 h-3.5" />
+                    )}
+                    <span>Outrank &amp; Defeat {selectedThreat.competitor_domain}</span>
                   </button>
                 </div>
               </div>

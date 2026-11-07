@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { CompetitorAgent } from '@/lib/agent/competitorAgent';
 import { SiteNicheProfiler } from '@/lib/agent/siteNicheProfiler';
 import { serp_analysis_tool } from '@/lib/tools/dataforseo';
@@ -13,8 +14,9 @@ const EXCLUDED_DOMAINS = new Set([
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const userClient = await createClient();
+    const { data: { user } } = await userClient.auth.getUser();
+    const supabase = createAdminClient();
 
     const userId = user?.id || '00000000-0000-0000-0000-000000000000';
     const body = await request.json();
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
       .eq('id', website_id)
       .single();
 
-    if (siteError || !website) {
+    if (siteError || !website || (user?.id && website.user_id !== user.id)) {
       return NextResponse.json({ error: 'Website not found or access denied.' }, { status: 404 });
     }
 

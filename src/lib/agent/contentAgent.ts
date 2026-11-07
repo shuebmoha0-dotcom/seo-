@@ -275,9 +275,10 @@ STRICT RULES:
 2. ZERO TABLE OF CONTENTS: Never generate a Table of Contents or anchor bullet list.
 3. ZERO META TAGS: Never output "Meta title:", "SEO title:", or meta descriptions in text.
 4. FEATURED SNIPPET: Directly under H1, provide a 40–50 word direct definition/answer for "${brief.primary_keyword}".
+5. COMPETITOR-BEATING COMPARISON TABLE: Include 1 compact Markdown comparison/benchmark table (| Criterion | Standard Approach | High-Performance Benchmark |) with 4 rows to win Google Table Snippets.
 5. INTERNAL LINKS: Embed at least 3 exact links from the candidate list as [anchor](URL).
 6. IMAGES: Place exact markers [IMAGE: ...].
-7. FAQ: Near conclusion, include 3 FAQ H3s with 2-sentence direct answers.
+7. FAQ RICH SNIPPETS: Near conclusion, include 3 FAQ H3 headings ending with a question mark (### Question?) followed by 2-sentence direct answers.
 8. TONE & AUDIENCE: ${rules.tone} | Written for ${rules.audience}.
 ${projectMemory ? `\nPROJECT INSIGHTS:\n${projectMemory}\n` : ''}${projectInstructions ? `\nCUSTOM INSTRUCTIONS:\n${projectInstructions}\n` : ''}${revisionNotes ? `\nREVISION:\n${revisionNotes}\n` : ''}`,
         prompt: `Write a focused, high-value ${rules.word_count_min}–${rules.word_count_max} word article based on the brief below. Stay tightly within the target ${rules.word_count_min}–${rules.word_count_max} word range.
@@ -563,7 +564,9 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
     if (!input.serp_benchmark && input.primary_keyword) {
       try {
         const { SerpReverseEngineer } = await import('./serpReverseEngineer');
-        input.serp_benchmark = await SerpReverseEngineer.reverseEngineerQuery(input.primary_keyword, { maxCompetitors: 4 });
+        const serpPromise = SerpReverseEngineer.reverseEngineerQuery(input.primary_keyword, { maxCompetitors: 4 });
+        const serpTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 7000));
+        input.serp_benchmark = await Promise.race([serpPromise, serpTimeout]);
       } catch (serpErr) {
         console.warn('[ContentAgent] SERP reverse-engineer notice:', serpErr);
       }
