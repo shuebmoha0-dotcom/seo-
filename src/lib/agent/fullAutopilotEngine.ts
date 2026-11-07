@@ -1359,6 +1359,15 @@ export class FullAutopilotEngine {
         if (indexingVerificationSummary) {
           telegramMsg += `🔍 *Google Indexation:* ${indexingVerificationSummary}\n`;
         }
+        try {
+          const { BacklinkMonitorService } = await import('@/lib/services/backlinkMonitorService');
+          const blCycle = await BacklinkMonitorService.runDailyBacklinkDiscoveryAndMonitor({
+            websiteId,
+            batchSize: 8,
+            triggerReason: 'new_article_published',
+          });
+          telegramMsg += `🔗 *Backlink Growth (100 Goal):* +${blCycle.newly_discovered_count} new opportunities (${blCycle.total_active_prospects + blCycle.total_acquired_backlinks}/${blCycle.target_goal} total)\n`;
+        } catch (_) {}
         telegramMsg += `⏱️ *Next Cycle:* ${new Date(nextRunAt).toUTCString()}\n\n`;
         telegramMsg += `_Operating 24/7 autonomously with closed-loop strategy & learning._`;
 

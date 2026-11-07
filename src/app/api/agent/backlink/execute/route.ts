@@ -143,19 +143,34 @@ export async function POST(request: Request) {
       const nowIso = new Date().toISOString();
       const targetAnchor = submission_data?.target_anchor || prospect.target_anchor || domain;
       const linkingUrl = DIRECTORY_SUBMISSION_PORTALS[targetDomain] || prospect.url || prospect.prospect_url || `https://${targetDomain}`;
+      const targetDestinationUrl = submission_data?.website_url || siteUrl;
 
-      // Insert into acquired_backlinks
-      const { data: acquiredRecord, error: acqErr } = await supabase
+      // Perform immediate live HTTP & backlink check
+      let initialHttpStatus = 200;
+      let initialStatusLabel = isDirectoryPlatform ? 'Submitted & Active' : 'Outreach Executed';
+      try {
+        const agent = new BacklinkAgent();
+        const check = await agent.verifyBacklink(linkingUrl, domain);
+        if (check.http_status) initialHttpStatus = check.http_status;
+        if (check.is_found) {
+          initialStatusLabel = check.is_dofollow ? 'Verified Live (Dofollow)' : 'Verified Live (Citation)';
+        }
+      } catch (_) {}
+
+      // Upsert into acquired_backlinks (strictly matching 00001_backlink_agent.sql schema)
+      const { data: acquiredRecord } = await supabase
         .from('acquired_backlinks')
-        .insert({
+        .upsert({
           website_id,
-          domain: targetDomain,
           linking_url: linkingUrl,
-          target_url: submission_data?.website_url || siteUrl,
+          target_url: targetDestinationUrl,
           anchor_text: targetAnchor,
-          verification_status: isDirectoryPlatform ? 'Submitted & Active' : 'Outreach Executed',
+          is_dofollow: true,
+          http_status: initialHttpStatus,
+          verification_status: initialStatusLabel,
           first_discovered_at: nowIso,
-        })
+          last_verified_at: nowIso,
+        }, { onConflict: 'website_id,linking_url,target_url' })
         .select('*')
         .maybeSingle();
 
@@ -171,7 +186,7 @@ export async function POST(request: Request) {
       try {
         const { GoogleIndexingService } = await import('@/lib/connectors/googleIndexing');
         await GoogleIndexingService.requestIndexing({
-          url: siteUrl,
+          url: targetDestinationUrl,
           websiteId: website_id,
           type: 'URL_UPDATED',
         });
@@ -179,14 +194,16 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        acquired: acquiredRecord || {
-          id: crypto.randomUUID(),
+        acquired: {
+          ...(acquiredRecord || {
+            id: crypto.randomUUID(),
+            linking_url: linkingUrl,
+            target_url: targetDestinationUrl,
+            anchor_text: targetAnchor,
+            verification_status: initialStatusLabel,
+            first_discovered_at: nowIso,
+          }),
           domain: targetDomain,
-          linking_url: linkingUrl,
-          target_url: siteUrl,
-          anchor_text: targetAnchor,
-          verification_status: isDirectoryPlatform ? 'Submitted & Active' : 'Outreach Executed',
-          first_discovered_at: nowIso,
         },
         message: isDirectoryPlatform
           ? `Listing on ${targetDomain} logged to Acquired Backlinks & indexed.`

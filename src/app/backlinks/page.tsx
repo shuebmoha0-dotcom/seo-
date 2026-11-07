@@ -134,19 +134,54 @@ export default function BacklinksPage() {
     }
     setResearching(true);
     try {
-      await fetch("/api/agent/backlink/research", {
+      const res = await fetch("/api/agent/backlink/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           website_id: currentWebsite.id,
           domain: currentWebsite.domain,
+          batch_size: 15,
         }),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.summary) {
+          setExecutionNotice(data.summary);
+          setTimeout(() => setExecutionNotice(null), 6000);
+        }
+      }
       await fetchBacklinkData();
     } catch (e) {
       console.error(e);
     } finally {
       setResearching(false);
+    }
+  };
+
+  const handleMonitorAndVerifyAll = async () => {
+    if (!currentWebsite) return;
+    setVerifyingId("all");
+    try {
+      const res = await fetch("/api/agent/backlink/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          website_id: currentWebsite.id,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExecutionNotice(
+          data.monitor_result?.summary ||
+            "Monitored all acquired backlinks and scanned for new link opportunities."
+        );
+        setTimeout(() => setExecutionNotice(null), 6000);
+      }
+      await fetchBacklinkData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setVerifyingId(null);
     }
   };
 
@@ -323,13 +358,13 @@ export default function BacklinksPage() {
               {currentWebsite && (
                 <>
                   <button
-                    onClick={handleClearAll}
-                    disabled={researching}
-                    title="Clear all prospects and re-scan fresh"
+                    onClick={handleMonitorAndVerifyAll}
+                    disabled={verifyingId === "all"}
+                    title="Crawl and verify all acquired backlinks & scan new opportunities"
                     className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-2.5 text-[13px] font-medium text-neutral-700 shadow-2xs hover:bg-neutral-50 hover:text-neutral-900 transition-colors disabled:opacity-60"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${researching ? 'animate-spin' : ''}`} />
-                    <span>Refresh &amp; Re-scan</span>
+                    <ShieldCheck className={`w-3.5 h-3.5 text-emerald-600 ${verifyingId === 'all' ? 'animate-pulse' : ''}`} />
+                    <span>{verifyingId === "all" ? "Monitoring links…" : "Monitor & Verify Links"}</span>
                   </button>
 
                   <button
@@ -340,9 +375,9 @@ export default function BacklinksPage() {
                     {researching ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <Search className="w-3.5 h-3.5" />
+                      <Plus className="w-3.5 h-3.5" />
                     )}
-                    <span>{researching ? "Scanning sources…" : "Find link prospects"}</span>
+                    <span>{researching ? "Discovering new batch…" : "Discover +15 New Backlinks"}</span>
                   </button>
                 </>
               )}
@@ -367,6 +402,44 @@ export default function BacklinksPage() {
             </div>
           ) : (
             <>
+              {/* 100-Backlink Growth Goal & Daily Autonomous Monitor Banner */}
+              <section className="rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/70 via-white to-emerald-50/50 p-4 shadow-2xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-600 text-white">
+                        <Target className="w-3 h-3" />
+                        100-Backlink Growth Roadmap
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                        Autonomous Daily Discovery &amp; Link Monitor Active
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-600">
+                      A growing domain requires <strong>100+ authoritative backlinks</strong> to dominate organic rankings. The agent automatically discovers new unique referring domains every 24 hours and whenever a new article is published, while continuously monitoring your acquired links.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-start md:items-end shrink-0 min-w-[220px]">
+                    <div className="flex items-center justify-between w-full text-xs font-semibold text-neutral-800 mb-1.5">
+                      <span>Pipeline Progress</span>
+                      <span className="font-mono text-indigo-700">
+                        {prospects.length + acquiredLinks.length} / 100 Backlinks
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-neutral-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, Math.max(4, prospects.length + acquiredLinks.length))}%` }}
+                      />
+                    </div>
+                    <span className="text-[11px] text-neutral-500 mt-1">
+                      {prospects.length} ready to execute · {acquiredLinks.length} acquired &amp; monitored
+                    </span>
+                  </div>
+                </div>
+              </section>
               {/* Stat strip */}
               <section aria-label="Key metrics" className="grid grid-cols-2 overflow-hidden rounded-xl border border-neutral-200 bg-white lg:grid-cols-4 shadow-2xs">
                 <div className="p-5">
@@ -932,6 +1005,26 @@ export default function BacklinksPage() {
             {/* TAB: ACQUIRED BACKLINKS */}
             {pipelineStage === "ACQUIRED" && (
               <div className="space-y-4">
+                <div className="flex items-center justify-between bg-white border border-neutral-200 rounded-xl p-4 shadow-xs">
+                  <div>
+                    <h3 className="font-bold text-sm text-neutral-900 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Live Backlink Health &amp; Indexation Monitor
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      The agent continuously monitors your acquired backlinks to verify HTTP status, dofollow attributes, and live page presence.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleMonitorAndVerifyAll}
+                    disabled={verifyingId === "all"}
+                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition-colors shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${verifyingId === "all" ? "animate-spin" : ""}`} />
+                    <span>{verifyingId === "all" ? "Verifying Live Links..." : "Verify All Backlinks Now"}</span>
+                  </button>
+                </div>
+
                 {acquiredLinks.length === 0 ? (
                   <div className="p-12 text-center bg-white border border-neutral-200 rounded-xl space-y-2 max-w-lg mx-auto shadow-xs">
                     <CheckCircle2 className="w-8 h-8 text-neutral-300 mx-auto" />
@@ -948,15 +1041,29 @@ export default function BacklinksPage() {
                           <th className="py-3 px-4">Referring Domain</th>
                           <th className="py-3 px-4">Target URL</th>
                           <th className="py-3 px-4">Anchor Text</th>
-                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">HTTP / Type</th>
+                          <th className="py-3 px-4">Monitor Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-100">
                         {acquiredLinks.map((l) => (
                           <tr key={l.id} className="hover:bg-neutral-50 transition-colors">
-                            <td className="py-3 px-4 font-semibold text-neutral-900">{l.domain || l.linking_url}</td>
+                            <td className="py-3 px-4 font-semibold text-neutral-900">
+                              <a
+                                href={l.linking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-indigo-600 hover:underline inline-flex items-center gap-1"
+                              >
+                                <span>{l.domain || l.linking_url}</span>
+                                <ArrowUpRight className="w-3 h-3" />
+                              </a>
+                            </td>
                             <td className="py-3 px-4 text-neutral-600 truncate max-w-xs">{l.target_url}</td>
                             <td className="py-3 px-4 font-mono text-neutral-700">{l.anchor_text || "Brand Mention"}</td>
+                            <td className="py-3 px-4 text-neutral-600 font-mono text-[11px]">
+                              HTTP {l.http_status || 200} · {l.is_dofollow !== false ? "Dofollow" : "Citation"}
+                            </td>
                             <td className="py-3 px-4">
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                 {l.verification_status || "Verified"}

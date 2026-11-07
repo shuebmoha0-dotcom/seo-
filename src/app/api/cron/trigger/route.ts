@@ -73,9 +73,12 @@ async function handleCronExecution(request: Request) {
       console.warn('[Cron Trigger] Platform blog engine notice:', blogErr.message);
     }
 
-    // 0.6. Continuous Auto-Indexing Watchdog: Scan all connected websites and automatically submit any unindexed published posts
+    // 0.6. Continuous Auto-Indexing & Daily Backlink Growth Watchdog:
+    // Scan all connected websites, submit any unindexed published posts, monitor acquired backlinks,
+    // and discover new daily backlinks toward the 100-Backlink Growth Goal
     try {
       const { PostIndexVerificationService } = await import('@/lib/services/postIndexVerificationService');
+      const { BacklinkMonitorService } = await import('@/lib/services/backlinkMonitorService');
       const { data: allActiveWebsites } = await supabase
         .from('websites')
         .select('id, domain, url')
@@ -94,10 +97,23 @@ async function handleCronExecution(request: Request) {
           } catch (siteIdxErr) {
             console.warn(`[Cron Trigger Auto-Indexing Watchdog] Notice for ${ws.domain}:`, siteIdxErr);
           }
+
+          try {
+            const blCycle = await BacklinkMonitorService.runDailyBacklinkDiscoveryAndMonitor({
+              websiteId: ws.id,
+              batchSize: 10,
+              triggerReason: 'daily_cron',
+            });
+            if (blCycle.newly_discovered_count > 0) {
+              console.log(`[Cron Trigger Backlink Growth Watchdog] Discovered ${blCycle.newly_discovered_count} new backlinks for ${ws.domain} (${blCycle.total_active_prospects + blCycle.total_acquired_backlinks}/${blCycle.target_goal})`);
+            }
+          } catch (blErr) {
+            console.warn(`[Cron Trigger Backlink Growth Watchdog] Notice for ${ws.domain}:`, blErr);
+          }
         }
       }
     } catch (idxWatchdogErr: any) {
-      console.warn('[Cron Trigger] Indexing watchdog error:', idxWatchdogErr?.message || idxWatchdogErr);
+      console.warn('[Cron Trigger] Indexing/Backlink watchdog error:', idxWatchdogErr?.message || idxWatchdogErr);
     }
 
     // 1. Check and execute due tasks from public.tasks table

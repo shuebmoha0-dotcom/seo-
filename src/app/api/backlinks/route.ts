@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { SiteNicheProfiler } from '@/lib/agent/siteNicheProfiler';
 import { BacklinkAgent } from '@/lib/agent/backlinkAgent';
+import { BacklinkMonitorService, TARGET_BACKLINK_GOAL } from '@/lib/services/backlinkMonitorService';
 
 const INVALID_BLOG_DOMAINS = [
   'saashub.com',
@@ -21,48 +23,59 @@ export async function GET(request: Request) {
     const websiteId = searchParams.get('website_id');
 
     if (!websiteId) {
-      return NextResponse.json({ prospects: [], acquired: [], linkable_assets: [] });
+      return NextResponse.json({
+        prospects: [],
+        acquired: [],
+        linkable_assets: [],
+        growth_goal: { target: TARGET_BACKLINK_GOAL, active_prospects: 0, acquired_count: 0, total_discovered: 0, progress_percent: 0 },
+      });
     }
 
-    const supabase = await createClient();
+    const userClient = await createClient();
+    const { data: { user } } = await userClient.auth.getUser();
+    const supabase = createAdminClient();
 
+    // Multi-tenant ownership verification (Rule 10)
     const { data: website } = await supabase
       .from('websites')
-      .select('id, domain, url')
+      .select('id, user_id, domain, url')
       .eq('id', websiteId)
-      .single();
+      .maybeSingle();
 
-    let siteType = 'blog' as any;
-    let primaryNiche = website?.domain?.split('.')[0]?.replace(/[-_]/g, ' ') || '';
-
-    if (website) {
-      try {
-        const profile = await SiteNicheProfiler.profileSite({
-          websiteId: website.id,
-          domain: website.domain,
-          siteUrl: website.url,
-        });
-        if (profile.siteType) siteType = profile.siteType;
-        if (profile.primaryNiche) primaryNiche = profile.primaryNiche;
-      } catch (_) {}
+    if (!website || (user?.id && website.user_id && website.user_id !== user.id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { data: prospects } = await supabase
+    let siteType = 'blog' as any;
+    let primaryNiche = website.domain?.split('.')[0]?.replace(/[-_]/g, ' ') || '';
+
+    try {
+      const profile = await SiteNicheProfiler.profileSite({
+        websiteId: website.id,
+        domain: website.domain,
+        siteUrl: website.url,
+      });
+      if (profile.siteType) siteType = profile.siteType;
+      if (profile.primaryNiche) primaryNiche = profile.primaryNiche;
+    } catch (_) {}
+
+    let { data: prospects } = await supabase
       .from('backlink_prospects')
       .select('*')
       .eq('website_id', websiteId)
       .order('relevance_score', { ascending: false });
 
-    const { data: acquired } = await supabase
+    let { data: acquired } = await supabase
       .from('acquired_backlinks')
       .select('*')
       .eq('website_id', websiteId)
       .order('first_discovered_at', { ascending: false });
 
-    const { data: assets } = await supabase
+    let { data: assets } = await supabase
       .from('linkable_assets')
       .select('*')
-      .eq('website_id', websiteId);
+      .eq('website_id', websiteId)
+      .order('created_at', { ascending: false });
 
     let cleanProspects = prospects || [];
 
@@ -77,7 +90,6 @@ export async function GET(request: Request) {
           (p: any) => !INVALID_BLOG_DOMAINS.includes((p.domain || '').toLowerCase())
         );
 
-        // Delete invalid records in database
         await supabase
           .from('backlink_prospects')
           .delete()
@@ -86,39 +98,79 @@ export async function GET(request: Request) {
       }
     }
 
-    // Auto-discover genuine editorial prospects if empty
-    if (cleanProspects.length === 0 && website) {
+    // Autonomous Opportunity & Growth Trigger:
+    // If prospects < 20 or linkable_assets == 0, automatically run a discovery & asset-sync wave toward the 100-Backlink Goal
+    if (cleanProspects.length < 20 || (assets || []).length === 0) {
       try {
-        const agent = new BacklinkAgent();
-        const fresh = await agent.discoverProspectsDirect(website.domain, primaryNiche, siteType);
-        if (fresh && fresh.length > 0) {
-          cleanProspects = fresh;
-          for (const p of fresh) {
-            await supabase.from('backlink_prospects').upsert({
-              website_id: websiteId,
-              prospect_url: p.url,
-              domain: p.domain,
-              category: p.category,
-              relevance_score: p.relevance_score,
-              quality_score: p.quality_score,
-              opportunity_score: p.opportunity_score,
-              risk_score: p.risk_score,
-              outreach_priority: p.outreach_priority,
-              contact_page: p.contact_page || `https://${p.domain}/contact`,
-            }, { onConflict: 'website_id,prospect_url' });
-          }
-        }
+        await BacklinkMonitorService.runDailyBacklinkDiscoveryAndMonitor({
+          websiteId,
+          batchSize: Math.max(15, 25 - cleanProspects.length),
+          triggerReason: 'initial_load',
+        });
+
+        const [refreshedProspects, refreshedAcquired, refreshedAssets] = await Promise.all([
+          supabase
+            .from('backlink_prospects')
+            .select('*')
+            .eq('website_id', websiteId)
+            .order('relevance_score', { ascending: false }),
+          supabase
+            .from('acquired_backlinks')
+            .select('*')
+            .eq('website_id', websiteId)
+            .order('first_discovered_at', { ascending: false }),
+          supabase
+            .from('linkable_assets')
+            .select('*')
+            .eq('website_id', websiteId)
+            .order('created_at', { ascending: false }),
+        ]);
+
+        if (refreshedProspects.data) cleanProspects = refreshedProspects.data;
+        if (refreshedAcquired.data) acquired = refreshedAcquired.data;
+        if (refreshedAssets.data) assets = refreshedAssets.data;
       } catch (e) {
-        console.warn('[Backlinks GET] Auto-prospecting note:', e);
+        console.warn('[Backlinks GET] Auto-discovery wave notice:', e);
       }
     }
 
+    // Enrich all prospects with their full Acquisition Playbook so every card displays Where on Site, Steps, Anchor & Pitch
+    const agent = new BacklinkAgent();
+    const enrichedProspects = cleanProspects.map((p: any) =>
+      agent.enrichProspectPlaybook(p, primaryNiche, siteType)
+    );
+
+    // Enrich acquired backlinks with clean domain extracted from linking_url
+    const enrichedAcquired = (acquired || []).map((a: any) => {
+      let parsedDomain = a.domain || '';
+      if (!parsedDomain && a.linking_url) {
+        try {
+          parsedDomain = new URL(a.linking_url).hostname.replace(/^www\./, '');
+        } catch {
+          parsedDomain = a.linking_url;
+        }
+      }
+      return {
+        ...a,
+        domain: parsedDomain,
+      };
+    });
+
+    const totalDiscovered = enrichedProspects.length + enrichedAcquired.length;
+
     return NextResponse.json({
-      prospects: cleanProspects,
-      acquired: acquired || [],
+      prospects: enrichedProspects,
+      acquired: enrichedAcquired,
       linkable_assets: assets || [],
       site_type: siteType,
       primary_niche: primaryNiche,
+      growth_goal: {
+        target: TARGET_BACKLINK_GOAL,
+        active_prospects: enrichedProspects.length,
+        acquired_count: enrichedAcquired.length,
+        total_discovered: totalDiscovered,
+        progress_percent: Math.min(100, Math.round((totalDiscovered / TARGET_BACKLINK_GOAL) * 100)),
+      },
     });
   } catch (error: any) {
     console.error('[Backlinks GET] Error:', error);
@@ -136,7 +188,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id or website_id is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     if (id) {
       await supabase.from('backlink_prospects').delete().eq('id', id);
