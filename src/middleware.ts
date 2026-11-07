@@ -27,6 +27,7 @@ const PUBLIC_EXACT_PAGES = new Set([
 
 const PROTECTED_APP_ROOTS = new Set([
   'admin',
+  'aeo',
   'api',
   'auth',
   'autopilot',

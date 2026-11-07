@@ -1457,6 +1457,11 @@ export class FullAutopilotEngine {
           });
           telegramMsg += `🔗 *Backlink Growth (100 Goal):* +${blCycle.newly_discovered_count} new opportunities (${blCycle.total_active_prospects + blCycle.total_acquired_backlinks}/${blCycle.target_goal} total)\n`;
         } catch (_) {}
+        try {
+          const { AeoMonitorService } = await import('@/lib/services/aeoMonitorService');
+          const aeoReport = await AeoMonitorService.runLiveScan(websiteId);
+          telegramMsg += `🤖 *AEO & AI Mentions (ChatGPT/Perplexity):* ${aeoReport.kpis.ai_share_of_voice_pct}% Share of Voice (${aeoReport.kpis.prompts_with_brand_mention}/${aeoReport.kpis.total_prompts_tracked} prompts citing brand)\n`;
+        } catch (_) {}
         telegramMsg += `⏱️ *Next Cycle:* ${new Date(nextRunAt).toUTCString()}\n\n`;
         telegramMsg += `_Operating 24/7 autonomously with closed-loop strategy & learning._`;
 
