@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PADDLE_PLANS } from '@/lib/billing/paddle';
 import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -69,12 +70,28 @@ export async function POST(req: NextRequest) {
       }
 
       if (userId) {
-        // Determine plan tier from items/price_id
+        // Determine plan tier from custom_data.plan_id or exact Paddle Price ID match
         const items = eventData.items || [];
         const firstPriceId = items[0]?.price?.id || '';
-        let planId = 'starter';
-        if (firstPriceId.includes('growth')) planId = 'growth';
-        if (firstPriceId.includes('agency')) planId = 'agency';
+        let planId = customData.plan_id || 'starter';
+        if (
+          firstPriceId === PADDLE_PLANS.growth.monthlyPriceId ||
+          firstPriceId === PADDLE_PLANS.growth.annualPriceId ||
+          firstPriceId.includes('growth')
+        ) {
+          planId = 'growth';
+        } else if (
+          firstPriceId === PADDLE_PLANS.agency.monthlyPriceId ||
+          firstPriceId === PADDLE_PLANS.agency.annualPriceId ||
+          firstPriceId.includes('agency')
+        ) {
+          planId = 'agency';
+        } else if (
+          firstPriceId === PADDLE_PLANS.starter.monthlyPriceId ||
+          firstPriceId === PADDLE_PLANS.starter.annualPriceId
+        ) {
+          planId = 'starter';
+        }
 
         const subscriptionId = eventData.id || eventData.subscription_id;
         const customerId = eventData.customer_id;
