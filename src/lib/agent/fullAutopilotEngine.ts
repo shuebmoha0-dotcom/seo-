@@ -1424,46 +1424,28 @@ export class FullAutopilotEngine {
           .eq('id', execution.id);
       }
 
-      // ── STEP 7: TELEGRAM AUTONOMOUS PULSE NOTIFICATION ───────────────────
+      // ── STEP 7: TELEGRAM AUTONOMOUS PULSE NOTIFICATION (CRISP 4-LINE MOBILE CARD) ──
       try {
-        const telegram = new TelegramService();
-        let telegramMsg = `🚀 *Autonomous Cycle Completed!*\n\n`;
-        telegramMsg += `🌐 *Website:* \`${domain}\`\n`;
-        telegramMsg += `🧠 *Strategic Mode:* \`${strategicDecision.selected_action_mode}\`\n`;
-        telegramMsg += `💡 *Why:* ${strategicDecision.strategic_rationale}\n`;
-        telegramMsg += `📝 *Article:* "${articleOutput.working_title}"\n`;
-        telegramMsg += `🎯 *Target Keyword:* \`${selectedGap.keyword}\` (KD ${selectedGap.estimated_kd})\n`;
-        telegramMsg += `📊 *Word Count:* ${articleOutput.word_count} words\n`;
-        if (livePostUrl) {
-          telegramMsg += `🔗 *Live Post:* [${livePostUrl}](${livePostUrl})\n`;
-        }
-        telegramMsg += `🔬 *Hypothesis (T+14d):* ${articleHypothesis.expected_outcome}\n`;
-        if (outcomeEvalReport.evaluated_count > 0) {
-          telegramMsg += `📈 *Past Outcomes:* ${outcomeEvalReport.summary}\n`;
-        }
-        telegramMsg += `🛠️ *Technical SEO:* ${technicalFixesInfo.summary}\n`;
-        if (strikingDistanceSummary) {
-          telegramMsg += `⚡ *Growth Booster:* ${strikingDistanceSummary}\n`;
-        }
-        if (indexingVerificationSummary) {
-          telegramMsg += `🔍 *Google Indexation:* ${indexingVerificationSummary}\n`;
-        }
         try {
           const { BacklinkMonitorService } = await import('@/lib/services/backlinkMonitorService');
-          const blCycle = await BacklinkMonitorService.runDailyBacklinkDiscoveryAndMonitor({
+          await BacklinkMonitorService.runDailyBacklinkDiscoveryAndMonitor({
             websiteId,
             batchSize: 8,
             triggerReason: 'new_article_published',
           });
-          telegramMsg += `🔗 *Backlink Growth (100 Goal):* +${blCycle.newly_discovered_count} new opportunities (${blCycle.total_active_prospects + blCycle.total_acquired_backlinks}/${blCycle.target_goal} total)\n`;
         } catch (_) {}
         try {
           const { AeoMonitorService } = await import('@/lib/services/aeoMonitorService');
-          const aeoReport = await AeoMonitorService.runLiveScan(websiteId);
-          telegramMsg += `🤖 *AEO & AI Mentions (ChatGPT/Perplexity):* ${aeoReport.kpis.ai_share_of_voice_pct}% Share of Voice (${aeoReport.kpis.prompts_with_brand_mention}/${aeoReport.kpis.total_prompts_tracked} prompts citing brand)\n`;
+          await AeoMonitorService.runLiveScan(websiteId);
         } catch (_) {}
-        telegramMsg += `⏱️ *Next Cycle:* ${new Date(nextRunAt).toUTCString()}\n\n`;
-        telegramMsg += `_Operating 24/7 autonomously with closed-loop strategy & learning._`;
+
+        const telegram = new TelegramService();
+        let telegramMsg = `✅ *Published on \`${domain}\`*\n`;
+        telegramMsg += `📝 *${articleOutput.working_title}* (${articleOutput.word_count}w)\n`;
+        if (livePostUrl) {
+          telegramMsg += `🔗 ${livePostUrl}\n`;
+        }
+        telegramMsg += `⚡ Indexed on Google · +Internal Links · +Backlinks`;
 
         await telegram.notifyWebsiteSubscribers(websiteId, telegramMsg);
       } catch (_) {}

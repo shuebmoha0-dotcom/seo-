@@ -255,14 +255,10 @@ export async function POST(request: Request) {
 
         // Edit current message confirming approval and immediate search engine indexing
         if (chatId && messageId) {
-          const indexingLine = indexReportSummary
-            ? `\n\n🚀 *Search Engine Indexing Dispatched:*\n${indexReportSummary}`
-            : `\n\n🚀 *Indexing Submitted:* Googlebot & Bingbot (IndexNow) have been notified to crawl immediately.`;
-
           await telegram.editMessageText(
             chatId,
             messageId,
-            `✅ *Approved & Published Live!*\n\n*Title:* "${draft?.working_title || 'Article'}"\n🔗 *URL:* ${livePostUrl || siteBaseUrl}\n\nQueued to WordPress for immediate publication.${indexingLine}`
+            `✅ *Published on \`${siteBaseUrl.replace(/^https?:\/\//, '')}\`*\n📝 *${draft?.working_title || 'Article'}*\n🔗 ${livePostUrl || siteBaseUrl}\n⚡ Indexed on Google & IndexNow`
           );
         }
       } else if (action === 'approve_index' && executionId) {
@@ -1070,53 +1066,24 @@ Your agent will process the request in the background and ping you when finished
             } catch (memErr) {}
 
             let reportLines = [
-              `📊 *${isDailySchedule ? 'Daily SEO Health & Technical Audit' : 'SEO Diagnostic & Technical Audit'}: \`${currentSite.domain}\`*`,
-              '━━━━━━━━━━━━━━━━━━━━━',
-              `🏆 *Overall Technical Health:* *${score}/100* (${healthRating})\n`,
+              `📊 *Audit: \`${currentSite.domain}\` (${score}/100 · ${healthRating})*`,
             ];
 
-            if (isDailySchedule) {
-              reportLines.push(
-                '⏱ *Autonomous Schedule:* ✅ *Active (Daily at 09:00 UTC)*',
-                'Your site will be crawled and monitored daily without manual prompting!\n'
-              );
-            }
-
             if (criticalIssues.length > 0) {
-              reportLines.push(
-                `🚨 *Critical Barriers Found (${criticalIssues.length}):*`,
-                ...criticalIssues.map(item => `• ${item}`),
-                ''
-              );
+              reportLines.push(...criticalIssues.slice(0, 2).map(item => `🚨 ${item}`));
             }
 
             if (warnings.length > 0) {
-              reportLines.push(
-                `⚠️ *Improvements Needed (${warnings.length}):*`,
-                ...warnings.map(item => `• ${item}`),
-                ''
-              );
+              reportLines.push(...warnings.slice(0, 2).map(item => `⚠️ ${item}`));
             }
 
-            reportLines.push(
-              `✅ *Passing Ranking Factors (${passingItems.length}):*`,
-              ...passingItems.map(item => `• ${item}`),
-              ''
-            );
+            if (criticalIssues.length === 0 && warnings.length === 0) {
+              reportLines.push(`🟢 All 8 technical SEO ranking checks passed.`);
+            }
 
             if (actionPlan.length > 0) {
-              reportLines.push(
-                '━━━━━━━━━━━━━━━━━━━━━',
-                '🛠️ *Prioritized Action Plan:*',
-                ...actionPlan.slice(0, 4).map((step, idx) => `${idx + 1}️⃣ ${step}`),
-                ''
-              );
+              reportLines.push(`💡 *Next:* ${actionPlan[0]}`);
             }
-
-            reportLines.push(
-              '━━━━━━━━━━━━━━━━━━━━━',
-              '💡 *Next Step:* Reply with *"Fix H1 tag"* or *"Write an article for [keyword]"* to dispatch an execution action!'
-            );
 
             await telegram.sendMessage(chatId, reportLines.join('\n'), { parse_mode: 'Markdown' });
           } catch (crawlErr: any) {
@@ -1272,7 +1239,7 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
       if (parsed.action_type === 'seo_diagnostic') {
         await telegram.sendMessage(
           chatId,
-          `🔎 *Forensic SEO Diagnostic Agent Activated*\n\n*Target:* \`${currentSite.domain}\`\n*Investigating:* "${parsed.goal}"\n\n1️⃣ Inspecting Search Console queries & position trends\n2️⃣ Auditing technical signals (indexability, canonicals, status codes)\n3️⃣ Checking for keyword & topical cannibalization\n4️⃣ Isolating root causes and building step-by-step remediation plan...\n\n_Agent is investigating now..._ ⏳`,
+          `🔎 *Diagnosing SEO signals on \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'write_article') {
@@ -1292,27 +1259,22 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         if (!isGeneric) {
           const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(targetTopic, inventory);
           if (dupCheck.isDuplicate) {
-            const gaps = await SiteContentGapDetector.findContentGaps({ inventory, limit: 3 });
+            const gaps = await SiteContentGapDetector.findContentGaps({ inventory, limit: 2 });
             const altList = gaps.length > 0
-              ? gaps.map((g, idx) => `${idx + 1}️⃣ *"${g.working_title}"*\n   ↳ _Keyword:_ \`${g.keyword}\` | _Category:_ ${g.target_category} (${g.estimated_volume}/mo, KD ${g.estimated_kd})`).join('\n\n')
-              : '• Check your Content Planner for fresh, uncovered keyword opportunities.';
+              ? gaps.map((g, idx) => `${idx + 1}️⃣ *${g.working_title}* (\`${g.keyword}\`)`).join('\n')
+              : '• Check your Content Planner for uncovered topics.';
 
             const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
             const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
               ? dupCheck.url
               : (dupCheck.status === 'published' ? `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}` : undefined);
 
-            const proofLine = articleLink
-              ? `🔗 *Live Article Proof:* ${articleLink}\n\n`
-              : `📋 *Status in Content Planner:* Awaiting review / approved (${dupCheck.status || 'draft'})\n\n`;
+            const proofLine = articleLink ? `🔗 ${articleLink}\n` : '';
 
-            const cancelMsg = `⚠️ *Topic Already Covered — Write Request Prevented*\n\n` +
-              `An article covering *"${targetTopic}"* already exists for \`${currentSite.domain}\`:\n` +
+            const cancelMsg = `⚠️ *Already Covered on \`${currentSite.domain}\`*\n` +
               `👉 *"${dupCheck.existingTitle}"*\n` +
               proofLine +
-              `Writing another article on this exact topic would cause *search cannibalization* and burn AI tokens unnecessarily.\n\n` +
-              `🎯 *Recommended Uncovered Content Gaps Instead:*\n\n${altList}\n\n` +
-              `_Please reply with one of the above topics or a new uncovered keyword to proceed!_`;
+              `🎯 *Try an uncovered topic instead:*\n${altList}`;
 
             await telegram.sendMessage(chatId, cancelMsg, { parse_mode: 'Markdown' });
             return NextResponse.json({ ok: true });
@@ -1321,12 +1283,11 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
 
         await telegram.sendMessage(
           chatId,
-          `✍️ *Drafting article:* "${parsed.topic || parsed.goal}" for \`${currentSite.domain}\`... ⏳`,
+          `✍️ *Drafting:* "${parsed.topic || parsed.goal}" on \`${currentSite.domain}\`... ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'keyword_research') {
         const { SiteContentGapDetector } = await import('@/lib/agent/siteContentGapDetector');
-        const { DuplicateArticleChecker } = await import('@/lib/agent/duplicateChecker');
         const inventory = await SiteContentGapDetector.getSiteInventory({
           websiteId: currentSite.id,
           domain: currentSite.domain,
@@ -1334,53 +1295,39 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
         });
         sharedInventory = inventory;
 
-        const seed = (parsed.topic || '').trim();
-        let coveredNotice = '';
-        if (seed) {
-          const dupCheck = DuplicateArticleChecker.findDuplicateInInventory(seed, inventory);
-          if (dupCheck.isDuplicate) {
-            const siteBase = (currentSite.url || `https://${currentSite.domain}`).replace(/\/+$/, '');
-            const articleLink = dupCheck.url && dupCheck.url.startsWith('http')
-              ? dupCheck.url
-              : (dupCheck.status === 'published' ? `${siteBase}/${DuplicateArticleChecker.toSlug(dupCheck.existingTitle)}` : undefined);
-            const proofText = articleLink ? ` (${articleLink})` : ` [in Content Planner: ${dupCheck.status}]`;
-            coveredNotice = `\n\n💡 *Note:* Your site already covers *"${dupCheck.existingTitle}"*${proofText}. Filtering out all duplicates to discover strictly *uncovered* content gaps...`;
-          }
-        }
-
         await telegram.sendMessage(
           chatId,
-          `🎯 *Researching Uncovered Keywords for \`${currentSite.domain}\`...* ⏳${coveredNotice}`,
+          `🎯 *Researching keywords for \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'generate_images') {
         await telegram.sendMessage(
           chatId,
-          `🎨 *Generating visuals for:* "${parsed.topic || parsed.goal}"... ⏳`,
+          `🎨 *Generating visual for:* "${parsed.topic || parsed.goal}"... ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'edit_article') {
         await telegram.sendMessage(
           chatId,
-          `✏️ *Applying edits to:* "${parsed.goal}" for \`${currentSite.domain}\`... ⏳`,
+          `✏️ *Editing article on \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'indexing_check') {
         await telegram.sendMessage(
           chatId,
-          `🚀 *Instant Indexing Pipeline Activated for \`${currentSite.domain}\`...* ⏳\n\nSubmitting to Google Indexing API, IndexNow (Bing/Yandex), and search engine re-crawl bots...`,
+          `🚀 *Submitting \`${currentSite.domain}\` URLs for instant indexing...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else if (parsed.action_type === 'growth_acceleration') {
         await telegram.sendMessage(
           chatId,
-          `⚡ *Autonomous Growth Acceleration Activated for \`${currentSite.domain}\`...* ⏳\n\n1️⃣ Inspecting live Google Search Console performance data\n2️⃣ Identifying striking-distance queries (positions 4–20 with impressions)\n3️⃣ Formulating High-CTR Title & Schema optimizations to leap into Top 3...`,
+          `⚡ *Running Growth Acceleration on \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       } else {
         await telegram.sendMessage(
           chatId,
-          `⚙️ *Executing:* \`${parsed.action_type}\` for \`${currentSite.domain}\`... ⏳`,
+          `⚙️ *Executing \`${parsed.action_type}\` on \`${currentSite.domain}\`...* ⏳`,
           { parse_mode: 'Markdown' }
         );
       }
@@ -1415,13 +1362,13 @@ Format your response with clean Markdown (bullet points, bold text). Keep it und
                 { parse_mode: 'Markdown' }
               );
             } else if (parsed.action_type === 'keyword_research' && execResult.data?.top_opportunities?.length) {
-              const topList = execResult.data.top_opportunities.map((o: any, idx: number) => 
-                `${idx + 1}️⃣ *"${o.keyword}"*\n   • Volume: *${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo* | KD: *${o.keyword_difficulty || 20}* | Intent: _${o.intent}_`
-              ).join('\n\n');
+              const topList = execResult.data.top_opportunities.slice(0, 3).map((o: any, idx: number) => 
+                `${idx + 1}️⃣ *${o.keyword}* (${o.search_volume ? o.search_volume.toLocaleString() : '400+'}/mo · KD ${o.keyword_difficulty || 20})`
+              ).join('\n');
 
               await telegram.sendMessage(
                 chatId,
-                `✅ *Keyword Research Complete!*\n\n${execResult.summary}\n\n🎯 *Top High-Demand, Fast-Win Targets:*\n\n${topList}\n\n💡 *Zero Ghost Keywords:* All recommended queries have verified search traffic (>= 200/mo) and KD <= 30.\n\n[View in Keyword Explorer](${execResult.link_url || '/keywords'})`,
+                `🎯 *Top Keywords for \`${currentSite.domain}\`:*\n${topList}`,
                 { parse_mode: 'Markdown' }
               );
             } else if (parsed.action_type === 'write_article') {

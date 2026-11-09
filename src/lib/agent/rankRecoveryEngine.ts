@@ -311,35 +311,13 @@ export class RankRecoveryEngine {
             status: 'pending_approval',
           });
           savedCount++;
-
-          // Broadcast alert to Telegram Bot subscribers
-          try {
-            await telegram.broadcastDiscovery({
-              websiteId,
-              domain: report.domain,
-              type: 'rank_drop',
-              dedupKey: `${websiteId}:drop:${drop.keyword.toLowerCase()}`,
-              title: `Ranking Drop Alert: "${drop.keyword}"`,
-              fields: [
-                { label: 'Position Shift', value: `Decreased from #${drop.previous_position} to #${drop.current_position} (-${drop.position_drop})` },
-                { label: 'Traffic Impact', value: `Lost ${drop.traffic_loss_pct}% clicks` },
-                { label: 'Root Cause', value: drop.primary_root_cause.replace(/_/g, ' ').toUpperCase() },
-                { label: 'Diagnosis', value: drop.root_cause_explanation },
-                { label: 'Recovery Step 1', value: drop.recovery_plan[0]?.description || 'Refresh content & re-index' },
-              ],
-              actionLabel: 'Recover Ranking',
-              actionUrl: '/rank-tracking',
-            });
-          } catch (tErr) {
-            console.warn('[RankRecoveryEngine] Drop Telegram alert note:', tErr);
-          }
         }
       } catch (err) {
         console.warn('[RankRecoveryEngine] Failed to save drop opportunity:', err);
       }
     }
 
-    // 2. Persist Striking-Distance Growth Actions & Broadcast to Bot
+    // 2. Persist Striking-Distance Growth Actions (saved to DB; zero per-item Telegram spam)
     for (const opp of report.striking_distance_opportunities.slice(0, 5)) {
       try {
         const problem = `Striking-Distance Query: "${opp.keyword}" is at #${opp.current_position} (${opp.impressions.toLocaleString()} impressions)`;
@@ -367,27 +345,6 @@ export class RankRecoveryEngine {
             status: 'pending_approval',
           });
           savedCount++;
-
-          // Broadcast growth opportunity to Telegram Bot subscribers
-          try {
-            await telegram.broadcastDiscovery({
-              websiteId,
-              domain: report.domain,
-              type: 'striking_distance',
-              dedupKey: `${websiteId}:growth:${opp.keyword.toLowerCase()}`,
-              title: `Fast-Rank Growth Opportunity: "${opp.keyword}"`,
-              fields: [
-                { label: 'Current Position', value: `#${opp.current_position} (${opp.impressions.toLocaleString()} impressions)` },
-                { label: 'Target Position', value: `Top 3 (${opp.estimated_click_multiplier})` },
-                { label: 'Estimated Click Unlock', value: `+${opp.estimated_monthly_clicks_gain} clicks/month` },
-                { label: 'Recommended Title Hook', value: opp.prescriptive_actions.title_hook_suggestion || 'Update Title & Meta' },
-              ],
-              actionLabel: 'Deploy Booster',
-              actionUrl: '/rank-tracking',
-            });
-          } catch (tErr) {
-            console.warn('[RankRecoveryEngine] Growth Telegram alert note:', tErr);
-          }
         }
       } catch (err) {
         console.warn('[RankRecoveryEngine] Failed to save growth opportunity:', err);

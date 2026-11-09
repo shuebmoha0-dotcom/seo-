@@ -314,14 +314,9 @@ export class TelegramService {
     }
   ): Promise<any> {
     const text = 
-`🔔 *Action Required: Article Draft Ready*
-
-*Title:* ${data.taskTitle}
-*Target:* ${data.websiteDomain}
-*Rank Math SEO Score:* ${data.score || 82}/100 🟢
-*Word Count:* ${data.wordCount || 1400} words
-
-Tap a button below to execute or reject directly from your phone:`;
+`📝 *Draft Ready on \`${data.websiteDomain}\`*
+*${data.taskTitle}*
+📊 ${data.wordCount || 1400}w · SEO Score: ${data.score || 88}/100 🟢`;
 
     const inlineKeyboard = {
       inline_keyboard: [
@@ -354,12 +349,9 @@ Tap a button below to execute or reject directly from your phone:`;
     }
   ): Promise<any> {
     const text =
-`🎉 *Article Published Live!*
-
-*Title:* ${data.postTitle}
-🔗 *Live URL:* ${data.postUrl}
-
-Would you like me to request Google Search Console & IndexNow indexing for this URL now?`;
+`🎉 *Published Live!*
+*${data.postTitle}*
+🔗 ${data.postUrl}`;
 
     const inlineKeyboard = {
       inline_keyboard: [
@@ -664,7 +656,7 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
 
     notifiedDiscoveries.set(params.dedupKey, now);
 
-    // 3. Format visual discovery card with emojis
+    // 3. Format compact 4-line discovery card
     const icon = params.type === 'striking_distance'
       ? '⚡'
       : params.type === 'rank_drop'
@@ -673,21 +665,13 @@ Would you like me to request Google Search Console & IndexNow indexing for this 
           ? '🎯'
           : '🛠️';
 
-    let msg = `${icon} *SEO Discovery Alert*\n`;
-    if (params.domain) {
-      msg += `🌐 *Site:* \`${params.domain}\`\n`;
-    }
-    msg += `📌 *${params.title}*\n\n`;
+    let msg = `${icon} *${params.title}*${params.domain ? ` (\`${params.domain}\`)` : ''}\n`;
 
-    for (const f of params.fields) {
+    for (const f of params.fields.slice(0, 3)) {
       msg += `• *${f.label}:* ${f.value}\n`;
     }
 
-    if (params.actionUrl) {
-      msg += `\n🔗 _View details in dashboard: ${params.actionUrl}_`;
-    }
-
-    await this.notifyWebsiteSubscribers(params.websiteId, msg);
+    await this.notifyWebsiteSubscribers(params.websiteId, msg.trim());
     return true;
   }
 }

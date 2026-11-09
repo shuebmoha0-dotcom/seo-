@@ -700,32 +700,11 @@ export class AutopilotExecutor {
             priority: op.priority,
           }));
 
-        // Broadcast newly discovered keywords to Telegram Bot
-        try {
-          const { TelegramService } = await import('../telegram/telegramService');
-          const telegram = new TelegramService();
-          await telegram.broadcastDiscovery({
-            websiteId: website_id,
-            domain: website_domain,
-            type: 'new_keywords',
-            dedupKey: `${website_id}:kw:${topOpps.map(o => o.keyword).join(',')}`,
-            title: `New Keywords Discovered (${opportunities.length} opportunities)`,
-            fields: topOpps.slice(0, 3).map(op => ({
-              label: op.keyword,
-              value: `Vol: ${op.search_volume?.toLocaleString() || 'N/A'}/mo · KD: ${op.keyword_difficulty || 'Low'}`
-            })),
-            actionLabel: 'View Keywords',
-            actionUrl: '/keywords',
-          });
-        } catch (tErr) {
-          console.warn('[AutopilotExecutor] Keyword Telegram alert note:', tErr);
-        }
-
         return {
           success: true,
           intent_type: 'immediate_action',
           action_type: 'keyword_research',
-          summary: `Analyzed site niche "${siteProfile.primaryNiche}" (${siteProfile.authorityTier.toUpperCase()} site with ${siteProfile.authorityMetrics.pageCount} pages, ${siteProfile.authorityMetrics.backlinkCount} backlinks). Mapped ${inventory.coveredTitles.length} existing articles and ${inventory.categories.length} categories on ${website_domain}. Discovered ${clusters.length} topical clusters and ${opportunities.length} targeted keyword opportunities (${siteProfile.authorityTier === 'established' ? 'Medium KD 30-55, Vol 1,000-15,000+' : 'Easy KD 10-28, Vol 250-2,500 with real search demand'}).`,
+          summary: `Discovered ${clusters.length} topical clusters and ${opportunities.length} keyword opportunities for ${website_domain} (${siteProfile.primaryNiche}).`,
           link_url: '/keywords',
           link_label: 'View Discovered Keywords',
           data: {
@@ -997,23 +976,7 @@ export class AutopilotExecutor {
               const telegram = new TelegramService();
 
               if (analysis.status === 'running') {
-                // Crawl is async — send honest "started" notification
-                const startedMsg = [
-                  `🚀 *Technical Audit Started: \`${website_domain}\`*`,
-                  '━━━━━━━━━━━━━━━━━━━━━',
-                  `🔗 *Target:* ${targetUrl}`,
-                  `⏳ *Status:* Crawling in background (this takes 1–3 minutes)`,
-                  '',
-                  'You will receive a second notification once the crawl completes with your full health score and issue list.',
-                  '\n━━━━━━━━━━━━━━━━━━━━━',
-                  '📍 Track progress at /technical-seo'
-                ].join('\n');
-
-                if (params.chat_id) {
-                  await telegram.sendMessage(params.chat_id, startedMsg, { parse_mode: 'Markdown' });
-                } else {
-                  await telegram.notifyWebsiteSubscribers(website_id, startedMsg);
-                }
+                // Crawl is async — only send completion notification once finished to avoid double-messaging
               } else {
                 // Crawl completed immediately (reused data or instant result)
                 const pagesAnalyzed = analysis?.result?.pages?.length || 0;
@@ -1022,17 +985,12 @@ export class AutopilotExecutor {
                 const healthScore = analysis?.result?.summary?.technical_health_score || 80;
                 const criticalIssues = issues.filter((i: any) => i.severity === 'critical');
                 const highIssues = issues.filter((i: any) => i.severity === 'high');
-                const issueSummaryLines = issues.slice(0, 3).map((iss: any) => `📌 ${iss.title}`);
+                const issueSummaryLines = issues.slice(0, 2).map((iss: any) => `• ${iss.title}`);
 
                 const completedMsg = [
-                  `✅ *Technical Audit Completed: \`${website_domain}\`*`,
-                  '━━━━━━━━━━━━━━━━━━━━━',
-                  `🏆 *Technical Health Score:* *${healthScore}/100*`,
-                  `📄 *Pages Crawled:* ${pagesAnalyzed}`,
-                  `🔍 *Issues Found:* ${issuesCount} (${criticalIssues.length} critical, ${highIssues.length} high)`,
-                  ...(issueSummaryLines.length > 0 ? ['\n*Top Priority Findings:*', ...issueSummaryLines] : ['No issues detected ✅']),
-                  '\n━━━━━━━━━━━━━━━━━━━━━',
-                  '💡 *Next Step:* Reply with *"Fix technical issues"* or visit /technical-seo'
+                  `✅ *Audit Complete: \`${website_domain}\` (${healthScore}/100)*`,
+                  `📄 ${pagesAnalyzed} pages · 🔍 ${issuesCount} issues (${criticalIssues.length} critical, ${highIssues.length} high)`,
+                  ...(issueSummaryLines.length > 0 ? issueSummaryLines : ['🟢 Zero critical blockers detected']),
                 ].join('\n');
 
                 if (params.chat_id) {
