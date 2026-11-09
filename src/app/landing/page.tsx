@@ -1090,22 +1090,22 @@ export default function LandingPage() {
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <h3 className="text-base font-extrabold text-neutral-950">
-                100% Human Approval Enforcement
+                Full Brand Control &amp; 1-Click Approvals
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                The agent never touches production unilaterally. Every code modification opens an isolated GitHub PR, and every article waits for your tap on Telegram or in the dashboard.
+                Run in 24/7 hands-free autopilot or require 1-click approval before anything goes live. Review, edit, or publish articles and SEO upgrades directly from your dashboard or Telegram.
               </p>
             </div>
 
             <div className="p-7 rounded-2xl border border-neutral-200 bg-neutral-50/50 space-y-4">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center">
-                <Lock className="w-5 h-5" />
+                <Sparkles className="w-5 h-5" />
               </div>
               <h3 className="text-base font-extrabold text-neutral-950">
-                Airtight Multi-Tenant Privacy (RLS)
+                AEO &amp; AI Search Citations (ChatGPT &amp; Perplexity)
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Postgres Row Level Security ensures total data isolation. Your website URLs, keywords, credentials, and Search Console telemetry are strictly inaccessible across tenants.
+                Engineered for both Google Page 1 and AI Answer Engines. Every article embeds direct answer blocks, comparison tables, and FAQPage JSON-LD schema so ChatGPT, Perplexity, and Google AI Overviews cite your brand.
               </p>
             </div>
 
@@ -1114,10 +1114,10 @@ export default function LandingPage() {
                 <Cpu className="w-5 h-5" />
               </div>
               <h3 className="text-base font-extrabold text-neutral-950">
-                Non-Destructive WordPress REST Auth
+                1-Click WordPress Sync &amp; Instant Google Indexing
               </h3>
               <p className="text-xs text-neutral-600 leading-relaxed">
-                Connect via standard WordPress Application Passwords or our lightweight connector plugin. Your administrator password is never required, stored, or transmitted.
+                Connect your site in 60 seconds without sharing your admin password. Every published article includes a custom hero image, internal links, and instant submission to Google Indexing API &amp; IndexNow.
               </p>
             </div>
           </div>
