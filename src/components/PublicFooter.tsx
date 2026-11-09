@@ -75,6 +75,7 @@ export function PublicFooter() {
           <ul className="space-y-2 text-xs text-neutral-600">
             <li><Link href="/privacy" className="hover:text-indigo-600 transition-colors">Privacy Policy</Link></li>
             <li><Link href="/terms" className="hover:text-indigo-600 transition-colors">Terms of Service</Link></li>
+            <li><Link href="/refunds" className="hover:text-indigo-600 transition-colors">Refund Policy</Link></li>
             <li><Link href="/security" className="hover:text-indigo-600 transition-colors">Security Architecture</Link></li>
           </ul>
         </div>

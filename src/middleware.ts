@@ -19,6 +19,7 @@ const PUBLIC_EXACT_PAGES = new Set([
   '/auth/callback',
   '/privacy',
   '/terms',
+  '/refunds',
   '/sitemap.xml',
   '/sitemap',
   '/robots.txt',
