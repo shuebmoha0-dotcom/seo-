@@ -56,14 +56,27 @@ export default function TermsOfServicePage() {
           </section>
 
           <section className="space-y-2">
-            <h2 className="text-lg font-bold text-neutral-900">5. Limitation of Liability</h2>
+            <h2 className="text-lg font-bold text-neutral-900">5. Subscriptions, Billing, Cancellation &amp; Refund Policy</h2>
+            <p>
+              Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and handles returns.
+            </p>
+            <p>
+              <strong>Cancellation:</strong> Subscriptions renew automatically on a monthly or annual cycle depending on the plan selected at checkout. You may cancel your subscription at any time from your account settings or by contacting support@outdart.com, and your cancellation will take effect at the end of the current billing period.
+            </p>
+            <p>
+              <strong>14-Day Refund Policy:</strong> In accordance with Paddle buyer protection standards, we offer a full 14-day money-back guarantee on initial subscription purchases. Refund requests submitted within 14 days of the transaction date will be processed in full via the original payment method.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h2 className="text-lg font-bold text-neutral-900">6. Limitation of Liability</h2>
             <p>
               While Outdart provides algorithmic recommendations based on official search engine documentation and historical performance signals, we do not guarantee specific ranking positions or traffic levels. Search algorithms are controlled entirely by third-party search engines.
             </p>
           </section>
 
           <section className="space-y-2">
-            <h2 className="text-lg font-bold text-neutral-900">6. Contact</h2>
+            <h2 className="text-lg font-bold text-neutral-900">7. Contact</h2>
             <p>
               Questions regarding these Terms of Service can be directed to{' '}
               <a href="mailto:support@outdart.com" className="text-indigo-600 underline font-semibold">
