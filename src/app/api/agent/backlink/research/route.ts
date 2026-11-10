@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { BacklinkMonitorService } from '@/lib/services/backlinkMonitorService';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const { website_id, batch_size } = await request.json();
@@ -13,7 +16,7 @@ export async function POST(request: Request) {
 
     const userClient = await createClient();
     const { data: { user } } = await userClient.auth.getUser();
-    const supabase = createAdminClient();
+    const supabase = userClient || createAdminClient();
 
     const { data: website } = await supabase
       .from('websites')
@@ -30,6 +33,7 @@ export async function POST(request: Request) {
       batchSize: batch_size || 15,
       forceNewBatch: true,
       triggerReason: 'manual_scan',
+      customClient: userClient,
     });
 
     return NextResponse.json({

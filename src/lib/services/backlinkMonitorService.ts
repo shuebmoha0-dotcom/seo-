@@ -43,8 +43,9 @@ export class BacklinkMonitorService {
     batchSize?: number;
     forceNewBatch?: boolean;
     triggerReason?: 'daily_cron' | 'new_article_published' | 'manual_scan' | 'initial_load';
+    customClient?: any;
   }): Promise<BacklinkMonitorCycleResult> {
-    const supabase = createAdminClient();
+    const supabase = params.customClient || createAdminClient();
     const batchSize = params.batchSize || 15;
 
     const { data: website } = await supabase
@@ -163,7 +164,7 @@ export class BacklinkMonitorService {
       }
     }
 
-    // 4. Monitor & Verify Existing Acquired Backlinks
+    // 4. Monitor & Verify Existing Acquired Backlinks (skip on manual prospect discovery to ensure fast sub-10s response)
     const { data: acquiredRows } = await supabase
       .from('acquired_backlinks')
       .select('*')
@@ -172,8 +173,9 @@ export class BacklinkMonitorService {
 
     let verifiedLiveCount = 0;
     const nowIso = new Date().toISOString();
+    const shouldVerifyAcquired = params.triggerReason !== 'manual_scan';
 
-    if (acquiredRows && acquiredRows.length > 0) {
+    if (shouldVerifyAcquired && acquiredRows && acquiredRows.length > 0) {
       // Verify up to 8 acquired backlinks per cycle to stay fast under serverless timeouts
       const toVerify = acquiredRows.slice(0, 8);
       await Promise.all(
@@ -305,7 +307,7 @@ export class BacklinkMonitorService {
 
       // Persist all newly discovered unique prospects into backlink_prospects & backlink_pipeline
       for (const p of newlyDiscovered) {
-        const { data: upserted } = await supabase
+        const { data: upserted, error: upsertErr } = await supabase
           .from('backlink_prospects')
           .upsert(
             {
@@ -324,6 +326,10 @@ export class BacklinkMonitorService {
           )
           .select('id')
           .maybeSingle();
+
+        if (upsertErr) {
+          console.warn('[BacklinkMonitorService] Prospect upsert notice:', upsertErr.message);
+        }
 
         // Store rich playbook metadata in backlink_pipeline.notes so it persists in DB
         if (upserted?.id) {

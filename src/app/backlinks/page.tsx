@@ -149,6 +149,17 @@ export default function BacklinksPage() {
           setExecutionNotice(data.summary);
           setTimeout(() => setExecutionNotice(null), 6000);
         }
+        if (data.prospects && Array.isArray(data.prospects) && data.prospects.length > 0) {
+          setProspects((prev) => {
+            const existingDomains = new Set(prev.map((p) => p.domain?.toLowerCase()));
+            const fresh = data.prospects.filter((p: any) => !existingDomains.has(p.domain?.toLowerCase()));
+            return [...fresh, ...prev];
+          });
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setExecutionNotice(`Discovery notice: ${errData.error || 'Failed to discover prospects'}`);
+        setTimeout(() => setExecutionNotice(null), 6000);
       }
       await fetchBacklinkData();
     } catch (e) {

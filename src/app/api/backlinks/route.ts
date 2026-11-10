@@ -5,6 +5,9 @@ import { SiteNicheProfiler } from '@/lib/agent/siteNicheProfiler';
 import { BacklinkAgent } from '@/lib/agent/backlinkAgent';
 import { BacklinkMonitorService, TARGET_BACKLINK_GOAL } from '@/lib/services/backlinkMonitorService';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 const INVALID_BLOG_DOMAINS = [
   'saashub.com',
   'producthunt.com',
@@ -33,7 +36,7 @@ export async function GET(request: Request) {
 
     const userClient = await createClient();
     const { data: { user } } = await userClient.auth.getUser();
-    const supabase = createAdminClient();
+    const supabase = userClient || createAdminClient();
 
     // Multi-tenant ownership verification (Rule 10)
     const { data: website } = await supabase
@@ -106,6 +109,7 @@ export async function GET(request: Request) {
           websiteId,
           batchSize: Math.max(15, 25 - cleanProspects.length),
           triggerReason: 'initial_load',
+          customClient: userClient,
         });
 
         const [refreshedProspects, refreshedAcquired, refreshedAssets] = await Promise.all([

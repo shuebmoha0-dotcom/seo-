@@ -73,7 +73,7 @@ async function ensureLiveWorkingUrl(rawUrl: string, domain: string): Promise<str
     const res = await fetch(testUrl, {
       method: 'HEAD',
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(1500),
       redirect: 'follow',
     });
 
@@ -1106,7 +1106,7 @@ export class BacklinkAgent {
         }),
         prompt: `
           You are an elite Digital PR and Link Building Strategist building a 100-Backlink Growth Roadmap.
-          Identify ${Math.min(batchSize, 15)} NEW, high-value, REALISTIC backlink OPPORTUNITIES for:
+          Identify ${Math.min(batchSize, 6)} NEW, high-value, REALISTIC backlink OPPORTUNITIES for:
           Customer Domain: ${customerDomain}
           Website Business Model / Type: ${isBlog ? 'EDITORIAL / INFORMATIONAL CONTENT BLOG & Niche Publisher' : `${siteType.toUpperCase()} Software Platform`}
           Primary Niche: ${topic}
