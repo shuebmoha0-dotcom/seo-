@@ -319,6 +319,19 @@ Instructions: Write the full article now starting directly with the H1 (# Title)
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Primary\s+(?:keyword)(?:\*\*|\*)?\s*:.*$/gmi, '');
       finalArticle = finalArticle.replace(/^(?:\*\*|\*)?Secondary\s+(?:keywords)(?:\*\*|\*)?\s*:.*$/gmi, '');
 
+      // Strip markdown code fences if model wrapped whole output in ```markdown
+      finalArticle = finalArticle.replace(/^```(?:markdown|md)?\s*\n/i, '');
+      finalArticle = finalArticle.replace(/\n```\s*$/i, '');
+
+      // Strip conversational AI preambles and robotic chatter
+      finalArticle = finalArticle.replace(/^(?:Here is|Certainly!? Here is|Below is|I have written|Sure, here's)[\s\S]*?(?:article|guide|breakdown|post)[\s\S]*?\n+/im, '');
+      finalArticle = finalArticle.replace(/<(?:thinking|reflection)>[\s\S]*?<\/(?:thinking|reflection)>/gi, '');
+      finalArticle = finalArticle.replace(/^(?:\*\*|\*)?(?:Note|Notice|Editor's Note|AI Disclaimer)(?:\*\*|\*)?\s*:.*$/gmi, '');
+
+      // Strip naked schema or accidental JSON-LD blobs
+      finalArticle = finalArticle.replace(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
+      finalArticle = finalArticle.replace(/(?:\{|%7B|&quot;\{|“\{|”\{)\s*["“@]?context["”]?\s*:\s*["“]?https?:\\?\/\\?\/schema\.org[\s\S]*?(?:\}\s*\}|\}\s*\]\s*\}|\}\s*\]\s*\}\s*\})/gi, '');
+
       // Clean any raw Table of Contents sections and Gutenberg comments
       finalArticle = finalArticle.replace(/^#*\s*Table of Contents\s*\n+((?:[-*]\s+\[.*?\]\(.*?\)\s*\n*)+)/gmi, '');
       finalArticle = finalArticle.replace(/<!--\s*wp:rank-math\/toc-block[\s\S]*?<!--\s*\/wp:rank-math\/toc-block\s*-->/gi, '');

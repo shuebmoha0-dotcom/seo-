@@ -116,6 +116,23 @@ async function handleCronExecution(request: Request) {
       console.warn('[Cron Trigger] Indexing/Backlink watchdog error:', idxWatchdogErr?.message || idxWatchdogErr);
     }
 
+    // 0.7. Autonomous Article Quality & Self-Healing Watchdog:
+    // Proactively scan all articles and drafts to detect and auto-repair:
+    // - Naked schema JSON blobs or corrupted <script> tags
+    // - Unprofessional AI conversational preambles/chatter ("Here is...", "Certainly!...", "As an AI...")
+    // - Thinking/reflection tags
+    // - Codeblock fences wrapping articles
+    // Auto-heals in Supabase and immediately dispatches update_post jobs to WordPress sites.
+    try {
+      const { ArticleQualityAuditor } = await import('@/lib/services/articleQualityAuditor');
+      const qualityAudit = await ArticleQualityAuditor.scanAndCleanAllArticles({ customClient: supabase });
+      if (qualityAudit.total_cleaned > 0) {
+        console.log(`[Cron Trigger Article Quality Watchdog] Auto-healed ${qualityAudit.total_cleaned} article(s) across websites (dispatched ${qualityAudit.wordpress_updates_dispatched} WordPress update jobs)`);
+      }
+    } catch (qualityErr: any) {
+      console.warn('[Cron Trigger Article Quality Watchdog] Notice:', qualityErr?.message || qualityErr);
+    }
+
     // 1. Check and execute due tasks from public.tasks table
     const { data: dueTasks, error: tasksErr } = await supabase
       .from('tasks')

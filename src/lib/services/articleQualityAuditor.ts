@@ -118,8 +118,8 @@ export class ArticleQualityAuditor {
         }
       }
 
-      // If published to WordPress, dispatch an update_post job with pristine HTML
-      if (draft.status === 'published' && (wpPostId || draft.url_slug)) {
+      // If issues were found and repaired, and the post is published to WordPress, dispatch an update_post job with pristine HTML
+      if (isDirty && draft.status === 'published' && (wpPostId || draft.url_slug)) {
         try {
           const rawWpHtml = markdownToWordPressHtml(cleanBody);
           const { repairedHtml } = ContentPresentationAuditor.autoRepairHtml(rawWpHtml);
