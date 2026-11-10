@@ -37,6 +37,8 @@ class SEO_Autopilot_Worker {
                 return self::op_add_internal_link($job['payload'] ?? array());
             case 'set_featured_image':
                 return self::op_set_featured_image($job['payload'] ?? array());
+            case 'setup_indexnow':
+                return self::op_setup_indexnow($job['payload'] ?? array());
             default:
                 throw new Exception("Unknown job_type: {$job['job_type']}");
         }
@@ -649,6 +651,25 @@ class SEO_Autopilot_Worker {
             'post_id'     => $source_post_id,
             'linked_url'  => $target_url,
             'anchor_text' => $anchor_text
+        );
+    }
+
+    /**
+     * Set up IndexNow key file at the site root (ABSPATH)
+     */
+    public static function op_setup_indexnow($payload) {
+        $key = sanitize_text_field($payload['key'] ?? 'seautopilotindexnowkey');
+        if (empty($key)) {
+            $key = 'seautopilotindexnowkey';
+        }
+        $file_path = ABSPATH . $key . '.txt';
+        $written = @file_put_contents($file_path, $key);
+        return array(
+            'status'   => $written !== false ? 'success' : 'fallback_virtual_only',
+            'key'      => $key,
+            'file'     => $file_path,
+            'url'      => site_url($key . '.txt'),
+            'writable' => $written !== false,
         );
     }
 }

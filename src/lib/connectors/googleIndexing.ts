@@ -334,18 +334,21 @@ export class GoogleIndexingService {
 
     result.success = googleSubmitted || indexNowSubmitted;
 
-    if (!googleSubmitted && googleError?.includes('Owner Verification Required')) {
-      result.blocker = {
-        type: 'GSC_OWNER_REQUIRED',
-        message: googleError,
-        actionRequired: `Add service account "${serviceAccountEmail || 'agent'}" as Owner in Google Search Console under Settings -> Users and permissions.`,
-      };
-    } else if (!indexNowSubmitted && indexNowError?.includes('403')) {
-      result.blocker = {
-        type: 'INDEXNOW_KEY_MISSING',
-        message: indexNowError,
-        actionRequired: 'IndexNow key verification file missing from site root.',
-      };
+    // Only set blocker if NEITHER Google nor IndexNow succeeded
+    if (!googleSubmitted && !indexNowSubmitted) {
+      if (googleError?.includes('Owner Verification Required') || googleError?.includes('Permission denied')) {
+        result.blocker = {
+          type: 'GSC_OWNER_REQUIRED',
+          message: googleError,
+          actionRequired: `Add service account "${serviceAccountEmail || 'agent'}" as Owner in Google Search Console under Settings -> Users and permissions.`,
+        };
+      } else if (indexNowError?.includes('403')) {
+        result.blocker = {
+          type: 'INDEXNOW_KEY_MISSING',
+          message: indexNowError,
+          actionRequired: 'IndexNow key verification file missing from site root.',
+        };
+      }
     }
 
     // Build user-facing Markdown summary
@@ -362,7 +365,7 @@ export class GoogleIndexingService {
     if (indexNowSubmitted) {
       parts.push(`🟢 *IndexNow (Bing, Yandex, Naver):* Submitted successfully (HTTP ${indexNowStatusCode || 200})`);
     } else if (indexNowError) {
-      parts.push(`⚠️ *IndexNow:* ${indexNowError}`);
+      parts.push(`ℹ️ *IndexNow (Bing):* ${indexNowError.includes('403') ? 'Pending Bing site-root key verification' : indexNowError}`);
     }
 
     if (sitemapPinged) {

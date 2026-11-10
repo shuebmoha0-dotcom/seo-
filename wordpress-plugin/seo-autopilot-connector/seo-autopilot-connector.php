@@ -18,11 +18,27 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-define('SEO_AUTOPILOT_VERSION', '1.2.1');
+define('SEO_AUTOPILOT_VERSION', '1.2.2');
 define('SEO_AUTOPILOT_API_VERSION', 'v1');
 define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
+
+// Automatically serve IndexNow verification key and ensure file exists at ABSPATH root
+add_action('init', function() {
+    $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+    if (strpos($request_uri, 'seautopilotindexnowkey.txt') !== false) {
+        status_header(200);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('X-Robots-Tag: noindex, follow');
+        echo 'seautopilotindexnowkey';
+        exit;
+    }
+    // Auto-create physical verification file in WordPress root if missing
+    if (defined('ABSPATH') && !file_exists(ABSPATH . 'seautopilotindexnowkey.txt')) {
+        @file_put_contents(ABSPATH . 'seautopilotindexnowkey.txt', 'seautopilotindexnowkey');
+    }
+});
 
 // Guard minimum PHP version safely
 if (version_compare(PHP_VERSION, '7.4', '<')) {
@@ -461,6 +477,8 @@ class SEO_Autopilot_Worker {
                 return self::op_add_internal_link($job['payload'] ?? array());
             case 'set_featured_image':
                 return self::op_set_featured_image($job['payload'] ?? array());
+            case 'setup_indexnow':
+                return self::op_setup_indexnow($job['payload'] ?? array());
             default:
                 throw new Exception("Unknown job_type: {$job['job_type']}");
         }
@@ -1008,6 +1026,25 @@ class SEO_Autopilot_Worker {
             'post_id'     => $source_post_id,
             'linked_url'  => $target_url,
             'anchor_text' => $anchor_text
+        );
+    }
+
+    /**
+     * Set up IndexNow key file at the site root (ABSPATH)
+     */
+    public static function op_setup_indexnow($payload) {
+        $key = sanitize_text_field($payload['key'] ?? 'seautopilotindexnowkey');
+        if (empty($key)) {
+            $key = 'seautopilotindexnowkey';
+        }
+        $file_path = ABSPATH . $key . '.txt';
+        $written = @file_put_contents($file_path, $key);
+        return array(
+            'status'   => $written !== false ? 'success' : 'fallback_virtual_only',
+            'key'      => $key,
+            'file'     => $file_path,
+            'url'      => site_url($key . '.txt'),
+            'writable' => $written !== false,
         );
     }
 }

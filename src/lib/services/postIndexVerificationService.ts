@@ -477,7 +477,7 @@ export class PostIndexVerificationService {
                 ? new Date().toISOString()
                 : existingNotes.last_submitted_for_indexing,
             indexing_status: subResult?.summary || existingNotes.indexing_status,
-            indexing_blocker: subResult?.blocker?.actionRequired,
+            indexing_blocker: subResult?.google?.submitted ? null : (subResult?.blocker?.actionRequired || null),
           };
           await supabase.from('content_drafts').update({
             revision_notes: JSON.stringify(notesObj),
