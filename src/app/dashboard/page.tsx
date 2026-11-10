@@ -98,7 +98,7 @@ export default function DashboardPage() {
   });
 
   const [chartInterval, setChartInterval] = useState<"daily" | "weekly">("daily");
-  const [chartTimeRange, setChartTimeRange] = useState<"24h" | "7d" | "28d" | "3m" | "6m" | "16m">("24h");
+  const [chartTimeRange, setChartTimeRange] = useState<"24h" | "7d" | "28d" | "3m" | "6m" | "16m">("28d");
   const [moreRangesOpen, setMoreRangesOpen] = useState(false);
   const [intervalDropdownOpen, setIntervalDropdownOpen] = useState(false);
   const [gscConnected, setGscConnected] = useState(false);

@@ -141,7 +141,7 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
         }
 
         // B. Check if Platform Service Account has verified access to this domain
-        const saCreds = GoogleIndexingService.getServiceAccountCredentials();
+        const saCreds = (await GoogleIndexingService.resolveServiceAccountCredentials()) || GoogleIndexingService.getServiceAccountCredentials();
         if (!integration && saCreds?.client_email && saCreds?.private_key) {
           const jwtAuth = new google.auth.JWT({
             email: saCreds.client_email,
@@ -235,7 +235,7 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
       saPrivateKey = saParts[1] ? decryptCredential(saParts[1]) : '';
     }
     if (!saEmail || !saPrivateKey) {
-      const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+      const platformCreds = (await GoogleIndexingService.resolveServiceAccountCredentials()) || GoogleIndexingService.getServiceAccountCredentials();
       if (platformCreds?.client_email && platformCreds?.private_key) {
         saEmail = platformCreds.client_email;
         saPrivateKey = platformCreds.private_key;
@@ -264,7 +264,7 @@ export async function syncSearchConsoleData(websiteId: string, daysBack: number 
 
   // Fallback: if accessToken is still empty, check if platform Service Account has access
   if (!accessToken || accessToken.includes('simulated')) {
-    const platformCreds = GoogleIndexingService.getServiceAccountCredentials();
+    const platformCreds = (await GoogleIndexingService.resolveServiceAccountCredentials()) || GoogleIndexingService.getServiceAccountCredentials();
     if (platformCreds?.client_email && platformCreds?.private_key) {
       try {
         const jwtClient = new google.auth.JWT({

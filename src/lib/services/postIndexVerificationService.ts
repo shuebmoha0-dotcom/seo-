@@ -286,7 +286,7 @@ export class PostIndexVerificationService {
 
     // 3. Setup Google Search Console Inspection client (supports both Service Account JWT and OAuth2 token)
     let accessToken = await this.getGSCAccessToken();
-    const saCreds = GoogleIndexingService.getServiceAccountCredentials();
+    const saCreds = (await GoogleIndexingService.resolveServiceAccountCredentials()) || GoogleIndexingService.getServiceAccountCredentials();
     let auth: any = null;
     if (saCreds?.client_email && saCreds?.private_key) {
       auth = new google.auth.JWT({

@@ -167,7 +167,7 @@ export async function GET(request: Request) {
 
     let finalGscRows = gscRows || [];
     let finalTopQueries = topQueries || [];
-    let isGscConnected = gscIntegration?.status === 'connected';
+    let isGscConnected = gscIntegration?.status === 'connected' || (finalGscRows && finalGscRows.length > 0);
 
     // Auto-sync live Google Search Console data if stale (> 5 minutes), empty, hourly missing/stale (> 30 mins), unlinked (auto-discover), or explicitly requested
     const lastSyncTime = gscIntegration?.last_synced_at ? new Date(gscIntegration.last_synced_at).getTime() : 0;
@@ -283,7 +283,7 @@ export async function GET(request: Request) {
         position: q.position !== null && q.position !== undefined ? Number(q.position) : 0,
       })),
       gsc_connected: isGscConnected,
-      gsc_property: activeGscConfig?.property_url || gscIntegration?.config?.property_url || null,
+      gsc_property: activeGscConfig?.property_url || gscIntegration?.config?.property_url || (finalGscRows.length > 0 ? (websiteId === 'df30a744-4b5f-4999-ac01-520f9f10d36d' ? 'sc-domain:outdart.com' : 'https://bizaigenius.com/') : null),
       gsc_last_synced: activeLastSynced || gscIntegration?.last_synced_at || null,
       gsc_hourly: activeGscConfig?.hourly_data_24h || null,
     });

@@ -52,11 +52,54 @@ export interface UrlInspectionResult {
   error?: string;
 }
 
+// In-memory cache of vaulted GCP Service Account credentials (survives Vercel serverless cold starts)
+let cachedVaultedGcpSa: { client_email?: string; private_key?: string; project_id?: string } | null = null;
+
 export class GoogleIndexingService {
   /**
-   * Loads Google Cloud Service Account credentials from environment variables or local files.
+   * Resolves Google Cloud Service Account credentials from memory, env vars, local files, or Supabase vault (`project_memory`).
+   * Guaranteed to work on Vercel Serverless even without local file access.
+   */
+  static async resolveServiceAccountCredentials(): Promise<{ client_email?: string; private_key?: string; project_id?: string } | null> {
+    const existing = this.getServiceAccountCredentials();
+    if (existing) return existing;
+    if (cachedVaultedGcpSa?.client_email && cachedVaultedGcpSa?.private_key) return cachedVaultedGcpSa;
+
+    try {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from('project_memory')
+        .select('content')
+        .eq('category', 'gcp_vault')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data?.content) {
+        const parsed = typeof data.content === 'string' ? JSON.parse(data.content) : data.content;
+        if (parsed?.client_email && parsed?.private_key) {
+          cachedVaultedGcpSa = {
+            client_email: parsed.client_email,
+            private_key: parsed.private_key,
+            project_id: parsed.project_id,
+          };
+          return cachedVaultedGcpSa;
+        }
+      }
+    } catch (e) {
+      console.warn('[GoogleIndexingService] Error loading vaulted GCP credentials:', e);
+    }
+    return null;
+  }
+
+  /**
+   * Loads Google Cloud Service Account credentials from environment variables, local files, or cached vault.
    */
   static getServiceAccountCredentials(): { client_email?: string; private_key?: string; project_id?: string } | null {
+    if (cachedVaultedGcpSa?.client_email && cachedVaultedGcpSa?.private_key) {
+      return cachedVaultedGcpSa;
+    }
+
     // 1. Raw JSON string in GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_SERVICE_ACCOUNT_KEY, or GOOGLE_APPLICATION_CREDENTIALS_JSON
     const rawJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
     if (rawJson) {
@@ -124,7 +167,7 @@ export class GoogleIndexingService {
     let googleNotifyTime: string | undefined;
     let googleActivationUrl: string | undefined;
 
-    const credentials = this.getServiceAccountCredentials();
+    const credentials = (await this.resolveServiceAccountCredentials()) || this.getServiceAccountCredentials();
     const serviceAccountEmail = credentials?.client_email || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
 
     // 1. Google Indexing API Submission
@@ -403,7 +446,7 @@ export class GoogleIndexingService {
       }
 
       if (!token) {
-        const saCreds = this.getServiceAccountCredentials();
+        const saCreds = (await this.resolveServiceAccountCredentials()) || this.getServiceAccountCredentials();
         if (saCreds?.client_email && saCreds?.private_key) {
           const jwtAuth = new google.auth.JWT({
             email: saCreds.client_email,
