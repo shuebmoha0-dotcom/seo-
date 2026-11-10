@@ -145,7 +145,7 @@ class SEO_Autopilot_Auth {
         if ($status !== 'active') {
             return new WP_Error(
                 'seo_autopilot_inactive_key',
-                'SEO Autopilot API key is revoked or unconfigured.',
+                'Outdart API key is revoked or unconfigured.',
                 array('status' => 401)
             );
         }

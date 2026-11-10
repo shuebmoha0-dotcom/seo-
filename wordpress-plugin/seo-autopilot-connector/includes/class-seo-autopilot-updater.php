@@ -94,12 +94,12 @@ class SEO_Autopilot_Updater {
             }
             
             $res = new stdClass();
-            $res->name = $body['name'] ?? 'SEO Autopilot Agent Connector';
+            $res->name = $body['name'] ?? 'Outdart Agent Connector';
             $res->slug = $body['slug'] ?? 'seo-autopilot-connector';
             $res->version = $body['version'];
             $res->tested = $body['tested'] ?? '6.4';
             $res->requires = $body['requires'] ?? '5.8';
-            $res->author = $body['author'] ?? 'SEO Autopilot Team';
+            $res->author = $body['author'] ?? 'Outdart Team';
             $res->author_profile = $body['author_profile'] ?? 'https://seautopilot.io';
             $res->download_link = $body['download_url'] ?? '';
             $res->trunk = $body['download_url'] ?? '';

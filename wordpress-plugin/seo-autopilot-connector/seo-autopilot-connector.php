@@ -1,13 +1,13 @@
 <?php
 /**
- * Plugin Name:       SEO Autopilot Agent Connector
- * Plugin URI:        https://seautopilot.io
- * Description:       Official secure agent connector for SEO Autopilot SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via outbound reverse-connection architecture without sharing passwords or requiring inbound access.
- * Version:           1.2.0
+ * Plugin Name:       Outdart Agent Connector
+ * Plugin URI:        https://outdart.com
+ * Description:       Official secure agent connector for Outdart SaaS. Enables autonomous SEO optimization, draft publishing, media uploads, and audit telemetry via outbound reverse-connection architecture without sharing passwords or requiring inbound access.
+ * Version:           1.2.1
  * Requires at least: 5.8
  * Requires PHP:      7.4
- * Author:            SEO Autopilot Team
- * Author URI:        https://seautopilot.io
+ * Author:            Outdart Team
+ * Author URI:        https://outdart.com
  * License:           GPL v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       seo-autopilot-connector
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly.
 }
 
-define('SEO_AUTOPILOT_VERSION', '1.2.0');
+define('SEO_AUTOPILOT_VERSION', '1.2.1');
 define('SEO_AUTOPILOT_API_VERSION', 'v1');
 define('SEO_AUTOPILOT_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('SEO_AUTOPILOT_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -27,7 +27,7 @@ define('SEO_AUTOPILOT_PLUGIN_BASENAME', plugin_basename(__FILE__));
 // Guard minimum PHP version safely
 if (version_compare(PHP_VERSION, '7.4', '<')) {
     add_action('admin_notices', function() {
-        echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> Requires PHP 7.4 or higher. Your server is running PHP ' . esc_html(PHP_VERSION) . '.</p></div>';
+        echo '<div class="notice notice-error"><p><strong>Outdart Connector:</strong> Requires PHP 7.4 or higher. Your server is running PHP ' . esc_html(PHP_VERSION) . '.</p></div>';
     });
     return;
 }
@@ -307,7 +307,7 @@ class SEO_Autopilot_Auth {
         if ($status !== 'active') {
             return new WP_Error(
                 'seo_autopilot_inactive_key',
-                'SEO Autopilot API key is revoked or unconfigured.',
+                'Outdart API key is revoked or unconfigured.',
                 array('status' => 401)
             );
         }
@@ -1160,7 +1160,7 @@ class SEO_Autopilot_Outbound {
         return array(
             'success' => true,
             'site_id' => $site_id,
-            'message' => 'Successfully connected to SEO Autopilot SaaS.',
+            'message' => 'Successfully connected to Outdart SaaS.',
         );
     }
 
@@ -1531,7 +1531,7 @@ class SEO_Autopilot_REST {
 
         return rest_ensure_response(array(
             'status'         => 'ok',
-            'plugin'         => 'SEO Autopilot Agent Connector',
+            'plugin'         => 'Outdart Agent Connector',
             'version'        => SEO_AUTOPILOT_VERSION,
             'api_version'    => SEO_AUTOPILOT_API_VERSION,
             'is_connected'   => $is_connected,
@@ -2024,12 +2024,12 @@ class SEO_Autopilot_Updater {
             }
             
             $res = new stdClass();
-            $res->name = $body['name'] ?? 'SEO Autopilot Agent Connector';
+            $res->name = $body['name'] ?? 'Outdart Agent Connector';
             $res->slug = $body['slug'] ?? 'seo-autopilot-connector';
             $res->version = $body['version'];
             $res->tested = $body['tested'] ?? '6.4';
             $res->requires = $body['requires'] ?? '5.8';
-            $res->author = $body['author'] ?? 'SEO Autopilot Team';
+            $res->author = $body['author'] ?? 'Outdart Team';
             $res->author_profile = $body['author_profile'] ?? 'https://seautopilot.io';
             $res->download_link = $body['download_url'] ?? '';
             $res->trunk = $body['download_url'] ?? '';
@@ -2080,9 +2080,9 @@ class SEO_Autopilot_Admin {
         if (!current_user_can('manage_options')) return;
         $wp_admin_bar->add_node(array(
             'id'    => 'seo-autopilot-topbar',
-            'title' => '⚡ SEO Autopilot',
+            'title' => '⚡ Outdart',
             'href'  => admin_url('options-general.php?page=seo-autopilot-connector'),
-            'meta'  => array('title' => 'SEO Autopilot Settings & Pairing'),
+            'meta'  => array('title' => 'Outdart Settings & Pairing'),
         ));
     }
 
@@ -2098,8 +2098,8 @@ class SEO_Autopilot_Admin {
         $is_paired = SEO_Autopilot_Outbound::is_paired();
         if (!$is_paired) {
             echo '<div class="notice notice-info is-dismissible" style="border-left-color: #4f46e5; padding: 12px 16px;">
-                <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>🚀 SEO Autopilot Agent Connector is active!</strong> Pair your site with the AI SaaS platform to start autonomous optimization.</p>
-                <p style="margin: 0;"><a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" class="button button-primary" style="background: #4f46e5; border-color: #4338ca;">Open SEO Autopilot Settings &rarr;</a></p>
+                <p style="font-size: 14px; margin: 0 0 8px 0;"><strong>🚀 Outdart Agent Connector is active!</strong> Pair your site with Outdart AI to start autonomous optimization.</p>
+                <p style="margin: 0;"><a href="' . esc_url(admin_url('options-general.php?page=seo-autopilot-connector')) . '" class="button button-primary" style="background: #4f46e5; border-color: #4338ca;">Open Outdart Settings &rarr;</a></p>
             </div>';
         }
     }
@@ -2113,10 +2113,10 @@ class SEO_Autopilot_Admin {
     }
 
     public function add_admin_menu() {
-        // Register cleanly under Settings -> SEO Autopilot
+        // Register cleanly under Settings -> Outdart
         add_options_page(
-            'SEO Autopilot Agent Connector',
-            'SEO Autopilot',
+            'Outdart Agent Connector',
+            'Outdart',
             'manage_options',
             'seo-autopilot-connector',
             array($this, 'render_admin_page')
@@ -2221,7 +2221,7 @@ class SEO_Autopilot_Admin {
                     <div style="display: flex; align-items: center; gap: 12px;">
                         <div style="background: #4f46e5; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 22px;">⚡</div>
                         <div>
-                            <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #0f172a;">SEO Autopilot Agent Connector</h1>
+                            <h1 style="font-size: 20px; font-weight: 700; margin: 0; color: #0f172a;">Outdart Agent Connector</h1>
                             <p style="font-size: 12px; color: #64748b; margin: 2px 0 0 0;">Outbound Reverse-Connection Architecture &bull; Version <?php echo esc_html(SEO_AUTOPILOT_VERSION); ?></p>
                         </div>
                     </div>
@@ -2375,7 +2375,7 @@ class SEO_Autopilot_Admin {
         </div>
         <?php
         } catch (\Throwable $e) {
-            echo '<div class="notice notice-error"><p><strong>SEO Autopilot Connector:</strong> An error occurred while rendering the settings page: ' . esc_html($e->getMessage()) . '</p></div>';
+            echo '<div class="notice notice-error"><p><strong>Outdart Connector:</strong> An error occurred while rendering the settings page: ' . esc_html($e->getMessage()) . '</p></div>';
         }
     }
 }

@@ -8,7 +8,7 @@ export async function GET() {
   return NextResponse.json({
     name: 'Outdart Agent Connector',
     slug: 'seo-autopilot-connector',
-    version: '1.2.0',
+    version: '1.2.1',
     download_url: siteUrl + '/api/integrations/wordpress/plugin',
     requires: '5.8',
     tested: '6.4',
@@ -18,7 +18,7 @@ export async function GET() {
     last_updated: new Date().toISOString(),
     sections: {
       description: 'Official secure agent connector for Outdart SaaS. Enables autonomous SEO optimization and publishing.',
-      changelog: '<h4>1.2.0</h4><ul><li>Fix menu slug collision to show dedicated Settings menu and top-bar shortcut.</li><li>Enhanced Over-The-Air updater with instant check support.</li></ul>'
+      changelog: '<h4>1.2.1</h4><ul><li>Rebranded plugin to Outdart Agent Connector.</li><li>Updated WordPress admin toolbar, settings menu, and notices to Outdart.</li></ul>'
     }
   });
 }

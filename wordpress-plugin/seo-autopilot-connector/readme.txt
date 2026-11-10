@@ -1,18 +1,18 @@
-=== SEO Autopilot Agent Connector ===
-Contributors: seoautopilot
+=== Outdart Agent Connector ===
+Contributors: outdart
 Tags: seo, ai-agent, automation, content, rest-api
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Official secure agent connector for the SEO Autopilot SaaS platform.
+Official secure agent connector for the Outdart SaaS platform.
 
 == Description ==
 
-SEO Autopilot Agent Connector provides a dedicated, scoped REST API layer for autonomous AI agents to manage SEO content, publish approved drafts, upload media, and audit technical SEO without requiring WordPress administrator passwords or core Application Passwords.
+Outdart Agent Connector provides a dedicated, scoped REST API layer for autonomous AI agents to manage SEO content, publish approved drafts, upload media, and audit technical SEO without requiring WordPress administrator passwords or core Application Passwords.
 
 = Key Features =
 
@@ -27,9 +27,9 @@ SEO Autopilot Agent Connector provides a dedicated, scoped REST API layer for au
 
 1. Upload the `seo-autopilot-connector` folder to `/wp-content/plugins/` or install via **Plugins > Add New > Upload Plugin**.
 2. Activate the plugin through the **Plugins** menu in WordPress.
-3. Navigate to **Settings > SEO Autopilot**.
+3. Navigate to **Settings > Outdart**.
 4. Click **Generate Connection Key** to create a fresh API secret.
-5. Copy the generated key into your SEO Autopilot SaaS Dashboard (**Integrations > WordPress**).
+5. Copy the generated key into your Outdart SaaS Dashboard (**Integrations > WordPress**).
 6. Test and verify connection!
 
 == REST Endpoints ==

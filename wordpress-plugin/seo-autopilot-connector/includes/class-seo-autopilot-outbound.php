@@ -147,7 +147,7 @@ class SEO_Autopilot_Outbound {
         return array(
             'success' => true,
             'site_id' => $site_id,
-            'message' => 'Successfully connected to SEO Autopilot SaaS.',
+            'message' => 'Successfully connected to Outdart SaaS.',
         );
     }
 

@@ -163,7 +163,7 @@ class SEO_Autopilot_REST {
 
         return rest_ensure_response(array(
             'status'         => 'ok',
-            'plugin'         => 'SEO Autopilot Agent Connector',
+            'plugin'         => 'Outdart Agent Connector',
             'version'        => SEO_AUTOPILOT_VERSION,
             'api_version'    => SEO_AUTOPILOT_API_VERSION,
             'is_connected'   => $is_connected,
