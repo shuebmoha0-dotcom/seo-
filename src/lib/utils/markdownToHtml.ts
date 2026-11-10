@@ -46,7 +46,16 @@ export function markdownToWordPressHtml(markdown: string, schemaContext?: {
     }
   }
 
-  // 0. Pre-clean and normalize split images and split links
+  // 0. Pre-clean: strip any raw JSON schemas, AI commentary, preambles, and markdown code wrappers
+  html = html.replace(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
+  html = html.replace(/<!--\s*wp:html\s*-->[\s\S]*?(?:application\/ld\+json|schema\.org)[\s\S]*?<!--\s*\/wp:html\s*-->/gi, '');
+  html = html.replace(/(?:\{|%7B|&quot;\{)\s*["“@]?context["”]?\s*:\s*["“]?https?:\\?\/\\?\/schema\.org[\s\S]*?(?:\}\s*\}|\}\s*\]\s*\}|\}\s*\]\s*\}\s*\})/gi, '');
+  html = html.replace(/^(?:Here is|Certainly!? Here is|Below is|I have written|Sure, here's)[\s\S]*?(?:article|guide|breakdown|post)[\s\S]*?\n+/im, '');
+  html = html.replace(/<(?:thinking|reflection)>[\s\S]*?<\/(?:thinking|reflection)>/gi, '');
+  html = html.replace(/^```(?:markdown|html)?\s*\n/i, '');
+  html = html.replace(/\n```\s*$/i, '');
+
+  // 0b. Pre-clean and normalize split images and split links
   html = html.replace(/!\[([^\]]*)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '![$1]($2)');
   html = html.replace(/\[([^\]]+)\]\s*\n\s*\((https?:\/\/[^\)]+)\)/g, '[$1]($2)');
 
@@ -262,14 +271,6 @@ export function markdownToWordPressHtml(markdown: string, schemaContext?: {
         },
       })),
     });
-  }
-
-  if (schemaGraph.length > 0 && !result.includes('application/ld+json')) {
-    const jsonLdPayload = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@graph': schemaGraph,
-    });
-    result += `\n\n<!-- wp:html -->\n<script type="application/ld+json">${jsonLdPayload}</script>\n<!-- /wp:html -->`;
   }
 
   return result;

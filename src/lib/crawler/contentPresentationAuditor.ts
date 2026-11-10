@@ -251,6 +251,23 @@ export class ContentPresentationAuditor {
     const fixesApplied: string[] = [];
     let content = rawContent;
 
+    // 0. Strip naked Schema.org JSON, raw JSON-LD text, corrupted script tags, and AI preambles
+    if (content.includes('schema.org') || content.includes('@context') || content.includes('application/ld+json')) {
+      content = content.replace(/<!--\s*wp:html\s*-->[\s\S]*?(?:application\/ld\+json|schema\.org)[\s\S]*?<!--\s*\/wp:html\s*-->/gi, '');
+      content = content.replace(/<script[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
+      content = content.replace(/<p[^>]*>\s*(?:\{|%7B|&quot;\{|“\{|”\{)\s*["“@]?context["”]?\s*:\s*["“]?https?:\\?\/\\?\/schema\.org[\s\S]*?<\/p>/gi, '');
+      content = content.replace(/(?:\{|%7B|&quot;\{|“\{|”\{)\s*["“@]?context["”]?\s*:\s*["“]?https?:\\?\/\\?\/schema\.org[\s\S]*?(?:\}\s*\}|\}\s*\]\s*\}|\}\s*\]\s*\}\s*\})/gi, '');
+      fixesApplied.push('Stripped raw Schema.org JSON-LD markup and corrupted script tags from article body');
+    }
+
+    // Strip AI conversational preambles and reflection blocks
+    if (/^(?:Here is|Certainly!? Here is|Below is|I have written|Sure, here's)/im.test(content) || /<(?:thinking|reflection)>/i.test(content)) {
+      content = content.replace(/^(?:Here is|Certainly!? Here is|Below is|I have written|Sure, here's)[\s\S]*?(?:article|guide|breakdown|post)[\s\S]*?\n+/im, '');
+      content = content.replace(/<(?:thinking|reflection)>[\s\S]*?<\/(?:thinking|reflection)>/gi, '');
+      content = content.replace(/^(?:\*\*|\*)?(?:Note|Notice|Editor's Note|AI Disclaimer)(?:\*\*|\*)?\s*:.*$/gmi, '');
+      fixesApplied.push('Stripped AI conversational preamble and thinking artifacts');
+    }
+
     // 1. Remove destructive outer container wrapper if present (entry-content-optimized)
     if (/class=["'][^"']*entry-content-optimized[^"']*["']/i.test(content) || content.includes('max-width: 820px')) {
       content = content.replace(/<div class="entry-content-optimized"[^>]*>/gi, '');
