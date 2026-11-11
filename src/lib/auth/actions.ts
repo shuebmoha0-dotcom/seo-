@@ -11,14 +11,11 @@ async function getAppOrigin(): Promise<string> {
   if (envUrl && !envUrl.includes('localhost')) {
     return envUrl.replace(/\/+$/, '');
   }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
   try {
     const headerList = await headers();
     const host = headerList.get('x-forwarded-host') || headerList.get('host');
     const proto = headerList.get('x-forwarded-proto') || 'https';
-    if (host && !host.includes('localhost')) {
+    if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
       return `${proto}://${host}`;
     }
   } catch {}
